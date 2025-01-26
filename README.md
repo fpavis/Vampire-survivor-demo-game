@@ -130,4 +130,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Additional Weapon Types
 - [ ] Boss Battles
 
-## 📧 Contact
+## 📧 DEMO
+https://fpavis.github.io/Vampire-survivor-demo-game/

@@ -1,4 +1,4 @@
-import { GAME_CONFIG, ENEMY_TYPES, STYLES, WORLD_CONFIG } from './config.js';
+import { GAME_CONFIG, ENEMY_TYPES, INITIAL_STATE, LEVEL_SCALING, STYLES, WORLD_CONFIG, SPAWN_CONFIG } from './config.js';
 import { gameState } from './gameState.js';
 import { EntityManager } from './entities.js';
 import { UIManager } from './ui.js';
@@ -62,11 +62,17 @@ class Game {
     }
 
     showStartScreen() {
+        // Create a container for start screen elements
+        const startScreen = new PIXI.Container();
+        startScreen.eventMode = 'static';
+        this.app.stage.addChild(startScreen);
+
         // Dark background
         const background = new PIXI.Graphics();
         background.beginFill(0x000000, 0.85);
         background.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
         background.endFill();
+        startScreen.addChild(background);
 
         // Game title
         const titleText = new PIXI.Text('Survival Game', {
@@ -77,6 +83,7 @@ class Game {
         });
         titleText.anchor.set(0.5);
         titleText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
+        startScreen.addChild(titleText);
 
         // Instructions text
         const instructionsText = new PIXI.Text(
@@ -87,47 +94,70 @@ class Game {
         });
         instructionsText.anchor.set(0.5);
         instructionsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+        startScreen.addChild(instructionsText);
 
-        // Start button
+        // Start button container
+        const buttonContainer = new PIXI.Container();
+        buttonContainer.eventMode = 'static';
+        buttonContainer.cursor = 'pointer';
+        buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
+
+        // Button background
         const button = new PIXI.Graphics();
         button.beginFill(0x00ff00);
         button.drawRoundedRect(-100, -30, 200, 60, 15);
         button.endFill();
-        button.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
 
+        // Button text
         const buttonText = new PIXI.Text('Start Game', {
             fontSize: 32,
             fill: 0x000000,
             fontWeight: 'bold'
         });
         buttonText.anchor.set(0.5);
-        button.addChild(buttonText);
 
-        // Make button interactive
-        button.eventMode = 'static';
-        button.cursor = 'pointer';
-        button.on('pointerdown', () => {
-            // Remove start screen elements
-            this.app.stage.removeChild(background);
-            this.app.stage.removeChild(titleText);
-            this.app.stage.removeChild(instructionsText);
-            this.app.stage.removeChild(button);
+        // Add text to button
+        buttonContainer.addChild(button, buttonText);
+        startScreen.addChild(buttonContainer);
+
+        // Button interactions
+        buttonContainer.on('pointerover', () => {
+            button.tint = 0x88ff88;
+        });
+        
+        buttonContainer.on('pointerout', () => {
+            button.tint = 0xffffff;
+        });
+
+        buttonContainer.on('pointerdown', () => {
+            // Remove start screen
+            this.app.stage.removeChild(startScreen);
             
-            // Initialize game (remove UI initialization from here)
+            // Clean up any existing game state
+            if (this.worldContainer) {
+                this.worldContainer.removeChildren();
+            }
+            
+            // Initialize new game
             this.bindEvents();
             this.init();
         });
 
-        // Add hover effect
-        button.on('pointerover', () => {
-            button.tint = 0x88ff88;
-        });
-        button.on('pointerout', () => {
-            button.tint = 0xffffff;
-        });
+        // Handle window resize
+        const resizeHandler = () => {
+            background.width = this.app.screen.width;
+            background.height = this.app.screen.height;
+            titleText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
+            instructionsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+            buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
+        };
 
-        // Add everything to stage
-        this.app.stage.addChild(background, titleText, instructionsText, button);
+        window.addEventListener('resize', resizeHandler);
+
+        // Clean up resize handler when start screen is removed
+        startScreen.on('destroyed', () => {
+            window.removeEventListener('resize', resizeHandler);
+        });
     }
 
     bindEvents() {
@@ -329,49 +359,85 @@ class Game {
 }
 
     updateEntities(delta) {
-        // Update enemies
-    if (Math.random() < 0.04 * delta) {
-        const types = Object.keys(ENEMY_TYPES);
-        const type = types[Math.floor(Math.random() * types.length)];
-            
-            // Get spawn position using createEnemy helper
-            const spawnPos = this.createEnemy();
-            const enemy = EntityManager.createEnemy(this.app, type, spawnPos.x, spawnPos.y);
-            this.worldContainer.addChild(enemy);  // Add to worldContainer instead of app.stage
-            gameState.enemies.push(enemy);
-        }
+        // Handle enemy spawning
+        this.handleEnemySpawning(delta);
 
         // Update existing enemies
         gameState.enemies.forEach(enemy => {
             // Calculate direction to player
             const dx = gameState.player.x - enemy.x;
             const dy = gameState.player.y - enemy.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
             
             // Move enemy towards player
-        if (dist > 0) {
+            if (dist > 0) {
                 const normalizedDx = dx / dist;
                 const normalizedDy = dy / dist;
                 enemy.x += normalizedDx * enemy.speed * delta;
                 enemy.y += normalizedDy * enemy.speed * delta;
-        }
+            }
 
-        // Update health bar
+            // Update health bar
             const healthPercent = enemy.health / enemy.maxHealth;
-            enemy.healthBar.width = (enemy.health / enemy.maxHealth) * (ENEMY_TYPES[enemy.type].size * 2);
+            enemy.healthBar.width = healthPercent * (ENEMY_TYPES[enemy.type].size * 2);
             enemy.healthBar.tint = healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health;
         });
 
-        // Update bullets with proper cleanup
+        // Update bullets
         for (let i = gameState.bullets.length - 1; i >= 0; i--) {
             const bullet = gameState.bullets[i];
-        bullet.sprite.x += bullet.dx * delta;
-        bullet.sprite.y += bullet.dy * delta;
+            bullet.sprite.x += bullet.dx * delta;
+            bullet.sprite.y += bullet.dy * delta;
 
             if (this.isOffScreen(bullet.sprite)) {
                 EntityManager.cleanup(this.app, bullet.sprite);
                 gameState.bullets.splice(i, 1);
             }
+        }
+    }
+
+    handleEnemySpawning(delta) {
+        // Check max enemies before spawning
+        if (gameState.enemies.length >= SPAWN_CONFIG.maxEnemies) return;
+
+        // Calculate spawn chance based on level
+        const spawnChance = SPAWN_CONFIG.baseRate * Math.pow(LEVEL_SCALING.enemySpawnRateScale, gameState.level - 1);
+        
+        if (Math.random() < spawnChance * delta) {
+            // Determine enemy type based on ratios
+            const roll = Math.random();
+            let type = 'BASIC';
+            let cumulative = 0;
+            
+            for (const [enemyType, ratio] of Object.entries(SPAWN_CONFIG.typeRatios)) {
+                cumulative += ratio;
+                if (roll <= cumulative) {
+                    type = enemyType;
+                    break;
+                }
+            }
+            
+            const spawnPos = this.createEnemy();
+            const enemy = EntityManager.createEnemy(this.app, type, spawnPos.x, spawnPos.y);
+            
+            // Scale enemy stats with level
+            const levelScale = gameState.level - 1;
+            enemy.health *= Math.pow(LEVEL_SCALING.enemyHealthScale, levelScale);
+            enemy.maxHealth = enemy.health;
+            enemy.speed *= Math.pow(LEVEL_SCALING.enemySpeedScale, levelScale);
+            enemy.experienceValue = Math.floor(ENEMY_TYPES[type].experience * Math.pow(LEVEL_SCALING.experienceMultiplierPerLevel, levelScale));
+            
+            // Check for elite enemy
+            if (Math.random() < SPAWN_CONFIG.eliteChance) {
+                enemy.tint = 0xFFD700; // Gold tint
+                enemy.health *= SPAWN_CONFIG.eliteModifiers.health;
+                enemy.maxHealth = enemy.health;
+                enemy.experienceValue *= SPAWN_CONFIG.eliteModifiers.experience;
+                enemy.speed *= SPAWN_CONFIG.eliteModifiers.speed;
+            }
+            
+            this.worldContainer.addChild(enemy);
+            gameState.enemies.push(enemy);
         }
     }
 
@@ -818,7 +884,7 @@ class Game {
         // Update level-related stats
         gameState.level++;
         gameState.experience = 0;
-        gameState.nextLevel *= 2;
+        gameState.nextLevel = Math.floor(gameState.nextLevel * LEVEL_SCALING.experienceMultiplier);
         gameState.levelUp = false;
         
         // Update all UI elements
@@ -844,9 +910,8 @@ class Game {
     createEnemy() {
         // Modify enemy spawn to use world coordinates
         const angle = Math.random() * Math.PI * 2;
-        const spawnDistance = 600;
-        const spawnX = gameState.player.x + Math.cos(angle) * spawnDistance;
-        const spawnY = gameState.player.y + Math.sin(angle) * spawnDistance;
+        const spawnX = gameState.player.x + Math.cos(angle) * SPAWN_CONFIG.spawnDistance;
+        const spawnY = gameState.player.y + Math.sin(angle) * SPAWN_CONFIG.spawnDistance;
         
         // Ensure spawn is within world bounds
         const x = Math.max(50, Math.min(WORLD_CONFIG.width - 50, spawnX));
@@ -943,7 +1008,7 @@ class Game {
                 key: '1', 
                 text: 'Increase Fire Rate', 
                 action: () => {
-                    gameState.fireRate *= 0.8;
+                    gameState.fireRate *= LEVEL_SCALING.fireRateUpgrade;
                     this.ui.updateDebugPanel(gameState);
                 }
             },
@@ -951,7 +1016,7 @@ class Game {
                 key: '2', 
                 text: 'Increase Speed', 
                 action: () => {
-                    gameState.playerSpeed *= 1.2;
+                    gameState.playerSpeed *= LEVEL_SCALING.speedUpgrade;
                     this.ui.updateDebugPanel(gameState);
                 }
             },
@@ -959,7 +1024,7 @@ class Game {
                 key: '3', 
                 text: 'Increase Health', 
                 action: () => {
-                    gameState.maxHealth = Math.floor(gameState.maxHealth * 1.5);
+                    gameState.maxHealth = Math.floor(gameState.maxHealth * LEVEL_SCALING.healthUpgrade);
                     gameState.health = gameState.maxHealth;
                     this.ui.updateHealth(gameState.health, gameState.maxHealth);
                     this.ui.updateDebugPanel(gameState);
@@ -969,7 +1034,7 @@ class Game {
                 key: '4', 
                 text: 'Increase Attack Damage', 
                 action: () => {
-                    gameState.attackDamage *= 1.5;
+                    gameState.attackDamage *= LEVEL_SCALING.damageUpgrade;
                     this.ui.updateDebugPanel(gameState);
                 }
             },
@@ -977,7 +1042,7 @@ class Game {
                 key: '5', 
                 text: 'Increase Health Regen', 
                 action: () => {
-                    gameState.healthRegen += 1;
+                    gameState.healthRegen += LEVEL_SCALING.healthRegenUpgrade;
                     this.ui.updateDebugPanel(gameState);
                 }
             }
