@@ -7,6 +7,11 @@ export class CollisionSystem {
         this.app = app;
         this.worldContainer = worldContainer;
         this.effectsManager = effectsManager;
+        this.game = null; // Reference to game instance
+    }
+
+    setGame(game) {
+        this.game = game;
     }
 
     checkCollisions() {
@@ -148,6 +153,9 @@ export class CollisionSystem {
             // Check for game over
             if (gameState.health <= 0) {
                 gameState.gameOver = true;
+                if (this.game && this.game.ui) {
+                    this.game.ui.showGameOver();
+                }
                 return true;
             }
         }

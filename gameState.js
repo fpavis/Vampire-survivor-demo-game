@@ -18,11 +18,15 @@ class GameState {
             invulnerable: false,
             gameOver: false,
             levelUp: false,
-            paused: false
+            paused: false,
+            killCount: 0
         });
         this.lastFire = 0;
         this.pendingExperience = 0;
         this.gameTicker = null;
+        
+        // Ensure nextLevel is properly set
+        this.nextLevel = INITIAL_STATE.XP_TO_LEVEL;
     }
 }
 

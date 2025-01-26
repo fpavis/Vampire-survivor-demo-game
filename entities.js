@@ -59,6 +59,7 @@ export class EntityManager {
         enemy.speed = config.speed;
         enemy.experienceValue = config.experience;
         enemy.healthBar = healthBar;
+        enemy.healthBarWidth = config.size * 2; // Store original health bar width
         
         return enemy;
     }
