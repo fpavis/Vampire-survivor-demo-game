@@ -213,7 +213,7 @@ class Game {
     }
 
     gameLoop(delta) {
-        if (gameState.gameOver || gameState.levelUp) return;
+        if (gameState.gameOver || gameState.levelUp || gameState.paused) return;
 
         this.handleMovement(delta);
         this.handleCombat(delta);

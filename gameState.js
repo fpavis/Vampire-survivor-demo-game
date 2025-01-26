@@ -10,6 +10,7 @@ class GameState {
         this.lastFire = 0;
         this.levelUp = false;
         this.gameOver = false;
+        this.paused = false;
         this.keys = {};
         this.pendingExperience = 0;
         
