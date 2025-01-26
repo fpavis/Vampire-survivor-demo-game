@@ -1,112 +1,95 @@
+import { gameState } from './gameState.js';
+import { INITIAL_STATE } from './config.js';
+
 // Weapon configurations
-export const WEAPON_TYPES = {
+const WEAPON_CONFIGS = {
     PISTOL: {
-        id: 'PISTOL',
         name: 'Pistol',
         damage: 20,
-        fireRate: 0.5,      // Shots per second
-        projectileSpeed: 32,
-        projectileCount: 1,
-        spread: 0,
-        projectileSize: 4,
+        fireRate: 500,
+        projectileSpeed: 8,
+        projectileSize: 5,
         color: 0xFFFF00,
         pattern: 'single',
-        sound: 'pistolShot',
-        description: 'Basic weapon with balanced stats',
-        range: 500
+        range: 500,
+        piercing: false
     },
     SHOTGUN: {
-        id: 'SHOTGUN',
         name: 'Shotgun',
         damage: 15,
-        fireRate: 1.2,      // Slower fire rate
-        projectileSpeed: 20,
-        projectileCount: 5,
-        spread: 30,         // Wider spread
-        projectileSize: 3,
-        color: 0xFF4400,
+        fireRate: 800,
+        projectileSpeed: 7,
+        projectileSize: 4,
+        color: 0xFF8800,
         pattern: 'spread',
-        sound: 'shotgunBlast',
-        description: 'Short range, high burst damage',
-        spreadCount: 5,
-        spreadAngle: Math.PI / 6,
-        range: 300
+        range: 300,
+        piercing: false
     },
     LASER: {
-        id: 'LASER',
-        name: 'Laser Rifle',
+        name: 'Laser',
         damage: 25,
-        fireRate: 0.3,      // Faster fire rate
-        projectileSpeed: 15,
-        projectileCount: 1,
-        spread: 0,
+        fireRate: 1000,
+        projectileSpeed: 12,
         projectileSize: 6,
         color: 0x00FFFF,
         pattern: 'beam',
-        sound: 'laserShot',
-        description: 'High damage, piercing beam',
-        piercing: true,
-        range: 800
+        range: 600,
+        piercing: true
     },
     MACHINEGUN: {
-        id: 'MACHINEGUN',
         name: 'Machine Gun',
-        damage: 8,
-        fireRate: 8,
-        projectileSpeed: 25,
-        projectileCount: 1,
-        spread: 15,         // Some spread for balance
+        damage: 10,
+        fireRate: 200,
+        projectileSpeed: 10,
         projectileSize: 3,
         color: 0xFF0000,
-        pattern: 'single',
-        sound: 'machinegunFire',
-        description: 'High rate of fire, low damage',
-        range: 400
+        pattern: 'rapid',
+        range: 400,
+        piercing: false
     }
 };
 
 // Weapon patterns implementation
 const WEAPON_PATTERNS = {
-    single: (weapon, origin, target) => {
-        return [{
-            angle: Math.atan2(target.y - origin.y, target.x - origin.x),
-            speed: weapon.projectileSpeed,
-            damage: weapon.damage
-        }];
-    },
-    spread: (weapon, origin, target) => {
-        const baseAngle = Math.atan2(target.y - origin.y, target.x - origin.x);
+    single: (weapon, angle) => [{
+        angle,
+        damage: weapon.damage,
+        piercing: weapon.piercing,
+        range: weapon.range,
+        speed: weapon.projectileSpeed
+    }],
+    
+    spread: (weapon, angle) => {
         const projectiles = [];
-        const totalSpread = weapon.spread * (Math.PI / 180);
+        const spreadAngle = Math.PI / 8; // 22.5 degrees
         
-        for (let i = 0; i < weapon.projectileCount; i++) {
-            const spreadAngle = totalSpread * (i / (weapon.projectileCount - 1) - 0.5);
+        for (let i = -1; i <= 1; i++) {
             projectiles.push({
-                angle: baseAngle + spreadAngle,
-                speed: weapon.projectileSpeed * (0.9 + Math.random() * 0.2),
-                damage: weapon.damage
+                angle: angle + (spreadAngle * i),
+                damage: weapon.damage * 0.8, // Slightly reduced damage for balance
+                piercing: weapon.piercing,
+                range: weapon.range,
+                speed: weapon.projectileSpeed
             });
         }
         return projectiles;
     },
-    beam: (weapon, origin, target) => {
-        return [{
-            angle: Math.atan2(target.y - origin.y, target.x - origin.x),
-            speed: weapon.projectileSpeed * 1.5,
-            damage: weapon.damage,
-            piercing: true,
-            range: 800
-        }];
-    },
-    rapid: (weapon, origin, target) => {
-        const baseAngle = Math.atan2(target.y - origin.y, target.x - origin.x);
-        const spread = (Math.random() - 0.5) * weapon.spread * (Math.PI / 180);
-        return [{
-            angle: baseAngle + spread,
-            speed: weapon.projectileSpeed,
-            damage: weapon.damage
-        }];
-    }
+    
+    beam: (weapon, angle) => [{
+        angle,
+        damage: weapon.damage * 1.5, // Higher damage for beam
+        piercing: true, // Beams always pierce
+        range: weapon.range * 1.2, // Longer range
+        speed: weapon.projectileSpeed * 1.5 // Faster projectiles for beam
+    }],
+
+    rapid: (weapon, angle) => [{
+        angle: angle + (Math.random() * 0.2 - 0.1), // Slight spread
+        damage: weapon.damage * 0.7, // Reduced damage for balance
+        piercing: weapon.piercing,
+        range: weapon.range * 0.8, // Shorter range
+        speed: weapon.projectileSpeed * 1.2 // Slightly faster for machine gun
+    }]
 };
 
 // Upgrade types
@@ -145,12 +128,12 @@ export const WEAPON_UPGRADES = {
 
 export class Weapon {
     constructor(type) {
-        const config = WEAPON_TYPES[type];
+        const config = WEAPON_CONFIGS[type];
         if (!config) throw new Error(`Invalid weapon type: ${type}`);
         
         Object.assign(this, config);
         
-        this.lastFired = 0;
+        this.lastFireTime = 0;
         this.level = 1;
         this.upgrades = new Map();
         Object.keys(WEAPON_UPGRADES).forEach(upgrade => {
@@ -159,32 +142,39 @@ export class Weapon {
     }
 
     canFire(currentTime) {
-        return currentTime - this.lastFired >= this.fireRate * 1000;
+        // Calculate actual fire rate by applying player's fire rate modifier
+        const actualFireRate = this.fireRate * (gameState.fireRate / INITIAL_STATE.fireRate);
+        return currentTime - this.lastFireTime >= actualFireRate;
     }
 
     fire(origin, target, currentTime) {
         if (!this.canFire(currentTime)) return [];
 
-        this.lastFired = currentTime;
+        this.lastFireTime = currentTime;
         const pattern = WEAPON_PATTERNS[this.pattern];
         if (!pattern) return [];
 
-        const projectiles = pattern(this, origin, target);
+        const projectiles = pattern(this, Math.atan2(target.y - origin.y, target.x - origin.x));
         return projectiles.map(proj => this.createProjectile(origin, proj));
     }
 
     createProjectile(origin, projConfig) {
-        const speed = projConfig.speed * 0.16; // Adjust speed for delta time
+        const speed = projConfig.speed || this.projectileSpeed;
+        // Add random damage variation (±12%)
+        const damageVariation = 0.88 + (Math.random() * 0.24); // Random between 0.88 and 1.12
+        const baseDamage = projConfig.damage * (gameState.attackDamage / INITIAL_STATE.attackDamage);
+        const finalDamage = Math.round(baseDamage * damageVariation);
+
         return {
             x: origin.x,
             y: origin.y,
             dx: Math.cos(projConfig.angle) * speed,
             dy: Math.sin(projConfig.angle) * speed,
-            damage: projConfig.damage,
+            damage: finalDamage,
             size: this.projectileSize,
             color: this.color,
             piercing: projConfig.piercing || false,
-            range: projConfig.range,
+            range: projConfig.range || this.range,
             distanceTraveled: 0,
             active: true
         };

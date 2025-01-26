@@ -118,4 +118,28 @@ export const WORLD_CONFIG = {
     width: 2000,  // World is larger than viewport
     height: 2000,
     viewportPadding: 200  // Distance from player to edge before camera moves
+};
+
+// Collision configuration
+export const COLLISION_CONFIG = {
+    // Player collision
+    player: {
+        radius: 20,
+        pushForce: 2,      // How much player pushes enemies
+        pushResistance: 0.3, // How much player resists being pushed
+        damageImmunityTime: 1000,  // Milliseconds
+        damage: 10,          // Damage taken from collisions
+    },
+    // Enemy collision
+    enemy: {
+        pushForce: 2,        // Base push force for enemy collisions
+        minDistance: 0.9,    // Multiplier for minimum distance (1 = touching exactly)
+        maxPushForce: 10,    // Maximum push force cap
+        repelForce: 0.5,     // How strongly enemies repel each other
+    },
+    // General collision
+    impulse: {
+        power: 2,            // Base impulse power
+        sizeFactor: 0.25,    // How much object sizes affect impulse (0.25 = width/4)
+    }
 }; 

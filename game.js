@@ -1,4 +1,4 @@
-import { GAME_CONFIG, ENEMY_TYPES, INITIAL_STATE, LEVEL_SCALING, STYLES, WORLD_CONFIG, SPAWN_CONFIG } from './config.js';
+import { GAME_CONFIG, ENEMY_TYPES, INITIAL_STATE, LEVEL_SCALING, STYLES, WORLD_CONFIG, SPAWN_CONFIG, COLLISION_CONFIG } from './config.js';
 import { gameState } from './gameState.js';
 import { EntityManager } from './entities.js';
 import { UIManager } from './ui.js';
@@ -578,6 +578,67 @@ class Game {
     }
 
     checkCollisions() {
+        // Check player-enemy collisions first
+        if (!gameState.invulnerable && gameState.player) {
+            for (const enemy of gameState.enemies) {
+                if (!enemy) continue;
+
+                // Calculate distance between player and enemy centers
+                const dx = enemy.x - gameState.player.x;
+                const dy = enemy.y - gameState.player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Use the actual radius values for collision
+                const playerRadius = gameState.player.radius;  // Set in EntityManager.createPlayer
+                const enemyRadius = enemy.radius;  // Set in EntityManager.createEnemy
+                const minDistance = (playerRadius + enemyRadius) * COLLISION_CONFIG.enemy.minDistance;
+
+                if (distance < minDistance) {
+                    // Calculate normalized direction for push
+                    const angle = Math.atan2(dy, dx);
+                    const pushForce = Math.min(
+                        (minDistance - distance) * COLLISION_CONFIG.enemy.pushForce,
+                        COLLISION_CONFIG.enemy.maxPushForce
+                    );
+
+                    // Push enemy away
+                    enemy.x += Math.cos(angle) * pushForce;
+                    enemy.y += Math.sin(angle) * pushForce;
+
+                    // Push player in opposite direction
+                    gameState.player.x -= Math.cos(angle) * pushForce * COLLISION_CONFIG.player.pushResistance;
+                    gameState.player.y -= Math.sin(angle) * pushForce * COLLISION_CONFIG.player.pushResistance;
+
+                    // Keep player in bounds
+                    gameState.player.x = Math.max(playerRadius, Math.min(WORLD_CONFIG.width - playerRadius, gameState.player.x));
+                    gameState.player.y = Math.max(playerRadius, Math.min(WORLD_CONFIG.height - playerRadius, gameState.player.y));
+
+                    // Apply damage to player
+                    if (!gameState.invulnerable) {
+                        gameState.health -= COLLISION_CONFIG.player.damage;
+                        gameState.invulnerable = true;
+
+                        // Flash player red
+                        gameState.player.tint = 0xFF0000;
+
+                        // Reset after immunity period
+                        setTimeout(() => {
+                            if (gameState.player) {
+                                gameState.invulnerable = false;
+                                gameState.player.tint = STYLES.colors.player;
+                            }
+                        }, COLLISION_CONFIG.player.damageImmunityTime);
+
+                        // Check for game over
+                        if (gameState.health <= 0) {
+                            gameState.gameOver = true;
+                            this.ui.showGameOver();
+                        }
+                    }
+                }
+            }
+        }
+
         // Check bullet collisions with enemies
         for (let i = gameState.bullets.length - 1; i >= 0; i--) {
             const bullet = gameState.bullets[i];
@@ -641,64 +702,34 @@ class Game {
             }
         }
 
-        // Check enemy collisions with player
-        if (!gameState.invulnerable && gameState.player) {
-            const playerRadius = 20; // Fixed player collision radius
-            
-            for (const enemy of gameState.enemies) {
-                if (!enemy) continue;
-
-                const dx = gameState.player.x - enemy.x;
-                const dy = gameState.player.y - enemy.y;
+        // Enemy-Enemy collisions
+        for (let i = 0; i < gameState.enemies.length; i++) {
+            for (let j = i + 1; j < gameState.enemies.length; j++) {
+                const enemy1 = gameState.enemies[i];
+                const enemy2 = gameState.enemies[j];
+                
+                if (!enemy1 || !enemy2) continue;
+                
+                const dx = enemy2.x - enemy1.x;
+                const dy = enemy2.y - enemy1.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
-                const enemyRadius = enemy.width / 2;
-                const minDistance = playerRadius + enemyRadius;
-
+                const minDistance = (enemy1.width/2 + enemy2.width/2) * COLLISION_CONFIG.enemy.minDistance;
+                
                 if (distance < minDistance) {
-                    // Calculate push force based on overlap
-                    const overlap = minDistance - distance;
-                    const pushForce = Math.min(overlap * 0.5, 10); // Cap the push force
                     const angle = Math.atan2(dy, dx);
+                    const pushForce = Math.min(
+                        (minDistance - distance) * COLLISION_CONFIG.enemy.repelForce,
+                        COLLISION_CONFIG.enemy.maxPushForce
+                    );
                     
-                    // Push enemy away from player
                     const pushX = Math.cos(angle) * pushForce;
                     const pushY = Math.sin(angle) * pushForce;
                     
-                    enemy.x = enemy.x - pushX;
-                    enemy.y = enemy.y - pushY;
-                    
-                    // Push player away slightly
-                    const playerPushForce = pushForce * 0.3; // Player moves less than enemy
-                    gameState.player.x = gameState.player.x + Math.cos(angle) * playerPushForce;
-                    gameState.player.y = gameState.player.y + Math.sin(angle) * playerPushForce;
-
-                    // Keep player in bounds after push
-                    gameState.player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, gameState.player.x));
-                    gameState.player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, gameState.player.y));
-
-                    // Apply damage to player and set invulnerability
-                    gameState.health -= 10;
-                    gameState.invulnerable = true;
-                    
-                    // Flash player red (only the body, not the glow)
-                    if (gameState.player.children[1]) {
-                        gameState.player.children[1].tint = 0xFF0000;
-                    }
-                    
-                    // Reset after invulnerability period
-                    setTimeout(() => {
-                        if (gameState.player && gameState.player.children[1]) {
-                            gameState.invulnerable = false;
-                            gameState.player.children[1].tint = STYLES.colors.player;
-                        }
-                    }, 1000);
-
-                    // Check for game over
-                    if (gameState.health <= 0) {
-                        gameState.gameOver = true;
-                        this.ui.showGameOver();
-                    }
+                    enemy1.x -= pushX;
+                    enemy1.y -= pushY;
+                    enemy2.x += pushX;
+                    enemy2.y += pushY;
                 }
             }
         }
@@ -1302,4 +1333,95 @@ try {
     const game = new Game();
 } catch (error) {
     console.error('Failed to start game:', error);
+}
+
+// Collision detection utilities
+function testForAABB(object1, object2) {
+    const bounds1 = object1.getBounds();
+    const bounds2 = object2.getBounds();
+
+    return bounds1.x < bounds2.x + bounds2.width
+        && bounds1.x + bounds1.width > bounds2.x
+        && bounds1.y < bounds2.y + bounds2.height
+        && bounds1.y + bounds1.height > bounds2.y;
+}
+
+function collisionResponse(object1, object2) {
+    if (!object1 || !object2) return new PIXI.Point(0);
+
+    const vCollision = new PIXI.Point(
+        object2.x - object1.x,
+        object2.y - object1.y
+    );
+
+    const distance = Math.sqrt(
+        (object2.x - object1.x) * (object2.x - object1.x) +
+        (object2.y - object1.y) * (object2.y - object1.y)
+    );
+
+    const vCollisionNorm = new PIXI.Point(
+        vCollision.x / distance,
+        vCollision.y / distance
+    );
+
+    // Use configured impulse values
+    const impulse = COLLISION_CONFIG.impulse.power * 
+        (object1.width + object2.width) * COLLISION_CONFIG.impulse.sizeFactor;
+
+    return new PIXI.Point(
+        impulse * vCollisionNorm.x,
+        impulse * vCollisionNorm.y
+    );
+}
+
+function handleCollisions() {
+    // Player-Enemy collisions
+    for (const enemy of gameState.enemies) {
+        if (testForAABB(gameState.player, enemy)) {
+            // Calculate collision response
+            const pushForce = collisionResponse(gameState.player, enemy);
+            
+            // Apply push force to both objects
+            enemy.x += pushForce.x;
+            enemy.y += pushForce.y;
+            
+            // Push player in opposite direction
+            gameState.player.x -= pushForce.x * 0.5;
+            gameState.player.y -= pushForce.y * 0.5;
+            
+            // Keep player in bounds
+            gameState.player.x = Math.max(0, Math.min(gameState.player.x, this.app.screen.width - gameState.player.width));
+            gameState.player.y = Math.max(0, Math.min(gameState.player.y, this.app.screen.height - gameState.player.height));
+            
+            // Apply damage if player isn't invulnerable
+            if (!gameState.player.isInvulnerable) {
+                gameState.player.health -= 10;
+                gameState.player.isInvulnerable = true;
+                gameState.player.tint = 0xff0000;
+                
+                setTimeout(() => {
+                    gameState.player.isInvulnerable = false;
+                    gameState.player.tint = 0xffffff;
+                }, 1000);
+            }
+        }
+    }
+
+    // Enemy-Enemy collisions
+    for (let i = 0; i < gameState.enemies.length; i++) {
+        for (let j = i + 1; j < gameState.enemies.length; j++) {
+            const enemy1 = gameState.enemies[i];
+            const enemy2 = gameState.enemies[j];
+            
+            if (testForAABB(enemy1, enemy2)) {
+                const pushForce = collisionResponse(enemy1, enemy2);
+                
+                // Apply forces in opposite directions
+                enemy1.x -= pushForce.x;
+                enemy1.y -= pushForce.y;
+                enemy2.x += pushForce.x;
+                enemy2.y += pushForce.y;
+            }
+        }
+    }
 }

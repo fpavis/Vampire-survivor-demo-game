@@ -34,7 +34,7 @@
 ## 📝 TODO List
 
 ### Combat Improvements
-- [ ] Different weapon types/shooting patterns
+- [x] Different weapon types/shooting patterns
 - [ ] Multiple bullet types
 - [ ] Bullet collision effects/particles
 - [ ] Enemy death animations

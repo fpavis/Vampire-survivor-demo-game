@@ -4,78 +4,63 @@ import { gameState } from './gameState.js';
 
 export class EntityManager {
     static createPlayer(app) {
-        const container = new PIXI.Container();
+        // Create player as a single graphics object
+        const player = new PIXI.Graphics();
         
         // Create glow effect
         const glow = new PIXI.Graphics();
         glow.beginFill(0x00ff00, 0.2);
         glow.drawCircle(0, 0, 25);
         glow.endFill();
-        container.addChild(glow);
         
-        // Create player body
-        const body = new PIXI.Graphics();
-        body.beginFill(STYLES.colors.player);
-        body.drawCircle(0, 0, 20);  // Fixed size for collision radius
-        body.endFill();
-        container.addChild(body);
-
-        // Set container dimensions explicitly for collision detection
-        container.width = 40;  // Diameter
-        container.height = 40; // Diameter
         
-        // Add hit area for better collision detection
-        container.hitArea = new PIXI.Circle(0, 0, 20);
-
-        return container;
+        // Draw player body
+        player.beginFill(STYLES.colors.player);
+        player.drawCircle(0, 0, 20);  // Fixed size for collision radius
+        player.endFill();
+        
+        // Set player properties
+        player.radius = 20;  // Store radius for collision detection
+        
+        return player;
     }
 
     static createEnemy(app, type, x, y) {
         const config = ENEMY_TYPES[type];
-        const container = new PIXI.Container();
         
         // Create enemy body
-        const body = new PIXI.Graphics();
-        body.beginFill(config.color);
-        body.drawCircle(0, 0, config.size);
-        body.endFill();
-        container.addChild(body);
+        const enemy = new PIXI.Graphics();
+        enemy.beginFill(config.color);
+        enemy.drawCircle(0, 0, config.size);
+        enemy.endFill();
         
-        // Create health bar background
+        // Create health bar background as separate object
         const healthBarBg = new PIXI.Graphics();
         healthBarBg.beginFill(STYLES.colors.healthBar.background);
         healthBarBg.drawRect(-config.size, -config.size - 10, config.size * 2, 4);
         healthBarBg.endFill();
-        container.addChild(healthBarBg);
+        enemy.addChild(healthBarBg);
         
-        // Create health bar
+        // Create health bar as separate object
         const healthBar = new PIXI.Graphics();
         healthBar.beginFill(STYLES.colors.healthBar.health);
         healthBar.drawRect(-config.size, -config.size - 10, config.size * 2, 4);
         healthBar.endFill();
-        container.addChild(healthBar);
+        enemy.addChild(healthBar);
         
-        // Set container properties
-        container.x = x;
-        container.y = y;
+        // Set enemy position
+        enemy.x = x;
+        enemy.y = y;
         
-        // Set dimensions to match the circle size exactly
-        const diameter = config.size * 2;
-        container.width = diameter;
-        container.height = diameter;
+        // Set enemy properties directly on the graphics object
+        enemy.radius = config.size;
+        enemy.health = config.health;
+        enemy.maxHealth = config.health;
+        enemy.speed = config.speed;
+        enemy.experienceValue = config.experience;
+        enemy.healthBar = healthBar;
         
-        // Add hit area for collision detection
-        container.hitArea = new PIXI.Circle(0, 0, config.size);
-        
-        // Add enemy properties
-        container.health = config.health;
-        container.maxHealth = config.health;
-        container.speed = config.speed;
-        container.experienceValue = config.experience;
-        container.healthBar = healthBar;
-        container.radius = config.size; // Store radius for easier access
-        
-        return container;
+        return enemy;
     }
 
     static createBullet(startX, startY, targetX, targetY) {

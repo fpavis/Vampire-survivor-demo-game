@@ -55,13 +55,18 @@ export class UIManager {
     }
 
     createUIElements() {
-        // Create UI panel background
+        // Create main UI panel background
         const panel = new PIXI.Graphics();
-        panel.beginFill(0x000000, 0.5);
-        panel.drawRoundedRect(5, 5, 200, 150, 10);
+        panel.beginFill(0x000000, 0.7);
+        panel.drawRoundedRect(5, 5, 250, 200, 10);
         panel.endFill();
+        panel.zIndex = 1;
         this.container.addChild(panel);
 
+        // Initialize elements object
+        this.elements = {};
+
+        // Define text styles
         const textStyle = {
             fontFamily: 'Arial',
             fontSize: 16,
@@ -74,85 +79,70 @@ export class UIManager {
             dropShadowDistance: 1
         };
 
-        const debugStyle = {
-            ...textStyle,
-            fontSize: 14,
-            fill: '#AAAAAA'
-        };
+        // Create and position all UI elements
+        let yPos = 15;
+        const SPACING = 30;
 
-        // Create stat icons
-        this.createIcon(15, 15, 0xFF0000, '❤️'); // Health
-        this.createIcon(15, 45, 0xFFD700, '⭐'); // Score
-        this.createIcon(15, 75, 0x00FF00, '📊'); // Level
-        this.createIcon(15, 105, 0xFF00FF, '💎'); // XP
+        // Health (with icon and bar)
+        this.createIcon(15, yPos, 0xFF0000, '❤️');
+        this.elements.healthText = new PIXI.Text('Health: 100/100', textStyle);
+        this.elements.healthText.position.set(40, yPos);
+        this.elements.healthBar = this.createProgressBar(40, yPos + 20, 190, 6, 0xFF0000);
+        yPos += SPACING + 10;
 
-        // Create settings button in top right
-        const settingsButton = new PIXI.Container();
-        const settingsIcon = new PIXI.Text('⚙️', { fontSize: 24 });
-        settingsIcon.anchor.set(0.5);
-        
-        const settingsBg = new PIXI.Graphics();
-        settingsBg.beginFill(0x000000, 0.3);
-        settingsBg.drawCircle(0, 0, 20);
-        settingsBg.endFill();
-        
-        settingsButton.addChild(settingsBg, settingsIcon);
-        // Position in top right with margin
-        settingsButton.position.set(this.app.screen.width - 40, 40);
-        settingsButton.eventMode = 'static';
-        settingsButton.cursor = 'pointer';
-        
-        // Add window resize handler for settings button
-        window.addEventListener('resize', () => {
-            settingsButton.position.set(this.app.screen.width - 40, 40);
-        });
-        
-        settingsButton.on('pointerdown', () => this.toggleSettings());
-        settingsButton.on('pointerover', () => {
-            settingsBg.clear();
-            settingsBg.beginFill(0x333333, 0.5);
-            settingsBg.drawCircle(0, 0, 20);
-        });
-        settingsButton.on('pointerout', () => {
-            settingsBg.clear();
-            settingsBg.beginFill(0x000000, 0.3);
-            settingsBg.drawCircle(0, 0, 20);
-        });
-        
-        this.container.addChild(settingsButton);
+        // Weapon (with icon)
+        this.createIcon(15, yPos, 0xFFFFFF, '🔫');
+        this.elements.weaponText = new PIXI.Text('Weapon: Pistol (1-4)', textStyle);
+        this.elements.weaponText.position.set(40, yPos);
+        yPos += SPACING;
 
-        this.elements = {
-            scoreText: new PIXI.Text('Score: 0', textStyle),
-            healthText: new PIXI.Text('Health: 100/100', textStyle),
-            levelText: new PIXI.Text('Level: 1', textStyle),
-            experienceText: new PIXI.Text('XP: 0/10', textStyle),
-            debugText: new PIXI.Text('', debugStyle)
-        };
+        // Level (with icon)
+        this.createIcon(15, yPos, 0x00FF00, '📊');
+        this.elements.levelText = new PIXI.Text('Level: 1', textStyle);
+        this.elements.levelText.position.set(40, yPos);
+        yPos += SPACING;
 
-        // Position UI elements with offset for icons
-        this.elements.healthText.position.set(40, 10);
-        this.elements.scoreText.position.set(40, 40);
-        this.elements.levelText.position.set(40, 70);
-        this.elements.experienceText.position.set(40, 100);
-        this.elements.debugText.position.set(10, 170);
+        // Experience (with icon and bar)
+        this.createIcon(15, yPos, 0xFF00FF, '💎');
+        this.elements.experienceText = new PIXI.Text('XP: 0/100', textStyle);
+        this.elements.experienceText.position.set(40, yPos);
+        this.elements.xpBar = this.createProgressBar(40, yPos + 20, 190, 6, 0x8800FF);
+        yPos += SPACING + 10;
 
-        // Add elements to container
+        // Score (with icon)
+        this.createIcon(15, yPos, 0xFFD700, '⭐');
+        this.elements.scoreText = new PIXI.Text('Score: 0', textStyle);
+        this.elements.scoreText.position.set(40, yPos);
+        yPos += SPACING;
+
+        // Stats text (smaller font for detailed stats)
+        const statsStyle = { ...textStyle, fontSize: 14 };
+        this.elements.statsText = new PIXI.Text('', statsStyle);
+        this.elements.statsText.position.set(15, yPos);
+
+        // Add all elements to container with proper z-index
         Object.values(this.elements).forEach(element => {
-            this.container.addChild(element);
+            if (element instanceof PIXI.DisplayObject) {
+                element.zIndex = 2;
+                this.container.addChild(element);
+            }
         });
 
-        // Add XP bar
-        this.xpBar = this.createProgressBar(10, 130, 190, 10, 0x8800FF);
-        this.healthBar = this.createProgressBar(40, 30, 160, 6, 0xFF0000);
+        // Initial stats update
+        this.updateStats(gameState);
+    }
 
-        // Add weapon info text
-        this.weaponText = new PIXI.Text('Weapon: Pistol', {
-            fontSize: 16,
-            fill: STYLES.colors.ui.text,
-            align: 'left'
-        });
-        this.weaponText.position.set(10, 100);  // Position below other UI elements
-        this.app.stage.addChild(this.weaponText);
+    updateStats(gameState) {
+        if (!this.elements.statsText) return;
+
+        const stats = [
+            `ATK: ${Math.round(gameState.attackDamage)}`,
+            `Rate: ${Math.round(60000/gameState.fireRate)}rpm`,
+            `Speed: ${gameState.playerSpeed.toFixed(1)}`,
+            `Regen: ${gameState.healthRegen.toFixed(1)}/s`
+        ].join('  |  ');
+
+        this.elements.statsText.text = stats;
     }
 
     createIcon(x, y, color, emoji) {
@@ -161,11 +151,13 @@ export class UIManager {
             align: 'center'
         });
         text.position.set(x, y);
+        text.zIndex = 2;
         this.container.addChild(text);
     }
 
     createProgressBar(x, y, width, height, color) {
         const container = new PIXI.Container();
+        container.zIndex = 1;
         
         // Background
         const bg = new PIXI.Graphics();
@@ -186,34 +178,118 @@ export class UIManager {
         return bar;
     }
 
+    updateHealth(health, maxHealth) {
+        if (!this.elements.healthText || !this.elements.healthBar) return;
+        
+        const currentHealth = Math.floor(health);
+        this.elements.healthText.text = `Health: ${currentHealth}/${maxHealth}`;
+        this.elements.healthBar.scale.x = Math.max(0, Math.min(1, health / maxHealth));
+    }
+
+    updateExperience(experience, nextLevel) {
+        if (!this.elements.experienceText || !this.elements.xpBar) return;
+        
+        this.elements.experienceText.text = `XP: ${experience}/${nextLevel}`;
+        this.elements.xpBar.scale.x = Math.max(0, Math.min(1, experience / nextLevel));
+    }
+
     updateScore(score) {
+        if (!this.elements.scoreText) return;
         this.elements.scoreText.text = `Score: ${score}`;
     }
 
-    updateHealth(health, maxHealth) {
-        this.elements.healthText.text = `${Math.floor(health)}/${maxHealth}`;
-        this.healthBar.scale.x = health / maxHealth;
-    }
-
     updateLevel(level) {
+        if (!this.elements.levelText) return;
+        
         this.elements.levelText.text = `Level: ${level}`;
-        // Only flash if level has increased
         if (level > this.previousLevel) {
             this.createFlashEffect(this.elements.levelText);
             this.previousLevel = level;
         }
     }
 
-    updateExperience(experience, nextLevel) {
-        this.elements.experienceText.text = `XP: ${experience}/${nextLevel}`;
-        this.xpBar.scale.x = experience / nextLevel;
+    updateWeaponInfo(weaponName) {
+        if (!this.elements.weaponText) return;
+        this.elements.weaponText.text = `Weapon: ${weaponName} (1-4)`;
     }
 
-    updateDebugPanel(state) {
-        this.elements.debugText.text = 
-            `⚔️ Attack: ${state.attackDamage} | 🏃 Speed: ${state.playerSpeed.toFixed(1)}\n` +
-            `⚡ Attack Speed: ${(1000 / state.fireRate).toFixed(1)}/s\n` +
-            `❤️ Regen: ${state.healthRegen.toFixed(1)}/s`;
+    updateDebugPanel(gameState) {
+        if (!this.debugPanel) {
+            // Create debug panel container
+            this.debugPanel = new PIXI.Container();
+            this.debugPanel.zIndex = 100; // Ensure it's above other UI elements
+            this.app.stage.addChild(this.debugPanel);
+
+            // Create semi-transparent background
+            const bg = new PIXI.Graphics();
+            bg.beginFill(0x000000, 0.7);
+            bg.drawRoundedRect(0, 0, 200, 360, 10);
+            bg.endFill();
+            this.debugPanel.addChild(bg);
+
+            // Create title
+            const titleStyle = {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                fill: 0xFFD700,
+                fontWeight: 'bold'
+            };
+            const title = new PIXI.Text('Debug Stats', titleStyle);
+            title.position.set(10, 10);
+            this.debugPanel.addChild(title);
+
+            // Create stats text with sections
+            const textStyle = {
+                fontFamily: 'Arial',
+                fontSize: 14,
+                fill: 0xFFFFFF,
+                lineHeight: 20
+            };
+
+            this.statsText = new PIXI.Text('', textStyle);
+            this.statsText.position.set(10, 35);
+            this.debugPanel.addChild(this.statsText);
+
+            // Position panel in bottom right with padding
+            const updatePosition = () => {
+                this.debugPanel.position.set(
+                    this.app.screen.width - this.debugPanel.width - 20,
+                    this.app.screen.height - this.debugPanel.height - 100
+                );
+            };
+
+            // Initial position
+            updatePosition();
+
+            // Update position on window resize
+            window.addEventListener('resize', updatePosition);
+        }
+
+        // Calculate fire rate in shots per second
+        const baseFireRate = 1000 / gameState.fireRate; // Convert ms delay to shots per second
+        const dps = gameState.attackDamage * baseFireRate;
+
+        // Update stats text with sections and formatting
+        const stats = [
+            '=== Combat Stats ===',
+            `Attack Damage: ${Math.round(gameState.attackDamage)}`,
+            `Fire Rate: ${baseFireRate.toFixed(2)} shots/sec`,
+            `DPS: ${Math.round(dps)}`,
+            '',
+            '=== Defense Stats ===',
+            `Max Health: ${Math.round(gameState.maxHealth)}`,
+            `Health Regen: ${gameState.healthRegen.toFixed(1)}/sec`,
+            '',
+            '=== Movement ===',
+            `Speed: ${gameState.playerSpeed.toFixed(1)}`,
+            '',
+            '=== Progress ===',
+            `Level: ${gameState.level}`,
+            `XP: ${gameState.experience}/${gameState.nextLevel}`,
+            `Score: ${gameState.score}`
+        ].join('\n');
+
+        this.statsText.text = stats;
     }
 
     createFlashEffect(target) {
@@ -665,12 +741,6 @@ export class UIManager {
         });
 
         return container;
-    }
-
-    updateWeaponInfo(weaponName) {
-        if (this.weaponText) {
-            this.weaponText.text = `Weapon: ${weaponName} (1-4 to switch)`;
-        }
     }
 
     showGameOver() {
