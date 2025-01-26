@@ -2,25 +2,56 @@ import { STYLES } from './config.js';
 import { gameState } from './gameState.js';
 
 export class UIManager {
-    constructor(app) {
+    constructor(app, game) {
         this.app = app;
+        this.game = game;  // Store game instance for debug toggle
+        
+        // Create main UI container
         this.container = new PIXI.Container();
-        this.container.zIndex = 1000;  // Keep UI on top
-        app.stage.addChild(this.container);
-        this.elements = {};
-        this.previousLevel = 1;
+        this.container.sortableChildren = true;
+        this.app.stage.addChild(this.container);
+        
+        // Initialize UI elements and settings
         this.createUIElements();
-        this.createJoystick();  // Initialize joystick
-
-        // Add keyboard shortcut for settings
+        this.settingsMenu = this.createSettingsMenu();
+        this.container.addChild(this.settingsMenu);
+        
+        // Create joystick if on mobile
+        if (this.isMobileDevice()) {
+            this.createJoystick();
+        }
+        
+        // Add keyboard shortcuts
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.toggleSettings();
+            } else if (e.key === 'p' || e.key === 'P') {
+                this.toggleDebugView();
             }
         });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => this.handleResize());
+    }
 
-        // Sort children by zIndex
-        this.app.stage.sortChildren();
+    handleResize() {
+        // Update UI positions based on new screen size
+        if (this.elements) {
+            const panel = this.container.getChildAt(0); // Get the UI panel
+            panel.clear();
+            panel.beginFill(0x000000, 0.5);
+            panel.drawRoundedRect(5, 5, 200, 150, 10);
+            panel.endFill();
+        }
+
+        // Update settings menu position if it exists
+        if (this.settingsMenu) {
+            this.settingsMenu.position.set(this.app.screen.width - 320, 60);
+        }
+    }
+
+    isMobileDevice() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
 
     createUIElements() {
@@ -113,6 +144,15 @@ export class UIManager {
         // Add XP bar
         this.xpBar = this.createProgressBar(10, 130, 190, 10, 0x8800FF);
         this.healthBar = this.createProgressBar(40, 30, 160, 6, 0xFF0000);
+
+        // Add weapon info text
+        this.weaponText = new PIXI.Text('Weapon: Pistol', {
+            fontSize: 16,
+            fill: STYLES.colors.ui.text,
+            align: 'left'
+        });
+        this.weaponText.position.set(10, 100);  // Position below other UI elements
+        this.app.stage.addChild(this.weaponText);
     }
 
     createIcon(x, y, color, emoji) {
@@ -307,7 +347,7 @@ export class UIManager {
         const bottomOffset = screenHeight * 0.15 + joystick.config.safeAreaInset;
         
         // Use positionX value (0 to 1) to determine x position
-        const positionX = joystick.config.positionX || 0;
+        const positionX = joystick.config.positionX || 0.5;
         const margin = screenWidth * 0.15; // 15% margin from edges
         const usableWidth = screenWidth - (margin * 2); // Width available for positioning
         const x = margin + (usableWidth * positionX); // Linear interpolation
@@ -365,10 +405,8 @@ export class UIManager {
     }
 
     toggleSettings() {
-        if (!this.settingsMenu) {
-            this.createSettingsMenu();
-        }
-
+        if (!this.settingsMenu) return;
+        
         // Toggle visibility and pause state
         const isOpening = !this.settingsMenu.visible;
         this.settingsMenu.visible = isOpening;
@@ -378,7 +416,9 @@ export class UIManager {
         if (isOpening) {
             // Opening settings
             this.settingsMenu.children.forEach(child => {
-                child.eventMode = 'static';  // Ensure all children are interactive
+                if (child.eventMode !== undefined) {
+                    child.eventMode = 'static';  // Ensure all children are interactive
+                }
             });
         } else {
             // Closing settings
@@ -390,202 +430,335 @@ export class UIManager {
         }
     }
 
+    toggleDebugView() {
+        if (this.game && this.game.toggleDebugView) {
+            this.game.toggleDebugView();
+            
+            // Update the checkbox in settings menu if it exists
+            if (this.settingsMenu) {
+                const debugToggle = this.settingsMenu.children.find(child => 
+                    child.children?.[0]?.text === 'Show Debug View:');
+                if (debugToggle) {
+                    const checkbox = debugToggle.children[2]; // The check mark
+                    checkbox.visible = !checkbox.visible;
+                }
+            }
+
+            // Toggle debug legend
+            if (!this.debugLegend) {
+                this.createDebugLegend();
+            }
+            this.debugLegend.visible = gameState.debugView;
+        }
+    }
+
+    createDebugLegend() {
+        this.debugLegend = new PIXI.Container();
+        
+        // Create semi-transparent background
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0x000000, 0.7);
+        bg.drawRoundedRect(0, 0, 200, 160, 10);
+        bg.endFill();
+        this.debugLegend.addChild(bg);
+
+        const legendStyle = {
+            fontSize: 14,
+            fill: 0xFFFFFF,
+            align: 'left'
+        };
+
+        const items = [
+            { color: 0x00FF00, text: '🟢 Player Collision' },
+            { color: 0xFF0000, text: '🔴 Enemy Collision' },
+            { color: 0xFF0000, alpha: 0.3, text: '➖ Enemy Target Line' },
+            { color: 0xFFFF00, text: '🟡 Bullet Collision' },
+            { color: 0xFFFF00, alpha: 0.3, text: '➖ Bullet Trajectory' },
+            { color: 0x00FFFF, text: '🔵 XP Collection Range' }
+        ];
+
+        items.forEach((item, index) => {
+            const text = new PIXI.Text(item.text, legendStyle);
+            text.position.set(10, 10 + (index * 25));
+            this.debugLegend.addChild(text);
+        });
+
+        // Position legend in bottom right
+        this.debugLegend.position.set(
+            this.app.screen.width - 220,
+            this.app.screen.height - 180
+        );
+
+        // Add resize handler for legend
+        window.addEventListener('resize', () => {
+            this.debugLegend.position.set(
+                this.app.screen.width - 220,
+                this.app.screen.height - 180
+            );
+        });
+
+        this.debugLegend.visible = false;
+        this.container.addChild(this.debugLegend);
+    }
+
     createSettingsMenu() {
+        // Create settings menu container
         const menu = new PIXI.Container();
+        menu.eventMode = 'static';
         menu.visible = false;
-        menu.zIndex = 2000; // Ensure it's above other UI elements
-        menu.eventMode = 'static'; // Make entire menu interactive
-
-        // Background overlay
-        const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0.8);
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
-        overlay.eventMode = 'static'; // Make overlay interactive
-        overlay.on('pointerdown', (e) => e.stopPropagation()); // Prevent clicks through overlay
-        menu.addChild(overlay);
-
-        // Settings panel - moved to top right
+        
+        // Create semi-transparent background panel
         const panel = new PIXI.Graphics();
-        panel.beginFill(0x333333, 0.95);
-        panel.lineStyle(2, 0xFFFFFF, 0.8);
+        panel.beginFill(0x000000, 0.8);
         panel.drawRoundedRect(0, 0, 300, 400, 10);
         panel.endFill();
-        panel.position.set(
-            this.app.screen.width - 320,  // 20px margin from right
-            20  // 20px margin from top
-        );
-        panel.eventMode = 'static'; // Make panel interactive
+        panel.eventMode = 'static';
         menu.addChild(panel);
-
-        // Title
-        const title = new PIXI.Text('Settings', {
+        
+        // Settings title
+        const titleText = new PIXI.Text('Settings', {
             fontSize: 24,
             fill: 0xFFFFFF,
             fontWeight: 'bold'
         });
-        title.position.set(panel.x + 150, panel.y + 20);
-        title.anchor.x = 0.5;
-        menu.addChild(title);
+        titleText.anchor.set(0.5, 0);
+        titleText.position.set(panel.width / 2, 20);
+        menu.addChild(titleText);
 
-        // Pause text
-        const pauseText = new PIXI.Text('GAME PAUSED', {
-            fontSize: 48,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 4,
-            dropShadowDistance: 2
+        let currentY = 60;
+        const SPACING = 50;
+
+        // Add debug view toggle
+        const debugToggle = this.createToggle('Show Debug View:', currentY, () => {
+            this.toggleDebugView();
         });
-        pauseText.anchor.set(0.5);
-        pauseText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
-        menu.addChild(pauseText);
+        menu.addChild(debugToggle);
+        currentY += SPACING;
 
-        // Settings options
-        const options = [
-            {
-                label: 'Joystick Position',
-                type: 'slider',
-                min: 0,
-                max: 1,
-                step: 0.1,
-                get: () => this.joystick.config.rightHanded ? 1 : 0,
-                set: (value) => {
-                    this.joystick.config.rightHanded = value > 0.5;
-                    this.joystick.config.positionX = value; // Store actual position value
+        // Add joystick controls (only show if joystick exists)
+        if (this.joystick) {
+            // Joystick Position Slider
+            const positionSlider = this.createSlider('Joystick Position:', currentY, 0, 1, this.joystick.config.positionX || 0.5, (value) => {
+                if (this.joystick) {
+                    this.joystick.config.positionX = value;
                     this.updateJoystickPosition(this.joystick);
                 }
-            },
-            {
-                label: 'Joystick Size',
-                type: 'slider',
-                min: 0.5,
-                max: 1.5,
-                step: 0.1,
-                get: () => this.joystick.config.size,
-                set: (value) => {
+            });
+            menu.addChild(positionSlider);
+            currentY += SPACING;
+
+            // Joystick Size Slider
+            const sizeSlider = this.createSlider('Joystick Size:', currentY, 0.5, 2, this.joystick.config.size || 1, (value) => {
+                if (this.joystick) {
                     this.joystick.config.size = value;
                     this.updateJoystickConfig(this.joystick);
                 }
-            },
-            {
-                label: 'Opacity',
-                type: 'slider',
-                min: 0.1,
-                max: 1.0,
-                step: 0.1,
-                get: () => this.joystick.config.opacity,
-                set: (value) => {
-                    this.joystick.config.opacity = value;
-                    this.updateJoystickConfig(this.joystick);
-                }
-            }
-        ];
-
-        // Create UI elements for each option
-        let yOffset = 70;
-        options.forEach(option => {
-            const label = new PIXI.Text(option.label, {
-                fontSize: 16,
-                fill: 0xFFFFFF
             });
-            label.position.set(panel.x + 20, panel.y + yOffset);
-            menu.addChild(label);
+            menu.addChild(sizeSlider);
+            currentY += SPACING;
 
-            if (option.type === 'slider') {
-                const slider = this.createSlider(
-                    panel.x + 150,
-                    panel.y + yOffset,
-                    option.min,
-                    option.max,
-                    option.step,
-                    option.get(),
-                    (value) => option.set(value)
-                );
-                menu.addChild(slider);
-            }
+            // Joystick Opacity Slider
+            const opacitySlider = this.createSlider('Joystick Opacity:', currentY, 0.1, 1, this.joystick.config.opacity || 0.3, (value) => {
+                if (this.joystick) {
+                    this.joystick.config.opacity = value;
+                    this.joystick.container.alpha = value;
+                }
+            });
+            menu.addChild(opacitySlider);
+            currentY += SPACING;
+        }
 
-            yOffset += 50;
-        });
-
-        // Close button
-        const closeButton = new PIXI.Graphics();
-        closeButton.beginFill(0xFF0000);
-        closeButton.drawRoundedRect(0, 0, 80, 30, 5);
-        closeButton.endFill();
-        closeButton.position.set(panel.x + 110, panel.y + 350);
-        closeButton.eventMode = 'static';
-        closeButton.cursor = 'pointer';
-
-        const closeText = new PIXI.Text('Close', {
-            fontSize: 16,
-            fill: 0xFFFFFF
-        });
-        closeText.anchor.set(0.5);
-        closeText.position.set(40, 15);
-        closeButton.addChild(closeText);
-
-        closeButton.on('pointerdown', () => {
-            this.toggleSettings();  // Use toggleSettings instead of direct visibility change
-        });
-
-        menu.addChild(closeButton);
-        this.container.addChild(menu);
-        this.settingsMenu = menu;
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            if (menu.visible) {
-                overlay.clear();
-                overlay.beginFill(0x000000, 0.8);
-                overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-                panel.position.set(
-                    this.app.screen.width - 320,
-                    20
-                );
-                pauseText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
-            }
-        });
-
+        // Position menu in top right
+        menu.position.set(this.app.screen.width - 320, 60);
+        
         return menu;
     }
 
-    createSlider(x, y, min, max, step, initial, onChange) {
-        const slider = new PIXI.Container();
-        slider.position.set(x, y);
+    createToggle(label, y, onChange) {
+        const container = new PIXI.Container();
+        container.eventMode = 'static';
+        container.cursor = 'pointer';
+        container.position.set(20, y);
 
+        const labelText = new PIXI.Text(label, {
+            fontSize: 16,
+            fill: 0xFFFFFF
+        });
+        container.addChild(labelText);
+
+        const checkbox = new PIXI.Graphics();
+        checkbox.lineStyle(2, 0xFFFFFF);
+        checkbox.drawRect(150, 0, 20, 20);
+        checkbox.endFill();
+        container.addChild(checkbox);
+
+        const check = new PIXI.Graphics();
+        check.beginFill(0x00FF00);
+        check.drawRect(153, 3, 14, 14);
+        check.endFill();
+        check.visible = false;
+        container.addChild(check);
+
+        container.on('pointerdown', () => {
+            check.visible = !check.visible;
+            if (onChange) onChange(check.visible);
+        });
+
+        return container;
+    }
+
+    createSlider(label, y, min, max, initialValue, onChange) {
+        const container = new PIXI.Container();
+        container.position.set(20, y);
+
+        // Label
+        const labelText = new PIXI.Text(label, {
+            fontSize: 16,
+            fill: 0xFFFFFF
+        });
+        container.addChild(labelText);
+
+        // Track
         const track = new PIXI.Graphics();
         track.beginFill(0x666666);
-        track.drawRect(0, 0, 100, 4);
+        track.drawRect(0, 30, 260, 4);
         track.endFill();
+        container.addChild(track);
 
+        // Handle
         const handle = new PIXI.Graphics();
         handle.beginFill(0xFFFFFF);
         handle.drawCircle(0, 0, 8);
         handle.endFill();
-
-        const initialX = ((initial - min) / (max - min)) * 100;
-        handle.position.set(initialX, 2);
-
-        slider.addChild(track, handle);
-        slider.eventMode = 'static';
         handle.eventMode = 'static';
         handle.cursor = 'pointer';
+        
+        // Set initial position
+        const initialX = (initialValue - min) / (max - min) * 260;
+        handle.position.set(initialX, 32);
+        container.addChild(handle);
 
+        // Value text
+        const valueText = new PIXI.Text(initialValue.toFixed(2), {
+            fontSize: 14,
+            fill: 0xFFFFFF
+        });
+        valueText.position.set(270, 25);
+        container.addChild(valueText);
+
+        // Make slider interactive
         let dragging = false;
         handle.on('pointerdown', () => dragging = true);
         this.app.stage.on('pointerup', () => dragging = false);
         this.app.stage.on('pointermove', (e) => {
-            if (!dragging) return;
-            const bounds = slider.getBounds();
-            let x = Math.max(0, Math.min(100, e.global.x - bounds.x));
-            handle.position.x = x;
-            const value = min + (x / 100) * (max - min);
-            onChange(Math.round(value / step) * step);
+            if (dragging) {
+                const bounds = track.getBounds();
+                const newX = Math.max(0, Math.min(260, e.global.x - bounds.x - container.parent.x - container.x));
+                handle.x = newX;
+                
+                // Calculate value
+                const value = min + (newX / 260) * (max - min);
+                valueText.text = value.toFixed(2);
+                
+                if (onChange) onChange(value);
+            }
         });
 
-        return slider;
+        return container;
+    }
+
+    updateWeaponInfo(weaponName) {
+        if (this.weaponText) {
+            this.weaponText.text = `Weapon: ${weaponName} (1-4 to switch)`;
+        }
+    }
+
+    showGameOver() {
+        // Create game over container
+        const gameOverScreen = new PIXI.Container();
+        gameOverScreen.zIndex = 1000;
+        this.app.stage.addChild(gameOverScreen);
+
+        // Dark overlay
+        const overlay = new PIXI.Graphics();
+        overlay.beginFill(0x000000, 0.8);
+        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
+        overlay.endFill();
+        gameOverScreen.addChild(overlay);
+
+        // Game Over text
+        const gameOverText = new PIXI.Text('GAME OVER', {
+            fontSize: 64,
+            fill: 0xFF0000,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 6,
+            dropShadow: true,
+            dropShadowColor: 0x000000,
+            dropShadowDistance: 4,
+            dropShadowBlur: 4
+        });
+        gameOverText.anchor.set(0.5);
+        gameOverText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
+        gameOverScreen.addChild(gameOverText);
+
+        // Stats text
+        const statsText = new PIXI.Text(
+            `Final Score: ${gameState.score}\n` +
+            `Level Reached: ${gameState.level}\n` +
+            `Time Survived: ${Math.floor(Date.now() - gameState.gameStartTime) / 1000}s`, {
+            fontSize: 32,
+            fill: 0xFFFFFF,
+            align: 'center'
+        });
+        statsText.anchor.set(0.5);
+        statsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+        gameOverScreen.addChild(statsText);
+
+        // Restart button
+        const buttonContainer = new PIXI.Container();
+        buttonContainer.eventMode = 'static';
+        buttonContainer.cursor = 'pointer';
+        buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
+
+        const button = new PIXI.Graphics();
+        button.beginFill(0x00FF00);
+        button.drawRoundedRect(-100, -25, 200, 50, 15);
+        button.endFill();
+
+        const buttonText = new PIXI.Text('Play Again', {
+            fontSize: 24,
+            fill: 0x000000,
+            fontWeight: 'bold'
+        });
+        buttonText.anchor.set(0.5);
+
+        buttonContainer.addChild(button, buttonText);
+        gameOverScreen.addChild(buttonContainer);
+
+        // Button interactions
+        buttonContainer.on('pointerover', () => button.tint = 0x88FF88);
+        buttonContainer.on('pointerout', () => button.tint = 0xFFFFFF);
+        buttonContainer.on('pointerdown', () => {
+            this.app.stage.removeChild(gameOverScreen);
+            location.reload(); // Reload the game
+        });
+
+        // Handle window resize
+        const resizeHandler = () => {
+            overlay.width = this.app.screen.width;
+            overlay.height = this.app.screen.height;
+            gameOverText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
+            statsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+            buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
+        };
+
+        window.addEventListener('resize', resizeHandler);
+
+        // Clean up resize handler when game over screen is removed
+        gameOverScreen.on('destroyed', () => {
+            window.removeEventListener('resize', resizeHandler);
+        });
     }
 
     // Add other UI update methods...

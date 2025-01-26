@@ -6,200 +6,218 @@ export class EntityManager {
     static createPlayer(app) {
         const container = new PIXI.Container();
         
-        // Main player circle with gradient
-        const player = new PIXI.Graphics();
-        const gradient = new PIXI.Graphics();
-        
-        // Create gradient effect
-        gradient.beginFill(STYLES.colors.player);
-        gradient.drawCircle(0, 0, 18);
-        gradient.endFill();
-        gradient.beginFill(0xffffff, 0.3);
-        gradient.drawCircle(0, 0, 15);
-        gradient.endFill();
-        
-        // Add glow effect
+        // Create glow effect
         const glow = new PIXI.Graphics();
-        glow.beginFill(STYLES.colors.player, 0.2);
+        glow.beginFill(0x00ff00, 0.2);
         glow.drawCircle(0, 0, 25);
         glow.endFill();
+        container.addChild(glow);
         
-        container.addChild(glow, gradient);
-        container.x = app.screen.width / 2;
-        container.y = app.screen.height / 2;
+        // Create player body
+        const body = new PIXI.Graphics();
+        body.beginFill(STYLES.colors.player);
+        body.drawCircle(0, 0, 20);  // Fixed size for collision radius
+        body.endFill();
+        container.addChild(body);
+
+        // Set container dimensions explicitly for collision detection
+        container.width = 40;  // Diameter
+        container.height = 40; // Diameter
         
-        // Add pulsing animation
-        const pulseAnimation = (delta) => {
-            glow.scale.x = 1 + Math.sin(Date.now() / 200) * 0.1;
-            glow.scale.y = glow.scale.x;
-        };
-        app.ticker.add(pulseAnimation);
-        
-        // Store ticker function for cleanup
-        container.pulseAnimation = pulseAnimation;
-        
+        // Add hit area for better collision detection
+        container.hitArea = new PIXI.Circle(0, 0, 20);
+
         return container;
     }
 
-    static createEnemy(app, typeKey, x, y) {
-        const type = ENEMY_TYPES[typeKey];
+    static createEnemy(app, type, x, y) {
+        const config = ENEMY_TYPES[type];
         const container = new PIXI.Container();
         
-        // Create enemy body with gradient
-        const enemy = new PIXI.Graphics();
-        enemy.beginFill(type.color);
-        enemy.drawCircle(0, 0, type.size);
-        enemy.endFill();
-        enemy.beginFill(0xffffff, 0.2);
-        enemy.drawCircle(0, 0, type.size * 0.7);
-        enemy.endFill();
+        // Create enemy body
+        const body = new PIXI.Graphics();
+        body.beginFill(config.color);
+        body.drawCircle(0, 0, config.size);
+        body.endFill();
+        container.addChild(body);
         
-        // Create health bar container
-        const healthBarContainer = new PIXI.Container();
+        // Create health bar background
         const healthBarBg = new PIXI.Graphics();
-        const healthBarFg = new PIXI.Graphics();
-        
-        // Health bar background
         healthBarBg.beginFill(STYLES.colors.healthBar.background);
-        healthBarBg.lineStyle(1, STYLES.colors.healthBar.border);
-        healthBarBg.drawRoundedRect(-type.size, -type.size - 10, type.size * 2, 5, 2);
+        healthBarBg.drawRect(-config.size, -config.size - 10, config.size * 2, 4);
         healthBarBg.endFill();
+        container.addChild(healthBarBg);
         
-        // Health bar foreground
-        healthBarFg.beginFill(STYLES.colors.healthBar.health);
-        healthBarFg.drawRoundedRect(-type.size, -type.size - 10, type.size * 2, 5, 2);
-        healthBarFg.endFill();
+        // Create health bar
+        const healthBar = new PIXI.Graphics();
+        healthBar.beginFill(STYLES.colors.healthBar.health);
+        healthBar.drawRect(-config.size, -config.size - 10, config.size * 2, 4);
+        healthBar.endFill();
+        container.addChild(healthBar);
         
-        healthBarContainer.addChild(healthBarBg, healthBarFg);
-        container.addChild(enemy, healthBarContainer);
-        
-        // Set enemy properties
-        Object.assign(container, {
-            health: type.health,
-            maxHealth: type.health,
-            speed: type.speed,
-            experienceValue: type.experience,
-            type: typeKey,
-            healthBar: healthBarFg
-        });
-
-        // Use provided coordinates instead of screen-based ones
+        // Set container properties
         container.x = x;
         container.y = y;
         
-        // Add pulse animation for enemy
-        const pulseAnimation = (delta) => {
-            enemy.alpha = 0.8 + Math.sin(Date.now() / 300) * 0.2;
-        };
-        app.ticker.add(pulseAnimation);
-        container.pulseAnimation = pulseAnimation;
-
+        // Set dimensions to match the circle size exactly
+        const diameter = config.size * 2;
+        container.width = diameter;
+        container.height = diameter;
+        
+        // Add hit area for collision detection
+        container.hitArea = new PIXI.Circle(0, 0, config.size);
+        
+        // Add enemy properties
+        container.health = config.health;
+        container.maxHealth = config.health;
+        container.speed = config.speed;
+        container.experienceValue = config.experience;
+        container.healthBar = healthBar;
+        container.radius = config.size; // Store radius for easier access
+        
         return container;
     }
 
     static createBullet(startX, startY, targetX, targetY) {
         const container = new PIXI.Container();
         
-        // Create bullet with trail effect
-        const bullet = new PIXI.Graphics();
-        bullet.beginFill(STYLES.colors.bullet);
-        bullet.drawCircle(0, 0, 5);
-        bullet.endFill();
-        
-        // Add glow
+        // Create bullet glow effect
         const glow = new PIXI.Graphics();
         glow.beginFill(STYLES.colors.bullet, 0.3);
         glow.drawCircle(0, 0, 8);
         glow.endFill();
         
-        container.addChild(glow, bullet);
+        // Create bullet trail effect
+        const trail = new PIXI.Graphics();
+        trail.beginFill(STYLES.colors.bullet, 0.2);
+        trail.drawEllipse(0, 0, 12, 6);
+        trail.endFill();
+        trail.rotation = Math.atan2(targetY - startY, targetX - startX);
+        
+        // Create bullet core
+        const bullet = new PIXI.Graphics();
+        bullet.beginFill(STYLES.colors.bullet);
+        bullet.drawCircle(0, 0, 4);
+        bullet.endFill();
+        
+        // Add all parts to container in correct order
+        container.addChild(trail);  // Trail behind
+        container.addChild(glow);   // Glow in middle
+        container.addChild(bullet); // Bullet on top
+        
         container.x = startX;
         container.y = startY;
-
+        
+        // Calculate angle and speed
         const angle = Math.atan2(targetY - startY, targetX - startX);
         const speed = 8;
-
+        
+        // Add pulsing animation
+        let pulseTime = Math.random() * Math.PI * 2; // Random start phase
+        container.ticker = new PIXI.Ticker();
+        container.ticker.add((delta) => {
+            pulseTime += delta * 0.2;
+            const scale = 1 + Math.sin(pulseTime) * 0.2;
+            glow.scale.set(scale);
+        });
+        container.ticker.start();
+        
         return {
             sprite: container,
             dx: Math.cos(angle) * speed,
-            dy: Math.sin(angle) * speed
+            dy: Math.sin(angle) * speed,
+            width: 8,  // For collision detection
+            height: 8, // Keep it circular
+            cleanup: () => {
+                if (container.ticker) {
+                    container.ticker.destroy();
+                }
+            }
         };
     }
 
-    static createExperienceGem(app, x, y, value) {
+    static createExperienceGem(x, y, value) {
+        // Create a container for the gem and effects
         const container = new PIXI.Container();
         
-        // Create gem with glow effect
+        // Create the glow effect
+        const glow = new PIXI.Graphics();
+        glow.beginFill(STYLES.colors.exp, 0.3);
+        glow.drawCircle(0, 0, 12);
+        glow.endFill();
+        container.addChild(glow);
+        
+        // Create the gem shape
         const gem = new PIXI.Graphics();
         gem.beginFill(STYLES.colors.exp);
         gem.drawPolygon([
-            -8, 0,   // Left point
-            0, -12,  // Top point
-            8, 0,    // Right point
-            0, 12    // Bottom point
+            -6, 0,   // Left point
+            0, -8,   // Top point
+            6, 0,    // Right point
+            0, 8     // Bottom point
         ]);
         gem.endFill();
-        
-        // Add inner highlight
-        const highlight = new PIXI.Graphics();
-        highlight.beginFill(0xffffff, 0.5);
-        highlight.drawPolygon([
-            -4, 0,
-            0, -6,
-            4, 0,
-            0, 6
-        ]);
-        highlight.endFill();
-        
-        // Add glow effect
-        const glow = new PIXI.Graphics();
-        glow.beginFill(STYLES.colors.exp, 0.3);
-        glow.drawCircle(0, 0, 15);
-        glow.endFill();
+        container.addChild(gem);
         
         // Add value text
-        const valueText = new PIXI.Text(`${value}`, {
-            fontSize: 14,
-            fill: 0xffffff,
-            fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: 0x000000,
-            dropShadowDistance: 1
+        const valueText = new PIXI.Text(`+${value}`, {
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fill: 0xFFFFFF,
+            stroke: 0x000000,
+            strokeThickness: 2,
+            align: 'center'
         });
         valueText.anchor.set(0.5);
-        valueText.y = -20;
+        valueText.y = -20; // Position above the gem
+        container.addChild(valueText);
         
-        container.addChild(glow, gem, highlight, valueText);
+        // Position the container
         container.x = x;
         container.y = y;
         
-        // Add floating animation
-        let time = Math.random() * Math.PI * 2;
-        const floatAnimation = (delta) => {
-            time += 0.05;
-            container.y += Math.sin(time) * 0.3;
-        };
-        app.ticker.add(floatAnimation);
-        
-        // Store ticker function for cleanup
-        container.floatAnimation = floatAnimation;
-        
+        // Add pulsing animation
+        let pulseTime = Math.random() * Math.PI * 2; // Random start phase
+        container.ticker = new PIXI.Ticker();
+        container.ticker.add((delta) => {
+            pulseTime += delta * 0.1;
+            const scale = 1 + Math.sin(pulseTime) * 0.1;
+            gem.scale.set(scale);
+            glow.scale.set(scale);
+            valueText.scale.set(scale);
+        });
+        container.ticker.start();
+
         return {
             sprite: container,
-            value: value
+            value: value,
+            cleanup: () => {
+                if (container.ticker) {
+                    container.ticker.destroy();
+                }
+            }
         };
     }
 
     static cleanup(app, entity) {
-        if (entity.pulseAnimation) {
-            app.ticker.remove(entity.pulseAnimation);
+        if (!entity) return;
+        
+        // Stop any active animations/tickers
+        if (entity.ticker) {
+            entity.ticker.destroy();
         }
-        if (entity.floatAnimation) {
-            app.ticker.remove(entity.floatAnimation);
+        
+        // If the entity has a cleanup function, call it
+        if (entity.cleanup) {
+            entity.cleanup();
         }
-        // Remove any other animations or tickers here
+        
+        // Remove from parent
         if (entity.parent) {
             entity.parent.removeChild(entity);
         }
+        
+        // Destroy the entity
+        entity.destroy({ children: true });
     }
 } 

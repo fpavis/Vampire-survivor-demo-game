@@ -6,21 +6,22 @@ class GameState {
     }
 
     reset() {
-        Object.assign(this, {...INITIAL_STATE});
+        Object.assign(this, {
+            ...INITIAL_STATE,
+            gameStartTime: Date.now(),
+            enemies: [],
+            bullets: [],
+            experienceGems: [],
+            keys: {},
+            pointerPosition: null,
+            pointerDown: false,
+            invulnerable: false,
+            gameOver: false,
+            levelUp: false,
+            paused: false
+        });
         this.lastFire = 0;
-        this.levelUp = false;
-        this.gameOver = false;
-        this.paused = false;
-        this.keys = {};
         this.pendingExperience = 0;
-        
-        this.pointerPosition = null;
-        this.pointerDown = false;
-        
-        this.player = null;
-        this.enemies = [];
-        this.bullets = [];
-        this.experienceGems = [];
         this.gameTicker = null;
     }
 }
