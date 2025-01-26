@@ -651,24 +651,12 @@ export class UIManager {
     }
 
     toggleDebugView() {
-        if (this.game && this.game.toggleDebugView) {
-            this.game.toggleDebugView();
-            
-            // Update the checkbox in settings menu if it exists
-            if (this.settingsMenu) {
-                const debugToggle = this.settingsMenu.children.find(child => 
-                    child.children?.[0]?.text === 'Show Debug View:');
-                if (debugToggle) {
-                    const checkbox = debugToggle.children[2]; // The check mark
-                    checkbox.visible = !checkbox.visible;
-                }
-            }
-
-            // Toggle debug legend
-            if (!this.debugLegend) {
-                this.createDebugLegend();
-            }
-            this.debugLegend.visible = gameState.debugView;
+        if (!this.debugPanel) {
+            this.createDebugPanel();
+        } else {
+            this.container.removeChild(this.debugPanel);
+            this.debugPanel = null;
+            this.statsText = null;
         }
     }
 
@@ -1200,7 +1188,7 @@ export class UIManager {
             // Add hover and click handlers
             container.on('pointerover', () => {
                 selectedIndex = index;
-                this.updateUpgradeSelection(optionContainers, selectedIndex);
+                updateSelection();
             });
             
             container.on('pointerdown', () => {
@@ -1208,7 +1196,7 @@ export class UIManager {
                 upgrade.action();
                 
                 // Cleanup
-                this.cleanupLevelUp(container.parent);
+                cleanup();
                 
                 // Complete level up
                 if (this.upgradeManager) {
@@ -1263,8 +1251,21 @@ export class UIManager {
         // Cleanup function
         const cleanup = () => {
             window.removeEventListener('keydown', handleKeyPress);
+            // Remove all level up UI elements
             this.app.stage.removeChild(levelUpText, instructionText);
             optionContainers.forEach(container => this.app.stage.removeChild(container));
+            // Remove the dark overlay (it's the first child of the stage)
+            const overlay = this.app.stage.children.find(child => 
+                child instanceof PIXI.Graphics && 
+                child.alpha > 0 && 
+                child.width === this.app.screen.width && 
+                child.height === this.app.screen.height
+            );
+            if (overlay) {
+                this.app.stage.removeChild(overlay);
+            }
+            // Reset game state
+            gameState.levelUp = false;
         };
 
         // Handle key events
@@ -1463,13 +1464,53 @@ export class UIManager {
         );
     }
 
-    toggleDebugView() {
-        if (!this.debugPanel) {
-            this.createDebugPanel();
-        } else {
-            this.container.removeChild(this.debugPanel);
-            this.debugPanel = null;
-            this.statsText = null;
-        }
+    showMessage(text, color = 0xFFFFFF, duration = 2000) {
+        const message = new PIXI.Text(text, {
+            fontFamily: 'Arial',
+            fontSize: 24,
+            fill: color,
+            align: 'center',
+            stroke: 0x000000,
+            strokeThickness: 4
+        });
+        
+        message.anchor.set(0.5);
+        message.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 100);
+        
+        // Add to stage
+        this.app.stage.addChild(message);
+        
+        // Animate in
+        message.alpha = 0;
+        message.scale.set(0.5);
+        
+        let progress = 0;
+        const fadeIn = () => {
+            progress += 0.1;
+            message.alpha = Math.min(1, progress);
+            message.scale.set(0.5 + (0.5 * progress));
+            
+            if (progress < 1) {
+                requestAnimationFrame(fadeIn);
+            } else {
+                // Hold, then fade out
+                setTimeout(() => {
+                    progress = 1;
+                    const fadeOut = () => {
+                        progress -= 0.1;
+                        message.alpha = Math.max(0, progress);
+                        message.scale.set(1 - (0.2 * (1 - progress)));
+                        
+                        if (progress > 0) {
+                            requestAnimationFrame(fadeOut);
+                        } else {
+                            this.app.stage.removeChild(message);
+                        }
+                    };
+                    fadeOut();
+                }, duration);
+            }
+        };
+        fadeIn();
     }
 } 

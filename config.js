@@ -229,8 +229,8 @@ export class Level {
         // Special area features
         this.features = config.features || [];
         
-        // Area state
-        this.isUnlocked = config.isUnlocked || false;
+        // Area state - set isUnlocked based on requirements
+        this.isUnlocked = config.id === 'starting_grounds' || config.isUnlocked === true;
         this.isCompleted = false;
     }
 
@@ -257,7 +257,6 @@ export class Level {
 
     // Check if player can enter this area
     canEnter(gameState) {
-        if (!this.isUnlocked) return false;
         if (!this.requirements) return true;
         
         return this.requirements.every(req => {
