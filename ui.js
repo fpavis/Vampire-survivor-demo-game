@@ -155,18 +155,17 @@ export class UIManager {
 
     createJoystick() {
         const joystickContainer = new PIXI.Container();
-        joystickContainer.visible = false; // Only show on touch devices
         
         // Base circle
         const base = new PIXI.Graphics();
-        base.beginFill(0x000000, 0.3);
-        base.lineStyle(2, 0xFFFFFF, 0.5);
+        base.beginFill(0x000000, 0.5);  // More visible background
+        base.lineStyle(2, 0xFFFFFF, 0.8);  // More visible border
         base.drawCircle(0, 0, 50);
         base.endFill();
 
         // Stick
         const stick = new PIXI.Graphics();
-        stick.beginFill(0xFFFFFF, 0.5);
+        stick.beginFill(0xFFFFFF, 0.8);  // More visible stick
         stick.drawCircle(0, 0, 20);
         stick.endFill();
 
@@ -190,16 +189,31 @@ export class UIManager {
         this.app.stage.on('pointerup', () => this.onJoystickUp(joystick));
         this.app.stage.on('pointerupoutside', () => this.onJoystickUp(joystick));
 
-        // Position joystick
-        joystickContainer.position.set(120, this.app.screen.height - 120);
+        // Position joystick in bottom left, accounting for safe areas
+        const margin = 20;
+        const bottomOffset = 100;
+        joystickContainer.position.set(
+            margin + joystick.baseRadius,
+            this.app.screen.height - bottomOffset
+        );
         
         // Store joystick reference
         this.joystick = joystick;
 
-        // Show joystick on touch devices
-        if ('ontouchstart' in window) {
-            joystickContainer.visible = true;
-        }
+        // Show joystick on mobile devices using multiple checks
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || 'ontouchstart' in window 
+            || navigator.maxTouchPoints > 0;
+            
+        joystickContainer.visible = isMobile;
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            joystickContainer.position.set(
+                margin + joystick.baseRadius,
+                this.app.screen.height - bottomOffset
+            );
+        });
     }
 
     onJoystickDown(event, joystick) {
