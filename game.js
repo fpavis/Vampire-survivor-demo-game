@@ -243,8 +243,13 @@ class Game {
         if (keys.ArrowUp) dy -= 1;
         if (keys.ArrowDown) dy += 1;
 
-        // Handle pointer movement only when pointer is down
-        if (gameState.pointerDown && gameState.pointerPosition) {
+        // Handle joystick input if available
+        if (this.ui.joystick && this.ui.joystick.active) {
+            dx = this.ui.joystick.position.x;
+            dy = this.ui.joystick.position.y;
+        }
+        // Handle pointer movement only when pointer is down and no joystick input
+        else if (gameState.pointerDown && gameState.pointerPosition && (!this.ui.joystick || !this.ui.joystick.active)) {
             const pointer = gameState.pointerPosition;
             // Convert pointer position to world coordinates
             const worldX = pointer.x - this.worldContainer.x;

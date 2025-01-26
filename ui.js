@@ -9,6 +9,7 @@ export class UIManager {
         this.elements = {};
         this.previousLevel = 1;
         this.createUIElements();
+        this.createJoystick();  // Initialize joystick
     }
 
     createUIElements() {
@@ -150,6 +151,91 @@ export class UIManager {
             target.tint = 0xFFFFFF;
             target.flashTimeout = null;
         }, 200);
+    }
+
+    createJoystick() {
+        const joystickContainer = new PIXI.Container();
+        joystickContainer.visible = false; // Only show on touch devices
+        
+        // Base circle
+        const base = new PIXI.Graphics();
+        base.beginFill(0x000000, 0.3);
+        base.lineStyle(2, 0xFFFFFF, 0.5);
+        base.drawCircle(0, 0, 50);
+        base.endFill();
+
+        // Stick
+        const stick = new PIXI.Graphics();
+        stick.beginFill(0xFFFFFF, 0.5);
+        stick.drawCircle(0, 0, 20);
+        stick.endFill();
+
+        joystickContainer.addChild(base, stick);
+        this.container.addChild(joystickContainer);
+
+        // Joystick state
+        const joystick = {
+            container: joystickContainer,
+            stick: stick,
+            baseRadius: 50,
+            active: false,
+            data: null,
+            position: { x: 0, y: 0 }
+        };
+
+        // Touch handlers
+        joystickContainer.eventMode = 'static';
+        joystickContainer.on('pointerdown', (e) => this.onJoystickDown(e, joystick));
+        this.app.stage.on('pointermove', (e) => this.onJoystickMove(e, joystick));
+        this.app.stage.on('pointerup', () => this.onJoystickUp(joystick));
+        this.app.stage.on('pointerupoutside', () => this.onJoystickUp(joystick));
+
+        // Position joystick
+        joystickContainer.position.set(120, this.app.screen.height - 120);
+        
+        // Store joystick reference
+        this.joystick = joystick;
+
+        // Show joystick on touch devices
+        if ('ontouchstart' in window) {
+            joystickContainer.visible = true;
+        }
+    }
+
+    onJoystickDown(event, joystick) {
+        joystick.active = true;
+        joystick.data = event.data;
+        joystick.stick.alpha = 0.8;
+    }
+
+    onJoystickMove(event, joystick) {
+        if (!joystick.active) return;
+
+        const newPosition = joystick.data.getLocalPosition(joystick.container);
+        const distance = Math.sqrt(newPosition.x * newPosition.x + newPosition.y * newPosition.y);
+        
+        if (distance <= joystick.baseRadius) {
+            joystick.stick.position = newPosition;
+        } else {
+            // Normalize the position to the base radius
+            const angle = Math.atan2(newPosition.y, newPosition.x);
+            joystick.stick.position.x = Math.cos(angle) * joystick.baseRadius;
+            joystick.stick.position.y = Math.sin(angle) * joystick.baseRadius;
+        }
+
+        // Update normalized position (-1 to 1)
+        joystick.position = {
+            x: joystick.stick.position.x / joystick.baseRadius,
+            y: joystick.stick.position.y / joystick.baseRadius
+        };
+    }
+
+    onJoystickUp(joystick) {
+        joystick.active = false;
+        joystick.data = null;
+        joystick.stick.position.set(0, 0);
+        joystick.stick.alpha = 0.5;
+        joystick.position = { x: 0, y: 0 };
     }
 
     // Add other UI update methods...

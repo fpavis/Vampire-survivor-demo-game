@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { ENEMY_TYPES, STYLES } from './config.js';
 import { gameState } from './gameState.js';
 
