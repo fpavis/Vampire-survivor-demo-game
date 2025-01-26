@@ -80,7 +80,7 @@ class Game {
 
         // Instructions text
         const instructionsText = new PIXI.Text(
-            'Use arrow keys or touch/mouse to move\nEnemies drop experience gems\nLevel up to become stronger', {
+            'Use WASD or arrow keys to move\nMouse/touch to move on mobile\nEnemies drop experience gems\nLevel up to become stronger', {
             fontSize: 24,
             fill: 0xcccccc,
             align: 'center'
@@ -238,18 +238,20 @@ class Game {
         let dx = 0;
         let dy = 0;
 
-        if (keys.ArrowLeft) dx -= 1;
-        if (keys.ArrowRight) dx += 1;
-        if (keys.ArrowUp) dy -= 1;
-        if (keys.ArrowDown) dy += 1;
+        // Arrow keys and WASD
+        if (keys.ArrowLeft || keys.a || keys.A) dx -= 1;
+        if (keys.ArrowRight || keys.d || keys.D) dx += 1;
+        if (keys.ArrowUp || keys.w || keys.W) dy -= 1;
+        if (keys.ArrowDown || keys.s || keys.S) dy += 1;
 
         // Handle joystick input if available
         if (this.ui.joystick && this.ui.joystick.active) {
+            // Joystick takes complete priority when active
             dx = this.ui.joystick.position.x;
             dy = this.ui.joystick.position.y;
         }
-        // Handle pointer movement only when pointer is down and no joystick input
-        else if (gameState.pointerDown && gameState.pointerPosition && (!this.ui.joystick || !this.ui.joystick.active)) {
+        // Only handle pointer/mouse if joystick is not active and not on mobile
+        else if (gameState.pointerDown && gameState.pointerPosition && (!this.ui.joystick || !this.ui.joystick.visible)) {
             const pointer = gameState.pointerPosition;
             // Convert pointer position to world coordinates
             const worldX = pointer.x - this.worldContainer.x;
@@ -269,10 +271,13 @@ class Game {
 
         // Apply movement if there's any input
         if (dx !== 0 || dy !== 0) {
-            // Normalize diagonal movement
-            const length = Math.sqrt(dx * dx + dy * dy);
-            dx = dx / length;
-            dy = dy / length;
+            // For joystick, we don't need to normalize as it's already normalized
+            if (!this.ui.joystick || !this.ui.joystick.active) {
+                // Normalize diagonal movement only for non-joystick input
+                const length = Math.sqrt(dx * dx + dy * dy);
+                dx = dx / length;
+                dy = dy / length;
+            }
 
             player.x += dx * speed;
             player.y += dy * speed;

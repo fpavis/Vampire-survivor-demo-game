@@ -156,17 +156,17 @@ export class UIManager {
     createJoystick() {
         const joystickContainer = new PIXI.Container();
         
-        // Base circle
+        // Base circle - bigger and more transparent
         const base = new PIXI.Graphics();
-        base.beginFill(0x000000, 0.5);  // More visible background
-        base.lineStyle(2, 0xFFFFFF, 0.8);  // More visible border
-        base.drawCircle(0, 0, 50);
+        base.beginFill(0x000000, 0.2);  // More transparent background
+        base.lineStyle(2, 0xFFFFFF, 0.3);  // More transparent border
+        base.drawCircle(0, 0, 130);  // Increased size for better control
         base.endFill();
 
-        // Stick
+        // Stick - bigger and more transparent
         const stick = new PIXI.Graphics();
-        stick.beginFill(0xFFFFFF, 0.8);  // More visible stick
-        stick.drawCircle(0, 0, 20);
+        stick.beginFill(0xFFFFFF, 0.3);  // More transparent stick
+        stick.drawCircle(0, 0, 50);  // Increased size proportionally
         stick.endFill();
 
         joystickContainer.addChild(base, stick);
@@ -176,7 +176,7 @@ export class UIManager {
         const joystick = {
             container: joystickContainer,
             stick: stick,
-            baseRadius: 50,
+            baseRadius: 130,  // Match the new radius
             active: false,
             data: null,
             position: { x: 0, y: 0 }
@@ -184,16 +184,19 @@ export class UIManager {
 
         // Touch handlers
         joystickContainer.eventMode = 'static';
-        joystickContainer.on('pointerdown', (e) => this.onJoystickDown(e, joystick));
+        joystickContainer.on('pointerdown', (e) => {
+            e.stopPropagation();  // Prevent click-to-move when using joystick
+            this.onJoystickDown(e, joystick);
+        });
         this.app.stage.on('pointermove', (e) => this.onJoystickMove(e, joystick));
         this.app.stage.on('pointerup', () => this.onJoystickUp(joystick));
         this.app.stage.on('pointerupoutside', () => this.onJoystickUp(joystick));
 
-        // Position joystick in bottom left, accounting for safe areas
-        const margin = 20;
-        const bottomOffset = 100;
+        // Position joystick at bottom center, 10% up from bottom
+        const bottomPercentage = 0.10;  // 10% from bottom
+        const bottomOffset = this.app.screen.height * bottomPercentage;
         joystickContainer.position.set(
-            margin + joystick.baseRadius,
+            this.app.screen.width / 2,
             this.app.screen.height - bottomOffset
         );
         
@@ -224,9 +227,10 @@ export class UIManager {
         
         // Handle window resize
         window.addEventListener('resize', () => {
+            const newBottomOffset = this.app.screen.height * bottomPercentage;
             joystickContainer.position.set(
-                margin + joystick.baseRadius,
-                this.app.screen.height - bottomOffset
+                this.app.screen.width / 2,
+                this.app.screen.height - newBottomOffset
             );
             debugText.position.set(10, this.app.screen.height - 200);
         });
