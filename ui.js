@@ -201,11 +201,26 @@ export class UIManager {
         this.joystick = joystick;
 
         // Show joystick on mobile devices using multiple checks
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
-            || 'ontouchstart' in window 
-            || navigator.maxTouchPoints > 0;
+        const userAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const touchWindow = 'ontouchstart' in window;
+        const touchPoints = navigator.maxTouchPoints > 0;
+        const isMobile = userAgent || touchWindow || touchPoints;
             
         joystickContainer.visible = isMobile;
+
+        // Add debug text for mobile detection
+        const debugText = new PIXI.Text(
+            `Mobile Detection:\nUser Agent: ${userAgent}\nTouch Window: ${touchWindow}\nTouch Points: ${touchPoints}\nFinal: ${isMobile}`, 
+            {
+                fontSize: 14,
+                fill: 0xFFFFFF,
+                stroke: '#000000',
+                strokeThickness: 2,
+                align: 'left'
+            }
+        );
+        debugText.position.set(10, this.app.screen.height - 200);
+        this.container.addChild(debugText);
         
         // Handle window resize
         window.addEventListener('resize', () => {
@@ -213,6 +228,7 @@ export class UIManager {
                 margin + joystick.baseRadius,
                 this.app.screen.height - bottomOffset
             );
+            debugText.position.set(10, this.app.screen.height - 200);
         });
     }
 
