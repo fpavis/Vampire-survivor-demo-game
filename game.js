@@ -3,6 +3,10 @@ import { gameState } from './gameState.js';
 import { EntityManager } from './entities.js';
 import { UIManager } from './ui.js';
 import { Weapon } from './weapons.js';
+import { InputManager } from './InputManager.js';
+import { CollisionSystem } from './CollisionSystem.js';
+import { EffectsManager } from './EffectsManager.js';
+import { CameraManager } from './CameraManager.js';
 
 class Game {
     constructor() {
@@ -13,6 +17,12 @@ class Game {
             // Create main container for the game world
             this.worldContainer = new PIXI.Container();
             this.app.stage.addChild(this.worldContainer);
+            
+            // Initialize managers
+            this.inputManager = new InputManager(this.app, this.worldContainer);
+            this.effectsManager = new EffectsManager(this.app, this.worldContainer);
+            this.collisionSystem = new CollisionSystem(this.app, this.worldContainer, this.effectsManager);
+            this.cameraManager = new CameraManager(this.app, this.worldContainer);
             
             // Add resize handler
             window.addEventListener('resize', () => this.handleResize());
@@ -229,11 +239,11 @@ class Game {
         
         // Initialize UI only once here
         if (!this.ui) {
-            this.ui = new UIManager(this.app, this);  // Pass game instance
+            this.ui = new UIManager(this.app, this);
         }
         
         // Center camera on player initially
-        this.updateCamera();
+        this.cameraManager.update();
         
         // Start game loop
         if (gameState.gameTicker) {
@@ -242,27 +252,8 @@ class Game {
         gameState.gameTicker = (delta) => this.gameLoop(delta);
         this.app.ticker.add(gameState.gameTicker);
 
-        // Initialize all weapons
-        gameState.player.weapons = {
-            1: new Weapon('PISTOL'),
-            2: new Weapon('SHOTGUN'),
-            3: new Weapon('LASER'),
-            4: new Weapon('MACHINEGUN')
-        };
-        gameState.player.activeWeapon = 1;  // Start with pistol
-
-        // Add weapon switch handler
-        window.addEventListener('keydown', (e) => {
-            const weaponKey = e.key;
-            if (['1', '2', '3', '4'].includes(weaponKey)) {
-                gameState.player.activeWeapon = parseInt(weaponKey);
-                // Update UI to show active weapon
-                if (this.ui) {
-                    const weapon = gameState.player.weapons[gameState.player.activeWeapon];
-                    this.ui.updateWeaponInfo(weapon.name);
-                }
-            }
-        });
+        // Initialize weapons
+        this.initializeWeapons();
     }
 
     toggleDebugView() {
@@ -343,76 +334,23 @@ class Game {
         this.updateEntities(delta);
         this.updateExperienceGems(delta);
         this.handleHealthRegen(delta);
-        this.checkCollisions();
-        this.updateDebugView();  // Add debug view update
+        this.collisionSystem.checkCollisions();
+        this.cameraManager.update();
         
         // Update all UI elements
-        this.ui.updateHealth(gameState.health, gameState.maxHealth);
-        this.ui.updateScore(gameState.score);
-        this.ui.updateLevel(gameState.level);
-        this.ui.updateExperience(gameState.experience, gameState.nextLevel);
-        this.ui.updateDebugPanel(gameState);
+        this.updateUI();
     }
 
     handleMovement(delta) {
-        const speed = gameState.playerSpeed * delta;
-        const { keys, player } = gameState;
-
-        // Handle keyboard movement
-        let dx = 0;
-        let dy = 0;
-
-        // Arrow keys and WASD
-        if (keys.ArrowLeft || keys.a || keys.A) dx -= 1;
-        if (keys.ArrowRight || keys.d || keys.D) dx += 1;
-        if (keys.ArrowUp || keys.w || keys.W) dy -= 1;
-        if (keys.ArrowDown || keys.s || keys.S) dy += 1;
-
-        // Handle joystick input if available
-        if (this.ui.joystick && this.ui.joystick.active) {
-            // Joystick takes complete priority when active
-            dx = this.ui.joystick.position.x;
-            dy = this.ui.joystick.position.y;
-        }
-        // Only handle pointer/mouse if joystick is not active and not on mobile
-        else if (gameState.pointerDown && gameState.pointerPosition && (!this.ui.joystick || !this.ui.joystick.visible)) {
-            const pointer = gameState.pointerPosition;
-            // Convert pointer position to world coordinates
-            const worldX = pointer.x - this.worldContainer.x;
-            const worldY = pointer.y - this.worldContainer.y;
-            
-            // Calculate direction to pointer
-            const dirX = worldX - player.x;
-            const dirY = worldY - player.y;
-            const distance = Math.sqrt(dirX * dirX + dirY * dirY);
-
-            // Only move if there's a significant distance to travel
-            if (distance > 5) {
-                dx = dirX / distance;
-                dy = dirY / distance;
-            }
-        }
-
-        // Apply movement if there's any input
-        if (dx !== 0 || dy !== 0) {
-            // For joystick, we don't need to normalize as it's already normalized
-            if (!this.ui.joystick || !this.ui.joystick.active) {
-                // Normalize diagonal movement only for non-joystick input
-                const length = Math.sqrt(dx * dx + dy * dy);
-                dx = dx / length;
-                dy = dy / length;
-            }
-
-            player.x += dx * speed;
-            player.y += dy * speed;
-        }
+        const movement = this.inputManager.getMovementDirection(delta, gameState.playerSpeed, this.ui.joystick);
+        
+        // Apply movement
+        gameState.player.x += movement.x;
+        gameState.player.y += movement.y;
 
         // Keep player in world bounds
-        player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, player.x));
-        player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, player.y));
-
-        // Update camera position
-        this.updateCamera();
+        gameState.player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, gameState.player.x));
+        gameState.player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, gameState.player.y));
     }
 
     handleCombat(delta) {
@@ -422,7 +360,7 @@ class Game {
 
         if (weapon.canFire(currentTime) && gameState.enemies.length > 0) {
             const closestEnemy = this.findClosestEnemy();
-            if (!closestEnemy) return;
+        if (!closestEnemy) return;
 
             const projectiles = weapon.fire(
                 { x: gameState.player.x, y: gameState.player.y },
@@ -454,22 +392,22 @@ class Game {
     }
 
     findClosestEnemy() {
-        let closest = null;
-        let minDistance = Infinity;
+    let closest = null;
+    let minDistance = Infinity;
 
         gameState.enemies.forEach(enemy => {
             const dx = enemy.x - gameState.player.x;
             const dy = enemy.y - gameState.player.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < minDistance) {
-                minDistance = distance;
-                closest = enemy;
-            }
-        });
+        if (distance < minDistance) {
+            minDistance = distance;
+            closest = enemy;
+        }
+    });
 
-        return closest;
-    }
+    return closest;
+}
 
     updateEntities(delta) {
         // Handle enemy spawning
@@ -493,7 +431,7 @@ class Game {
             // Update health bar
             const healthPercent = enemy.health / enemy.maxHealth;
             enemy.healthBar.width = (enemy.width * healthPercent);
-            enemy.healthBar.tint = healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health;
+            enemy.healthBar.tint = healthPercent < 0.3 ? STYLES.colors.healthBar.DAMAGE : STYLES.colors.healthBar.HEALTH;
         });
 
         // Update bullets
@@ -556,7 +494,7 @@ class Game {
             
             // Check for elite enemy
             if (Math.random() < SPAWN_CONFIG.eliteChance) {
-                enemy.tint = 0xFFD700; // Gold tint
+            enemy.tint = 0xFFD700; // Gold tint
                 enemy.health *= SPAWN_CONFIG.eliteModifiers.health;
                 enemy.maxHealth = enemy.health;
                 enemy.experienceValue *= SPAWN_CONFIG.eliteModifiers.experience;
@@ -575,164 +513,6 @@ class Game {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         return dist > 1000; // Remove bullets when they're far from the player
-    }
-
-    checkCollisions() {
-        // Check player-enemy collisions first
-        if (!gameState.invulnerable && gameState.player) {
-            for (const enemy of gameState.enemies) {
-                if (!enemy) continue;
-
-                // Calculate distance between player and enemy centers
-                const dx = enemy.x - gameState.player.x;
-                const dy = enemy.y - gameState.player.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                // Use the actual radius values for collision
-                const playerRadius = gameState.player.radius;  // Set in EntityManager.createPlayer
-                const enemyRadius = enemy.radius;  // Set in EntityManager.createEnemy
-                const minDistance = (playerRadius + enemyRadius) * COLLISION_CONFIG.enemy.minDistance;
-
-                if (distance < minDistance) {
-                    // Calculate normalized direction for push
-                    const angle = Math.atan2(dy, dx);
-                    const pushForce = Math.min(
-                        (minDistance - distance) * COLLISION_CONFIG.enemy.pushForce,
-                        COLLISION_CONFIG.enemy.maxPushForce
-                    );
-
-                    // Push enemy away
-                    enemy.x += Math.cos(angle) * pushForce;
-                    enemy.y += Math.sin(angle) * pushForce;
-
-                    // Push player in opposite direction
-                    gameState.player.x -= Math.cos(angle) * pushForce * COLLISION_CONFIG.player.pushResistance;
-                    gameState.player.y -= Math.sin(angle) * pushForce * COLLISION_CONFIG.player.pushResistance;
-
-                    // Keep player in bounds
-                    gameState.player.x = Math.max(playerRadius, Math.min(WORLD_CONFIG.width - playerRadius, gameState.player.x));
-                    gameState.player.y = Math.max(playerRadius, Math.min(WORLD_CONFIG.height - playerRadius, gameState.player.y));
-
-                    // Apply damage to player
-                    if (!gameState.invulnerable) {
-                        gameState.health -= COLLISION_CONFIG.player.damage;
-                        gameState.invulnerable = true;
-
-                        // Flash player red
-                        gameState.player.tint = 0xFF0000;
-
-                        // Reset after immunity period
-                        setTimeout(() => {
-                            if (gameState.player) {
-                                gameState.invulnerable = false;
-                                gameState.player.tint = STYLES.colors.player;
-                            }
-                        }, COLLISION_CONFIG.player.damageImmunityTime);
-
-                        // Check for game over
-                        if (gameState.health <= 0) {
-                            gameState.gameOver = true;
-                            this.ui.showGameOver();
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check bullet collisions with enemies
-        for (let i = gameState.bullets.length - 1; i >= 0; i--) {
-            const bullet = gameState.bullets[i];
-            let bulletRemoved = false;
-
-            // Skip if bullet is already marked for removal
-            if (!bullet || !bullet.sprite) continue;
-
-            for (let j = gameState.enemies.length - 1; j >= 0; j--) {
-                const enemy = gameState.enemies[j];
-                
-                // Skip if enemy is already dead
-                if (!enemy || enemy.health <= 0) continue;
-
-                // Calculate precise distance between bullet and enemy centers
-                const dx = bullet.sprite.x - enemy.x;
-                const dy = bullet.sprite.y - enemy.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                // Calculate collision radius based on actual sizes
-                const bulletRadius = bullet.size / 2;
-                const enemyRadius = enemy.width / 2;
-                const collisionRadius = bulletRadius + enemyRadius;
-
-                if (distance <= collisionRadius) {
-                    // Apply damage to enemy
-                    enemy.health -= bullet.damage;
-                    
-                    // Create damage number
-                    this.createDamageNumber(bullet.sprite.x, bullet.sprite.y, bullet.damage);
-                    
-                    // Create hit effect
-                    this.createHitEffect(bullet.sprite.x, bullet.sprite.y);
-
-                    // Check if enemy is defeated
-                    if (enemy.health <= 0) {
-                        // Create death effect
-                        this.createDeathEffect(enemy.x, enemy.y);
-                        
-                        // Add experience gem
-                        const gem = EntityManager.createExperienceGem(enemy.x, enemy.y, enemy.experienceValue);
-                        this.worldContainer.addChild(gem.sprite);
-                        gameState.experienceGems.push(gem);
-
-                        // Update score
-                        gameState.score += enemy.experienceValue;
-
-                        // Remove enemy
-                        EntityManager.cleanup(this.app, enemy);
-                        gameState.enemies.splice(j, 1);
-                    }
-
-                    // Remove bullet unless it's piercing
-                    if (!bullet.piercing && !bulletRemoved) {
-                        EntityManager.cleanup(this.app, bullet.sprite);
-                        gameState.bullets.splice(i, 1);
-                        bulletRemoved = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Enemy-Enemy collisions
-        for (let i = 0; i < gameState.enemies.length; i++) {
-            for (let j = i + 1; j < gameState.enemies.length; j++) {
-                const enemy1 = gameState.enemies[i];
-                const enemy2 = gameState.enemies[j];
-                
-                if (!enemy1 || !enemy2) continue;
-                
-                const dx = enemy2.x - enemy1.x;
-                const dy = enemy2.y - enemy1.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                const minDistance = (enemy1.width/2 + enemy2.width/2) * COLLISION_CONFIG.enemy.minDistance;
-                
-                if (distance < minDistance) {
-                    const angle = Math.atan2(dy, dx);
-                    const pushForce = Math.min(
-                        (minDistance - distance) * COLLISION_CONFIG.enemy.repelForce,
-                        COLLISION_CONFIG.enemy.maxPushForce
-                    );
-                    
-                    const pushX = Math.cos(angle) * pushForce;
-                    const pushY = Math.sin(angle) * pushForce;
-                    
-                    enemy1.x -= pushX;
-                    enemy1.y -= pushY;
-                    enemy2.x += pushX;
-                    enemy2.y += pushY;
-                }
-            }
-        }
     }
 
     updateExperienceGems(delta) {
@@ -767,13 +547,13 @@ class Game {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
             // Magnet effect
-            if (dist < 100) {
-                gem.sprite.x += (dx / dist) * 4 * delta;
-                gem.sprite.y += (dy / dist) * 4 * delta;
-            }
+        if (dist < 100) {
+            gem.sprite.x += (dx / dist) * 4 * delta;
+            gem.sprite.y += (dy / dist) * 4 * delta;
+        }
 
             // Collect gem
-            if (dist < 20) {
+        if (dist < 20) {
                 // Add to pending experience instead of directly to experience
                 gameState.pendingExperience += gem.value;
                 
@@ -929,10 +709,10 @@ class Game {
         gameState.levelUp = true;
 
         // Dark overlay with animation
-        const overlay = new PIXI.Graphics();
+    const overlay = new PIXI.Graphics();
         overlay.beginFill(0x000000, 0);  // Start transparent
         overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
+    overlay.endFill();
         this.app.stage.addChild(overlay);
 
         // Animate overlay
@@ -959,8 +739,8 @@ class Game {
             dropShadowColor: '#000000',
             dropShadowBlur: 10,
             dropShadowDistance: 5
-        });
-        levelUpText.anchor.set(0.5);
+    });
+    levelUpText.anchor.set(0.5);
         levelUpText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 120);
 
         // Add pulsing animation to level up text
@@ -1072,7 +852,7 @@ class Game {
         };
 
         // Handle key events
-        const handleKeyPress = (e) => {
+    const handleKeyPress = (e) => {
             switch(e.key) {
                 case 'ArrowUp':
                     selectedIndex = (selectedIndex - 1 + upgrades.length) % upgrades.length;
@@ -1102,8 +882,8 @@ class Game {
         // Initial selection update
         updateSelection();
 
-        window.addEventListener('keydown', handleKeyPress);
-    }
+    window.addEventListener('keydown', handleKeyPress);
+}
 
     levelUpComplete() {
         // Update level-related stats
@@ -1119,17 +899,29 @@ class Game {
         this.ui.updateDebugPanel(gameState);
     }
 
-    updateCamera() {
-        // Calculate where the camera should be
-        const targetX = -gameState.player.x + this.app.screen.width / 2;
-        const targetY = -gameState.player.y + this.app.screen.height / 2;
-        
-        // Clamp camera position to world bounds
-        const minX = -WORLD_CONFIG.width + this.app.screen.width;
-        const minY = -WORLD_CONFIG.height + this.app.screen.height;
-        
-        this.worldContainer.x = Math.max(Math.min(targetX, 0), minX);
-        this.worldContainer.y = Math.max(Math.min(targetY, 0), minY);
+    updateUI() {
+        this.ui.updateHealth(gameState.health, gameState.maxHealth);
+        this.ui.updateScore(gameState.score);
+        this.ui.updateLevel(gameState.level);
+        this.ui.updateExperience(gameState.experience, gameState.nextLevel);
+        this.ui.updateDebugPanel(gameState);
+    }
+
+    initializeWeapons() {
+        gameState.player.weapons = {
+            1: new Weapon('PISTOL'),
+            2: new Weapon('SHOTGUN'),
+            3: new Weapon('LASER'),
+            4: new Weapon('MACHINEGUN')
+        };
+        gameState.player.activeWeapon = 1;  // Start with pistol
+
+        // Add weapon switch handler
+        this.inputManager.handleWeaponSwitch((weaponKey) => {
+            gameState.player.activeWeapon = weaponKey;
+            const weapon = gameState.player.weapons[gameState.player.activeWeapon];
+            this.ui.updateWeaponInfo(weapon.name);
+        });
     }
 
     createEnemy() {
@@ -1147,16 +939,16 @@ class Game {
 
     createHitEffect(x, y) {
         const particles = [];
-        const particleCount = STYLES.particles.hit.count;
+        const particleCount = STYLES.particles.HIT.count;
         
         for (let i = 0; i < particleCount; i++) {
             const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.hit.color);
+            particle.beginFill(STYLES.particles.HIT.color);
             particle.drawCircle(0, 0, 2);
             particle.endFill();
             
             const angle = (Math.PI * 2 * i) / particleCount;
-            const speed = STYLES.particles.hit.speed;
+            const speed = STYLES.particles.HIT.speed;
             
             particle.x = x;
             particle.y = y;
@@ -1188,16 +980,16 @@ class Game {
 
     createDeathEffect(x, y) {
         const particles = [];
-        const particleCount = STYLES.particles.death.count;
+        const particleCount = STYLES.particles.DEATH.count;
         
         for (let i = 0; i < particleCount; i++) {
             const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.death.color);
+            particle.beginFill(STYLES.particles.DEATH.color);
             particle.drawCircle(0, 0, 3);
             particle.endFill();
             
             const angle = Math.random() * Math.PI * 2;
-            const speed = STYLES.particles.death.speed * (0.5 + Math.random() * 0.5);
+            const speed = STYLES.particles.DEATH.speed * (0.5 + Math.random() * 0.5);
             
             particle.x = x;
             particle.y = y;

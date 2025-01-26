@@ -1,145 +1,187 @@
-export const GAME_CONFIG = {
+// Base constants
+const BASE_SPAWN_DISTANCE = 600;
+const BASE_SPAWN_RATE = 0.02;
+const BASE_MAX_ENEMIES = 50;
+const BASE_ELITE_CHANCE = 0.1;
+
+// Enemy type ratios
+const ENEMY_TYPE_RATIOS = {
+    BASIC: 0.6,
+    TANK: 0.2,
+    FAST: 0.2
+};
+
+// Enemy dimensions
+const ENEMY_RADIUS = {
+    BASIC: 20,
+    TANK: 35,
+    FAST: 15
+};
+
+// Elite modifiers
+const ELITE_MODIFIERS = {
+    HEALTH: 1.5,
+    EXPERIENCE: 2.0,
+    SPEED: 1.2
+};
+
+// Initial player stats
+const INITIAL_PLAYER_STATS = {
+    HEALTH: 100,
+    FIRE_RATE: 600,
+    PLAYER_SPEED: 4.2,
+    ATTACK_DAMAGE: 20,
+    XP_TO_LEVEL: 25
+};
+
+export const GAME_CONFIG = Object.freeze({
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: 0x1a1a1a,
     antialias: true,
     resizeTo: window
-};
+});
 
-export const SPAWN_CONFIG = {
-    baseRate: 0.02,        // Base spawn chance per frame
-    maxEnemies: 50,       // Maximum number of enemies allowed
-    typeRatios: {
-        BASIC: 0.6,       // 60% chance for basic enemies
-        TANK: 0.2,        // 20% chance for tanks
-        FAST: 0.2         // 20% chance for fast enemies
-    },
-    eliteChance: 0.1,     // 10% chance for elite enemies
-    eliteModifiers: {
-        health: 1.5,      // 50% more health
-        experience: 2.0,   // Double experience
-        speed: 1.2        // 20% more speed
-    },
-    spawnDistance: 600    // Distance from player where enemies spawn
-};
+export const SPAWN_CONFIG = Object.freeze({
+    baseRate: BASE_SPAWN_RATE,
+    maxEnemies: BASE_MAX_ENEMIES,
+    typeRatios: Object.freeze(ENEMY_TYPE_RATIOS),
+    eliteChance: BASE_ELITE_CHANCE,
+    eliteModifiers: Object.freeze(ELITE_MODIFIERS),
+    spawnDistance: BASE_SPAWN_DISTANCE
+});
 
-export const ENEMY_TYPES = {
-    BASIC: {
+export const ENEMY_TYPES = Object.freeze({
+    BASIC: Object.freeze({
         color: 0xFF0000,
-        size: 20,
-        speed: 1.8,        // Slightly slower for better early game
-        health: 40,        // Reduced for quicker early kills
-        experience: 8      // Increased for faster early progression
-    },
-    TANK: {
+        size: ENEMY_RADIUS.BASIC,
+        speed: 1.8,
+        health: 40,
+        experience: 8
+    }),
+    TANK: Object.freeze({
         color: 0x8B0000,
-        size: 35,
-        speed: 0.8,       // Very slow but threatening
-        health: 100,      // Significant health pool
-        experience: 25    // Rewards player for the challenge
-    },
-    FAST: {
+        size: ENEMY_RADIUS.TANK,
+        speed: 0.8,
+        health: 100,
+        experience: 25
+    }),
+    FAST: Object.freeze({
         color: 0x0000FF,
-        size: 15,
-        speed: 3.0,       // Fast but manageable
-        health: 25,       // Very fragile
-        experience: 12    // Decent reward for the risk
-    }
-};
+        size: ENEMY_RADIUS.FAST,
+        speed: 3.0,
+        health: 25,
+        experience: 12
+    })
+});
 
-export const INITIAL_STATE = {
-    health: 100,
-    maxHealth: 100,
+export const INITIAL_STATE = Object.freeze({
+    health: INITIAL_PLAYER_STATS.HEALTH,
+    maxHealth: INITIAL_PLAYER_STATS.HEALTH,
     level: 1,
     experience: 0,
-    nextLevel: 25,        // Lower initial requirement for faster early game
-    fireRate: 600,        // Slightly slower initial fire rate
-    playerSpeed: 4.2,     // Adjusted for better control
-    attackDamage: 20,     // Balanced with enemy health
+    nextLevel: INITIAL_PLAYER_STATS.XP_TO_LEVEL,
+    fireRate: INITIAL_PLAYER_STATS.FIRE_RATE,
+    playerSpeed: INITIAL_PLAYER_STATS.PLAYER_SPEED,
+    attackDamage: INITIAL_PLAYER_STATS.ATTACK_DAMAGE,
     healthRegen: 0,
     score: 0
-};
+});
 
 // Level scaling factors
-export const LEVEL_SCALING = {
-    experienceMultiplier: 1.8,    // How much more XP needed per level (was 2.0)
-    healthUpgrade: 1.3,           // Health increase per health upgrade
-    damageUpgrade: 1.25,          // Damage increase per attack upgrade
-    fireRateUpgrade: 0.85,        // Fire rate improvement (lower is faster)
-    speedUpgrade: 1.15,           // Speed increase per speed upgrade
-    healthRegenUpgrade: 1,        // Fixed health per second per upgrade
+export const LEVEL_SCALING = Object.freeze({
+    experienceMultiplier: 1.8,
+    healthUpgrade: 1.3,
+    damageUpgrade: 1.25,
+    fireRateUpgrade: 0.85,
+    speedUpgrade: 1.15,
+    healthRegenUpgrade: 1,
     
     // Enemy scaling
-    enemyHealthScale: 1.15,       // Enemy health increase per level
-    enemyDamageScale: 1.12,       // Enemy damage increase per level
-    enemySpeedScale: 1.05,        // Slight speed increase per level
-    enemySpawnRateScale: 1.08,    // Spawn rate increase per level
+    enemyHealthScale: 1.15,
+    enemyDamageScale: 1.12,
+    enemySpeedScale: 1.05,
+    enemySpawnRateScale: 1.08,
     
     // Score and rewards
-    scoreMultiplier: 1.5,         // Score multiplier per level
-    experienceMultiplierPerLevel: 1.2  // Experience gain multiplier per level
-};
+    scoreMultiplier: 1.5,
+    experienceMultiplierPerLevel: 1.2
+});
 
-// Add color scheme and styles
-export const STYLES = {
-    colors: {
-        background: 0x1a1a1a,  // Darker background
-        player: 0x00ff88,      // Bright cyan-green
-        bullet: 0xffdd00,      // Bright yellow
-        exp: 0xff00ff,         // Bright magenta
-        healthBar: {
-            border: 0x333333,
-            background: 0x666666,
-            health: 0x00ff00,
-            damage: 0xff0000
-        },
-        ui: {
-            text: 0xffffff,
-            debug: 0xaaaaaa
-        }
+// UI Colors and styles
+const UI_COLORS = {
+    BACKGROUND: 0x1a1a1a,
+    PLAYER: 0x00ff88,
+    BULLET: 0xffdd00,
+    EXPERIENCE: 0xff00ff,
+    HEALTH_BAR: {
+        BORDER: 0x333333,
+        BACKGROUND: 0x666666,
+        HEALTH: 0x00ff00,
+        DAMAGE: 0xff0000
     },
-    particles: {
-        hit: {
-            color: 0xffff00,
-            count: 8,
-            speed: 5,
-            lifetime: 20
-        },
-        death: {
-            color: 0xff0000,
-            count: 15,
-            speed: 8,
-            lifetime: 30
-        }
+    UI_TEXT: {
+        PRIMARY: 0xffffff,
+        DEBUG: 0xaaaaaa
     }
 };
 
-export const WORLD_CONFIG = {
-    width: 2000,  // World is larger than viewport
-    height: 2000,
-    viewportPadding: 200  // Distance from player to edge before camera moves
+const PARTICLE_EFFECTS = {
+    HIT: {
+        color: 0xffff00,
+        count: 8,
+        speed: 5,
+        lifetime: 20
+    },
+    DEATH: {
+        color: 0xff0000,
+        count: 15,
+        speed: 8,
+        lifetime: 30
+    }
 };
+
+export const STYLES = Object.freeze({
+    colors: Object.freeze({
+        background: UI_COLORS.BACKGROUND,
+        player: UI_COLORS.PLAYER,
+        bullet: UI_COLORS.BULLET,
+        exp: UI_COLORS.EXPERIENCE,
+        healthBar: Object.freeze(UI_COLORS.HEALTH_BAR),
+        ui: Object.freeze(UI_COLORS.UI_TEXT)
+    }),
+    particles: Object.freeze(PARTICLE_EFFECTS)
+});
+
+export const WORLD_CONFIG = Object.freeze({
+    width: 2000,
+    height: 2000,
+    viewportPadding: 200
+});
 
 // Collision configuration
-export const COLLISION_CONFIG = {
-    // Player collision
-    player: {
+const COLLISION_SETTINGS = {
+    PLAYER: {
         radius: 20,
-        pushForce: 2,      // How much player pushes enemies
-        pushResistance: 0.3, // How much player resists being pushed
-        damageImmunityTime: 1000,  // Milliseconds
-        damage: 10,          // Damage taken from collisions
+        pushForce: 2,
+        pushResistance: 0.3,
+        damageImmunityTime: 1000,
+        damage: 10,
     },
-    // Enemy collision
-    enemy: {
-        pushForce: 2,        // Base push force for enemy collisions
-        minDistance: 0.9,    // Multiplier for minimum distance (1 = touching exactly)
-        maxPushForce: 10,    // Maximum push force cap
-        repelForce: 0.5,     // How strongly enemies repel each other
+    ENEMY: {
+        pushForce: 2,
+        minDistance: 0.9,
+        maxPushForce: 10,
+        repelForce: 0.5,
     },
-    // General collision
-    impulse: {
-        power: 2,            // Base impulse power
-        sizeFactor: 0.25,    // How much object sizes affect impulse (0.25 = width/4)
+    IMPULSE: {
+        power: 2,
+        sizeFactor: 0.25,
     }
-}; 
+};
+
+export const COLLISION_CONFIG = Object.freeze({
+    player: Object.freeze(COLLISION_SETTINGS.PLAYER),
+    enemy: Object.freeze(COLLISION_SETTINGS.ENEMY),
+    impulse: Object.freeze(COLLISION_SETTINGS.IMPULSE)
+}); 
