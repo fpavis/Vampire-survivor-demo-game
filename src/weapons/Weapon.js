@@ -1,5 +1,5 @@
-import { gameState } from './gameState.js';
-import { INITIAL_STATE } from './config.js';
+import { gameState } from '../core/gameState.js';
+import { INITIAL_STATE } from '../core/config.js';
 
 // Weapon configurations
 const WEAPON_CONFIGS = {

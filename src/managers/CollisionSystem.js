@@ -1,6 +1,6 @@
-import { COLLISION_CONFIG, STYLES, WORLD_CONFIG } from './config.js';
-import { EntityManager } from './entities.js';
-import { gameState } from './gameState.js';
+import { COLLISION_CONFIG, STYLES, WORLD_CONFIG } from '../core/config.js';
+import { EntityManager } from '../entities/Entity.js';
+import { gameState } from '../core/gameState.js';
 
 export class CollisionSystem {
     constructor(app, worldContainer, effectsManager) {

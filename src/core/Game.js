@@ -1,17 +1,17 @@
 import { GAME_CONFIG, ENEMY_TYPES, INITIAL_STATE, LEVEL_SCALING, STYLES, WORLD_CONFIG, SPAWN_CONFIG, COLLISION_CONFIG, LEVELS } from './config.js';
 import { gameState } from './gameState.js';
-import { EntityManager } from './entities.js';
-import { UIManager } from './ui.js';
-import { Weapon } from './weapons.js';
-import { InputManager } from './InputManager.js';
-import { CollisionSystem } from './CollisionSystem.js';
-import { EffectsManager } from './EffectsManager.js';
-import { CameraManager } from './CameraManager.js';
-import { CombatSystem } from './CombatSystem.js';
-import { EnemyManager } from './EnemyManager.js';
-import { PortalManager } from './PortalManager.js';
-import { UpgradeManager } from './UpgradeManager.js';
-import { ExperienceManager } from './ExperienceManager.js';
+import { EntityManager } from '../entities/Entity.js';
+import { UIManager } from '../managers/UIManager.js';
+import { Weapon } from '../weapons/Weapon.js';
+import { InputManager } from '../managers/InputManager.js';
+import { CollisionSystem } from '../managers/CollisionSystem.js';
+import { EffectsManager } from '../managers/EffectsManager.js';
+import { CameraManager } from '../managers/CameraManager.js';
+import { CombatSystem } from '../managers/CombatSystem.js';
+import { EnemyManager } from '../managers/EnemyManager.js';
+import { PortalManager } from '../managers/PortalManager.js';
+import { UpgradeManager } from '../managers/UpgradeManager.js';
+import { ExperienceManager } from '../managers/ExperienceManager.js';
 
 class Game {
     constructor() {
@@ -125,7 +125,19 @@ class Game {
     }
 
     initializeArea(area) {
-        // Clean up previous area
+        // Store current enemies state if leaving area
+        if (this.currentArea && this.currentArea !== area) {
+            this.currentArea.storedEnemies = gameState.enemies.map(enemy => ({
+                type: enemy.type,
+                x: enemy.x,
+                y: enemy.y,
+                health: enemy.health,
+                maxHealth: enemy.maxHealth
+            }));
+        }
+        
+        // Clean up current area but preserve player
+        const player = gameState.player;
         this.worldContainer.removeChildren();
         gameState.enemies = [];
         gameState.bullets = [];
@@ -137,18 +149,29 @@ class Game {
         background.drawRect(0, 0, area.width, area.height);
         background.endFill();
         background.name = 'background';
+        background.zIndex = 0;
         this.worldContainer.addChild(background);
         
-        // Add grid
+        // Add grid with proper z-index
         this.updateGrid(true);
+        const grid = this.worldContainer.getChildByName('grid');
+        if (grid) grid.zIndex = 1;
         
-        // Position player if this is a new game
-        if (!gameState.player) {
+        // Handle player
+        if (!player) {
+            // Create new player if doesn't exist
             gameState.player = EntityManager.createPlayer(this.app);
             gameState.player.x = area.width / 2;
             gameState.player.y = area.height / 2;
-            this.worldContainer.addChild(gameState.player);
+        } else {
+            // Reuse existing player
+            if (player.parent) {
+                player.parent.removeChild(player);
+            }
         }
+        // Ensure proper z-index for player
+        gameState.player.zIndex = 10;
+        this.worldContainer.addChild(gameState.player);
         
         // Initialize UI if needed
         if (!this.ui) {
@@ -160,7 +183,22 @@ class Game {
             this.experienceManager.setUpgradeManager(this.upgradeManager);
         }
         
-        // Create portals to connected areas
+        // Enable container sorting
+        this.worldContainer.sortableChildren = true;
+        
+        // Restore enemies if returning to area
+        if (area.storedEnemies) {
+            area.storedEnemies.forEach(enemyData => {
+                const enemy = EntityManager.createEnemy(this.app, enemyData.type, enemyData.x, enemyData.y);
+                enemy.health = enemyData.health;
+                enemy.maxHealth = enemyData.maxHealth;
+                enemy.zIndex = 5;
+                this.worldContainer.addChild(enemy);
+                gameState.enemies.push(enemy);
+            });
+        }
+        
+        // Create portals to connected areas with proper z-index
         this.portalManager.createAreaPortals(area);
         
         // Show area name and description

@@ -1,6 +1,6 @@
-import { gameState } from './gameState.js';
-import { EntityManager } from './entities.js';
-import { LEVEL_SCALING } from './config.js';
+import { gameState } from '../core/gameState.js';
+import { EntityManager } from '../entities/Entity.js';
+import { LEVEL_SCALING } from '../core/config.js';
 
 export class EnemyManager {
     constructor(app, worldContainer) {

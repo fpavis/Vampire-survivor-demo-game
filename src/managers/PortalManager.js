@@ -1,5 +1,5 @@
-import { gameState } from './gameState.js';
-import { LEVELS } from './config.js';
+import { gameState } from '../core/gameState.js';
+import { LEVELS } from '../core/config.js';
 
 export class PortalManager {
     constructor(app, worldContainer) {
@@ -43,6 +43,7 @@ export class PortalManager {
     createPortalGraphics(portal) {
         const graphics = new PIXI.Graphics();
         graphics.portalData = portal;
+        graphics.zIndex = 3;  // Ensure portals are above background but below enemies
         
         // Create portal visual
         const drawPortal = (scale = 1) => {

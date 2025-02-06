@@ -1,5 +1,5 @@
-import { gameState } from './gameState.js';
-import { LEVEL_SCALING } from './config.js';
+import { gameState } from '../core/gameState.js';
+import { LEVEL_SCALING } from '../core/config.js';
 
 export class UpgradeManager {
     constructor(ui) {

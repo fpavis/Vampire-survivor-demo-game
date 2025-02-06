@@ -1,5 +1,5 @@
-import { gameState } from './gameState.js';
-import { EntityManager } from './entities.js';
+import { gameState } from '../core/gameState.js';
+import { EntityManager } from '../entities/Entity.js';
 
 export class CombatSystem {
     constructor(app, worldContainer) {

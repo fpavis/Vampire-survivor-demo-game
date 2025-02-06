@@ -1,4 +1,4 @@
-import { gameState } from './gameState.js';
+import { gameState } from '../core/gameState.js';
 
 export class InputManager {
     constructor(app, worldContainer) {

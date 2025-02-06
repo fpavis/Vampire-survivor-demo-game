@@ -2,8 +2,8 @@
  * UI Manager class responsible for handling all game UI elements
  * Manages HUD, menus, overlays, and user interactions
  */
-import { STYLES } from './config.js';
-import { gameState } from './gameState.js';
+import { STYLES } from '../core/config.js';
+import { gameState } from '../core/gameState.js';
 
 export class UIManager {
     /**

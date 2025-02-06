@@ -1,4 +1,4 @@
-import { STYLES } from './config.js';
+import { STYLES } from '../core/config.js';
 
 export class EffectsManager {
     constructor(app, worldContainer) {

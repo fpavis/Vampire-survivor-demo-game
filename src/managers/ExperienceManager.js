@@ -1,4 +1,4 @@
-import { gameState } from './gameState.js';
+import { gameState } from '../core/gameState.js';
 
 export class ExperienceManager {
     constructor(app, worldContainer, ui, upgradeManager) {

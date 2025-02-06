@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
-import { ENEMY_TYPES, STYLES } from './config.js';
-import { gameState } from './gameState.js';
+import { ENEMY_TYPES, STYLES } from '../core/config.js';
+import { gameState } from '../core/gameState.js';
 
 export class EntityManager {
     static createPlayer(app) {
@@ -12,7 +12,7 @@ export class EntityManager {
         glow.beginFill(0x00ff00, 0.2);
         glow.drawCircle(0, 0, 25);
         glow.endFill();
-        
+        player.addChild(glow);
         
         // Draw player body
         player.beginFill(STYLES.colors.player);
@@ -21,6 +21,7 @@ export class EntityManager {
         
         // Set player properties
         player.radius = 20;  // Store radius for collision detection
+        player.zIndex = 10;  // Ensure player is above other entities
         
         return player;
     }
@@ -48,18 +49,18 @@ export class EntityManager {
         healthBar.endFill();
         enemy.addChild(healthBar);
         
-        // Set enemy position
+        // Set enemy position and properties
         enemy.x = x;
         enemy.y = y;
-        
-        // Set enemy properties directly on the graphics object
+        enemy.type = type;  // Store enemy type for area transitions
         enemy.radius = config.size;
         enemy.health = config.health;
         enemy.maxHealth = config.health;
         enemy.speed = config.speed;
         enemy.experienceValue = config.experience;
         enemy.healthBar = healthBar;
-        enemy.healthBarWidth = config.size * 2; // Store original health bar width
+        enemy.healthBarWidth = config.size * 2;
+        enemy.zIndex = 5;  // Ensure enemies are below player but above background
         
         return enemy;
     }

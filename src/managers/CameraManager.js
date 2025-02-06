@@ -1,5 +1,5 @@
-import { WORLD_CONFIG } from './config.js';
-import { gameState } from './gameState.js';
+import { WORLD_CONFIG } from '../core/config.js';
+import { gameState } from '../core/gameState.js';
 
 export class CameraManager {
     constructor(app, worldContainer) {
