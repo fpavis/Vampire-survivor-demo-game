@@ -45,6 +45,11 @@
  * @class
  */
 
+// Import PixiJS and Viewport
+import * as PIXI from 'pixi.js';
+import { Viewport } from 'pixi-viewport';
+
+// Game configuration and managers
 import { GAME_CONFIG, ENEMY_TYPES, LEVEL_SCALING, STYLES, WORLD_CONFIG, SPAWN_CONFIG, COLLISION_CONFIG, LEVELS } from './config.js';
 import { gameState } from './gameState.js';
 import { EntityManager } from '../entities/Entity.js';
@@ -59,6 +64,7 @@ import { EnemyManager } from '../managers/EnemyManager.js';
 import { PortalManager } from '../managers/PortalManager.js';
 import { UpgradeManager } from '../managers/UpgradeManager.js';
 import { ExperienceManager } from '../managers/ExperienceManager.js';
+import { BulletManager } from '../managers/BulletManager.js';
 
 class Game {
     constructor() {
@@ -76,173 +82,80 @@ class Game {
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
             
-            // Initialize Pixi application
+            // Initialize Pixi application with v8 syntax
             this.app = new PIXI.Application();
             await this.app.init({
-                ...GAME_CONFIG,
+                canvas,
                 width: viewportWidth,
                 height: viewportHeight,
                 resolution: window.devicePixelRatio || 1,
                 autoDensity: true,
                 antialias: true,
-                resizeTo: window,
-                canvas: canvas,
-                backgroundColor: GAME_CONFIG.backgroundColor || 0x1a1a1a,
-                hello: true // Enable WebGL debug info
+                hello: true,
+                preference: 'webgpu'
             });
             
-            // Initialize asset loader
+            // Initialize asset loader first
             await this.loadAssets();
             
-            // Set up main stage
+            // Set up main stage with v8 syntax
             this.app.stage.eventMode = 'passive';
             this.app.stage.sortableChildren = true;
             
-            // Create game viewport - this will handle game world scrolling
-            this.gameViewport = new PIXI.Container();
-            this.gameViewport.sortableChildren = true;
-            this.gameViewport.eventMode = 'passive';
-            this.gameViewport.label = 'GameViewport';
-            this.gameViewport.visible = true;
-            this.gameViewport.width = this.app.screen.width;
-            this.gameViewport.height = this.app.screen.height;
+            // Configure tickers
+            this.systemTicker = PIXI.Ticker.system;
+            this.gameTicker = PIXI.Ticker.shared;
+            this.gameTicker.maxFPS = 60;
+            this.gameTicker.minFPS = 30;
             
-            // Create world container that holds all game entities
-            this.worldContainer = new PIXI.Container();
-            this.worldContainer.sortableChildren = true;
-            this.worldContainer.eventMode = 'passive';
-            this.worldContainer.label = 'WorldContainer';
-            this.worldContainer.visible = true;
+            // Initialize camera system first and wait for it
+            this.cameraManager = new CameraManager(this.app);
             
-            // Create separate layers for different types of entities
-            this.backgroundLayer = new PIXI.Container();
-            this.backgroundLayer.sortableChildren = true;
-            this.backgroundLayer.zIndex = 0;
-            this.backgroundLayer.label = 'BackgroundLayer';
-            this.backgroundLayer.visible = true;
-            
-            this.entityLayer = new PIXI.Container();
-            this.entityLayer.sortableChildren = true;
-            this.entityLayer.zIndex = 10;
-            this.entityLayer.label = 'EntityLayer';
-            
-            this.bulletLayer = new PIXI.Container();
-            this.bulletLayer.sortableChildren = true;
-            this.bulletLayer.zIndex = 20;
-            this.bulletLayer.label = 'BulletLayer';
-            
-            this.effectsLayer = new PIXI.Container();
-            this.effectsLayer.sortableChildren = true;
-            this.effectsLayer.zIndex = 30;
-            this.effectsLayer.label = 'EffectsLayer';
-            
-            // Add layers to world container
-            this.worldContainer.addChild(this.backgroundLayer);
-            this.worldContainer.addChild(this.entityLayer);
-            this.worldContainer.addChild(this.bulletLayer);
-            this.worldContainer.addChild(this.effectsLayer);
-            
-            // Add world container to viewport
-            this.gameViewport.addChild(this.worldContainer);
-            
-            // Create UI container that stays fixed on screen
-            this.uiContainer = new PIXI.Container();
-            this.uiContainer.sortableChildren = true;
-            this.uiContainer.eventMode = 'static';
-            this.uiContainer.label = 'UIContainer';
-            this.uiContainer.zIndex = 1000;
-            
-            // Add containers to stage
-            this.app.stage.addChild(this.gameViewport);
-            this.app.stage.addChild(this.uiContainer);
-            
-            // Debug log viewport and container setup
-            console.log('Display hierarchy setup:', {
-                viewport: {
-                    width: viewportWidth,
-                    height: viewportHeight,
-                    devicePixelRatio: window.devicePixelRatio,
-                    stage: {
-                        children: this.app.stage.children.map(child => ({
-                            label: child.label,
-                            visible: child.visible,
-                            alpha: child.alpha,
-                            zIndex: child.zIndex
-                        }))
-                    }
-                },
-                gameViewport: {
-                    visible: this.gameViewport.visible,
-                    alpha: this.gameViewport.alpha,
-                    children: this.gameViewport.children.map(child => ({
-                        label: child.label,
-                        visible: child.visible,
-                        alpha: child.alpha,
-                        zIndex: child.zIndex
-                    }))
-                },
-                worldContainer: {
-                    visible: this.worldContainer.visible,
-                    alpha: this.worldContainer.alpha,
-                    children: this.worldContainer.children.map(child => ({
-                        label: child.label,
-                        visible: child.visible,
-                        alpha: child.alpha,
-                        zIndex: child.zIndex
-                    }))
+            // Wait for camera initialization
+            await new Promise(resolve => {
+                if (this.cameraManager.mainContainer && this.cameraManager.worldContainer) {
+                    resolve();
+                } else {
+                    requestAnimationFrame(resolve);
                 }
             });
             
-            // Add debug logging for container setup
-            console.log('Container visibility check:', {
-                stage: this.app.stage.visible,
-                gameViewport: this.gameViewport.visible,
-                worldContainer: this.worldContainer.visible,
-                backgroundLayer: this.backgroundLayer.visible,
-                entityLayer: this.entityLayer?.visible,
-                dimensions: {
-                    screen: {
-                        width: this.app.screen.width,
-                        height: this.app.screen.height
-                    },
-                    viewport: {
-                        width: this.gameViewport.width,
-                        height: this.gameViewport.height
-                    }
+            // Validate camera containers
+            if (!this.cameraManager?.mainContainer || !this.cameraManager?.worldContainer) {
+                throw new Error('Camera containers not properly initialized');
+            }
+            
+            // Create and validate game layers
+            await this.createGameLayers();
+            
+            // Validate all required containers and layers before manager initialization
+            const requiredContainers = {
+                mainContainer: this.cameraManager.mainContainer,
+                worldContainer: this.cameraManager.worldContainer,
+                entityLayer: this.entityLayer,
+                bulletLayer: this.bulletLayer,
+                effectsLayer: this.effectsLayer,
+                portalLayer: this.portalLayer,
+                uiContainer: this.uiContainer
+            };
+            
+            for (const [name, container] of Object.entries(requiredContainers)) {
+                if (!container) {
+                    throw new Error(`${name} not initialized`);
                 }
-            });
+                if (!container.parent && name !== 'mainContainer') {
+                    throw new Error(`${name} not properly added to scene graph`);
+                }
+            }
             
-            // Initialize managers with proper layer references
-            this.ui = new UIManager(this.app, this);
-            this.ui.setContainer(this.uiContainer);
-            
-            this.inputManager = new InputManager(this.app, this.entityLayer);
-            this.effectsManager = new EffectsManager(this.app, this.effectsLayer);
-            this.collisionSystem = new CollisionSystem(this.app, this.entityLayer, this.effectsManager);
-            this.collisionSystem.setGame(this);
-            this.cameraManager = new CameraManager(this.app, this.gameViewport);
-            this.combatSystem = new CombatSystem(this.app, this.bulletLayer);
-            this.enemyManager = new EnemyManager(this.app, this.entityLayer);
-            this.portalManager = new PortalManager(this.app, this.entityLayer);
-            this.experienceManager = new ExperienceManager(this.app, this.entityLayer);
-            
-            // Setup managers that need UI
-            this.upgradeManager = new UpgradeManager(this.ui);
-            this.ui.setUpgradeManager(this.upgradeManager);
-            this.portalManager.setUI(this.ui);
-            this.experienceManager.setUI(this.ui);
-            this.experienceManager.setUpgradeManager(this.upgradeManager);
-            
-            // Add resize handler
-            window.addEventListener('resize', () => this.handleResize());
+            // Initialize managers with validated containers
+            this.initializeManagers();
             
             // Set initial area
             this.currentArea = LEVELS.find(level => level.id === 'starting_grounds');
             if (!this.currentArea) {
                 throw new Error('Starting area not found');
             }
-            
-            console.log('Game setup complete, showing start screen...');
             
             // Show start screen
             this.ui.showStartScreen(() => {
@@ -252,6 +165,230 @@ class Game {
             
         } catch (error) {
             console.error('Game initialization error:', error);
+            throw error;
+        }
+    }
+
+    async createGameLayers() {
+        // Create layer containers with proper PixiJS v8 settings
+        const createLayer = (name, zIndex, eventMode = 'none') => {
+            // Create base container with initial properties
+            const layer = new PIXI.Container();
+            
+            // Set properties after creation
+            layer.label = name;
+            layer.sortableChildren = true;
+            layer.eventMode = eventMode;
+            layer.visible = true;
+            layer.zIndex = zIndex;
+            
+            // Initialize transform properties explicitly
+            layer.position.set(0, 0);
+            layer.scale.set(1, 1);
+            layer.pivot.set(0, 0);
+            layer.angle = 0;
+            
+            return layer;
+        };
+
+        // Validate and initialize world container transform
+        if (!this.cameraManager?.worldContainer) {
+            throw new Error('World container not available for layer initialization');
+        }
+
+        // Initialize world container transform if needed
+        if (!this.cameraManager.worldContainer.position) {
+            this.cameraManager.worldContainer.position.set(0, 0);
+            this.cameraManager.worldContainer.scale.set(1, 1);
+            this.cameraManager.worldContainer.pivot.set(0, 0);
+            this.cameraManager.worldContainer.angle = 0;
+        }
+
+        // Create all game layers
+        const layers = {
+            backgroundLayer: createLayer('BackgroundLayer', 0),
+            entityLayer: createLayer('EntityLayer', 10, 'passive'),
+            bulletLayer: createLayer('BulletLayer', 20),
+            portalLayer: createLayer('PortalLayer', 15),
+            effectsLayer: createLayer('EffectsLayer', 30)
+        };
+
+        // Add layers to world container and initialize them
+        for (const [name, layer] of Object.entries(layers)) {
+            // Add to world container first
+            this.cameraManager.worldContainer.addChild(layer);
+            
+            // Store reference in game instance
+            this[name] = layer;
+        }
+
+        // Create and initialize UI container
+        this.uiContainer = createLayer('UILayer', 100, 'passive');
+        this.app.stage.addChild(this.uiContainer);
+
+        // Wait for next frame to ensure DOM updates
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        // Final validation of all layers including UI
+        const allLayers = [...Object.values(layers), this.uiContainer];
+        for (const layer of allLayers) {
+            if (!layer.parent) {
+                throw new Error(`Layer ${layer.label} not properly added to scene graph`);
+            }
+        }
+
+        // Log successful initialization if in debug mode
+        if (gameState.debug) {
+            console.log('Layer initialization complete:', {
+                backgroundLayer: !!this.backgroundLayer,
+                entityLayer: !!this.entityLayer,
+                bulletLayer: !!this.bulletLayer,
+                portalLayer: !!this.portalLayer,
+                effectsLayer: !!this.effectsLayer,
+                uiContainer: !!this.uiContainer
+            });
+        }
+    }
+
+    initializeManagers() {
+        // Validate required containers first
+        if (!this.cameraManager?.mainContainer) {
+            throw new Error('Main container not initialized');
+        }
+        
+        if (!this.cameraManager?.worldContainer) {
+            throw new Error('World container not initialized');
+        }
+        
+        if (!this.cameraManager?.viewport) {
+            throw new Error('Viewport not initialized');
+        }
+
+        const worldContainer = this.cameraManager.worldContainer;
+        const viewport = this.cameraManager.viewport;
+        
+        if (gameState.debug) {
+            console.log('Initializing managers with:', {
+                viewport: {
+                    found: !!viewport,
+                    scale: viewport?.scale?.x,
+                    position: { x: viewport?.x, y: viewport?.y }
+                },
+                worldContainer: {
+                    found: !!worldContainer,
+                    children: worldContainer?.children?.length
+                }
+            });
+        }
+        
+        // Validate game layers
+        const requiredLayers = {
+            entityLayer: this.entityLayer,
+            bulletLayer: this.bulletLayer,
+            effectsLayer: this.effectsLayer,
+            portalLayer: this.portalLayer,
+            uiContainer: this.uiContainer
+        };
+        
+        // Validate layers exist and are properly parented
+        for (const [name, layer] of Object.entries(requiredLayers)) {
+            if (!layer) {
+                throw new Error(`${name} not initialized`);
+            }
+            if (!layer.parent && name !== 'mainContainer') {
+                throw new Error(`${name} not properly added to scene graph`);
+            }
+        }
+        
+        // Initialize managers with validated containers
+        try {
+            // Input manager needs main container for event handling
+            this.inputManager = new InputManager(
+                this.app,
+                this.cameraManager.mainContainer
+            );
+            
+            // Enemy manager needs world container and entity layer
+            this.enemyManager = new EnemyManager(
+                this.app,
+                viewport,
+                worldContainer,
+                this.entityLayer
+            );
+            
+            // Bullet manager needs world container and bullet layer
+            this.bulletManager = new BulletManager(
+                this.app,
+                viewport,
+                worldContainer,
+                this.bulletLayer
+            );
+            
+            // Effects manager needs world container and effects layer
+            this.effectsManager = new EffectsManager(
+                this.app,
+                viewport,
+                worldContainer,
+                this.effectsLayer
+            );
+            
+            // Portal manager needs world container and portal layer
+            this.portalManager = new PortalManager(
+                this.app,
+                viewport,
+                worldContainer,
+                this.portalLayer
+            );
+            
+            // Combat system needs world container and layers
+            this.combatSystem = new CombatSystem(
+                this.app,
+                viewport,
+                worldContainer,
+                this.bulletLayer,
+                this.entityLayer
+            );
+            
+            // Collision system needs world container and effects manager
+            this.collisionSystem = new CollisionSystem(
+                this.app,
+                viewport,
+                worldContainer,
+                this.effectsManager
+            );
+            
+            // Experience manager needs world container
+            this.experienceManager = new ExperienceManager(
+                this.app,
+                viewport,
+                worldContainer
+            );
+            
+            // Upgrade manager only needs app reference
+            this.upgradeManager = new UpgradeManager(this.app);
+            
+            // Initialize UI last so it has access to all managers
+            this.ui = new UIManager(this.app, this);
+            this.ui.setContainer(this.uiContainer);
+            
+            // Log successful initialization
+            if (gameState.debug) {
+                console.log('Managers initialized:', {
+                    input: !!this.inputManager,
+                    enemy: !!this.enemyManager,
+                    bullet: !!this.bulletManager,
+                    effects: !!this.effectsManager,
+                    portal: !!this.portalManager,
+                    combat: !!this.combatSystem,
+                    collision: !!this.collisionSystem,
+                    experience: !!this.experienceManager,
+                    upgrade: !!this.upgradeManager,
+                    ui: !!this.ui
+                });
+            }
+            
+        } catch (error) {
+            console.error('Failed to initialize managers:', error);
             throw error;
         }
     }
@@ -429,18 +566,54 @@ class Game {
     }
 
     init() {
-        console.log('Game.init() called - starting game initialization');
+        if (gameState.debug) console.log('Game.init() called - starting game initialization');
         
         // Reset game state
         gameState.reset();
         
-        // Clean up previous game state if exists
+        // Clean up previous game state
+        this.cleanup();
+        
+        // Initialize the first area
+        this.initializeArea(this.currentArea);
+        
+        // Initialize weapons
+        this.initializeWeapons();
+        
+        // Set up game loop
         if (gameState.player) {
-            console.log('Cleaning up existing player');
+            // Remove existing ticker if any
+            if (gameState.gameTicker) {
+                this.gameTicker.remove(gameState.gameTicker);
+            }
+            
+            // Create new game loop ticker
+            gameState.gameTicker = (delta) => this.gameLoop(delta);
+            
+            // Add to shared ticker for visual updates
+            this.gameTicker.add(gameState.gameTicker, PIXI.UPDATE_PRIORITY.NORMAL);
+            
+            // Add critical systems to system ticker
+            this.systemTicker.add(this.updateCriticalSystems, this, PIXI.UPDATE_PRIORITY.HIGH);
+            
+            // Start tickers if not already running
+            if (!this.gameTicker.started) this.gameTicker.start();
+            if (!this.systemTicker.started) this.systemTicker.start();
+        }
+    }
+
+    cleanup() {
+        // Remove tickers
+        if (gameState.gameTicker) {
+            this.gameTicker.remove(gameState.gameTicker);
+        }
+        this.systemTicker.remove(this.updateCriticalSystems, this);
+        
+        // Clean up entities
+        if (gameState.player) {
             EntityManager.cleanup(this.app, gameState.player);
         }
         
-        // Clean up all existing entities
         gameState.enemies.forEach(enemy => {
             EntityManager.cleanup(this.app, enemy);
         });
@@ -452,70 +625,16 @@ class Game {
         gameState.experienceGems.forEach(gem => {
             EntityManager.cleanup(this.app, gem.sprite);
         });
+    }
+
+    updateCriticalSystems = (delta) => {
+        if (gameState.gameOver || gameState.paused) return;
         
-        console.log('Starting area initialization');
-        // Initialize the first area
-        this.initializeArea(this.currentArea);
+        // Update collision system
+        this.collisionSystem.checkCollisions();
         
-        // Initialize weapons
-        this.initializeWeapons();
-        
-        // Only start game loop and camera update if player exists
-        if (gameState.player) {
-            console.log('Player created successfully');
-            
-            // Set initial position
-            const centerX = Math.floor(this.currentArea.width / 2);
-            const centerY = Math.floor(this.currentArea.height / 2);
-            gameState.player.position.set(centerX, centerY);
-            
-            // Log player position after centering
-            console.log('Player position after centering:', {
-                x: gameState.player.x,
-                y: gameState.player.y,
-                worldX: this.worldContainer.x,
-                worldY: this.worldContainer.y
-            });
-            
-            // Center camera on player with rounded values
-            const targetX = Math.round(this.app.screen.width / 2 - gameState.player.x);
-            const targetY = Math.round(this.app.screen.height / 2 - gameState.player.y);
-            
-            // Clamp world container position
-            const minX = -Math.floor(this.currentArea.width - this.app.screen.width);
-            const minY = -Math.floor(this.currentArea.height - this.app.screen.height);
-            this.worldContainer.x = Math.round(Math.max(Math.min(targetX, 0), minX));
-            this.worldContainer.y = Math.round(Math.max(Math.min(targetY, 0), minY));
-            
-            // Log final positions
-            console.log('Final positions:', {
-                player: { 
-                    x: Math.round(gameState.player.x), 
-                    y: Math.round(gameState.player.y) 
-                },
-                world: { 
-                    x: Math.round(this.worldContainer.x), 
-                    y: Math.round(this.worldContainer.y) 
-                },
-                screen: { 
-                    width: Math.round(this.app.screen.width), 
-                    height: Math.round(this.app.screen.height) 
-                },
-                area: { 
-                    width: this.currentArea.width, 
-                    height: this.currentArea.height 
-                }
-            });
-            
-            // Start game loop
-            if (gameState.gameTicker) {
-                this.app.ticker.remove(gameState.gameTicker);
-            }
-            gameState.gameTicker = (delta) => this.gameLoop(delta);
-            this.app.ticker.add(gameState.gameTicker);
-        } else {
-            console.error('Failed to initialize player');
-        }
+        // Update camera position
+        this.cameraManager.update(delta);
     }
 
     handleResize() {
@@ -523,163 +642,76 @@ class Game {
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         
-        // Update world bounds
-        const worldBounds = this.worldContainer.getChildByLabel('worldBounds');
-        if (worldBounds) {
-            worldBounds.clear();
-            worldBounds
-                .fill({ color: 0x000000, alpha: 0 })
-                .rect(0, 0, viewportWidth, viewportHeight);
-        }
+        // Update application dimensions
+        this.app.renderer.resize(viewportWidth, viewportHeight);
         
-        // Update UI bounds
-        const uiBounds = this.uiContainer.getChildByLabel('uiBounds');
-        if (uiBounds) {
-            uiBounds.clear();
-            uiBounds
-                .fill({ color: 0x000000, alpha: 0 })
-                .rect(0, 0, viewportWidth, viewportHeight);
-        }
+        // Update camera and viewport
+        this.cameraManager.handleResize(viewportWidth, viewportHeight);
         
-        // Update player bounds if it exists
-        if (gameState.player) {
-            const padding = 15;
-            gameState.player.x = Math.min(Math.max(padding, gameState.player.x), this.currentArea.width - padding);
-            gameState.player.y = Math.min(Math.max(padding, gameState.player.y), this.currentArea.height - padding);
-            
-            // Recenter camera on player
-            this.worldContainer.x = this.app.screen.width / 2 - gameState.player.x;
-            this.worldContainer.y = this.app.screen.height / 2 - gameState.player.y;
-            
-            // Clamp world container position
-            const minX = -(this.currentArea.width - this.app.screen.width);
-            const minY = -(this.currentArea.height - this.app.screen.height);
-            this.worldContainer.x = Math.max(Math.min(this.worldContainer.x, 0), minX);
-            this.worldContainer.y = Math.max(Math.min(this.worldContainer.y, 0), minY);
-        }
+        // Update input manager scale
+        this.inputManager.updateScale(viewportWidth, viewportHeight);
         
         // Update UI layout
         if (this.ui) {
             this.ui.handleResize(viewportWidth, viewportHeight);
         }
-        
-        // Debug log new dimensions
-        console.log('Resize event:', {
-            viewport: { width: viewportWidth, height: viewportHeight },
-            screen: { width: this.app.screen.width, height: this.app.screen.height },
-            worldBounds: worldBounds ? worldBounds.getBounds() : null,
-            uiBounds: uiBounds ? uiBounds.getBounds() : null,
-            world: { x: this.worldContainer.x, y: this.worldContainer.y },
-            player: gameState.player ? { x: gameState.player.x, y: gameState.player.y } : null
-        });
     }
 
     gameLoop(delta) {
         if (gameState.gameOver || gameState.levelUp || gameState.paused || !gameState.player) return;
 
-        // Add position logging counter
-        this.positionLogCounter = (this.positionLogCounter || 0) + 1;
-        
-        // Log positions every 60 frames (approximately once per second)
-        if (this.positionLogCounter % 60 === 0) {
-            console.log('Position Debug:', {
-                player: {
-                    x: Math.round(gameState.player.x),
-                    y: Math.round(gameState.player.y),
-                    visible: gameState.player.visible,
-                    parent: gameState.player.parent?.label || 'none'
-                },
-                camera: {
-                    x: Math.round(this.worldContainer.x),
-                    y: Math.round(this.worldContainer.y),
-                    bounds: {
-                        minX: -Math.round(this.currentArea.width - this.app.screen.width),
-                        minY: -Math.round(this.currentArea.height - this.app.screen.height),
-                        screenWidth: this.app.screen.width,
-                        screenHeight: this.app.screen.height
-                    }
-                },
-                area: {
-                    width: this.currentArea.width,
-                    height: this.currentArea.height
-                }
-            });
-        }
-
+        // Handle gameplay updates
         this.handleMovement(delta);
         this.combatSystem.handleCombat(delta);
         this.updateEntities(delta);
         this.experienceManager.updateExperienceGems(delta);
         this.handleHealthRegen(delta);
-        this.collisionSystem.checkCollisions();
+        
+        // Check for area transitions
         this.portalManager.checkPortalCollisions(this.currentArea, (newArea) => {
             this.currentArea = newArea;
             this.initializeArea(newArea);
         });
-        this.cameraManager.update();
         
+        // Update UI and sort display list
         this.updateUI();
-        
-        // Sort stage children each frame to maintain zIndex order
         this.app.stage.sortChildren();
     }
 
     handleMovement(delta) {
         if (!gameState.player) return;
         
-        // Get movement input with validation
+        // Get movement input
         const movement = this.inputManager.getMovementDirection(delta, gameState.playerSpeed, this.ui.joystick);
         
         // Early return if no movement
         if (!movement || (movement.x === 0 && movement.y === 0)) return;
         
+        // Calculate new player position
+        const currentPos = gameState.player.getWorldPosition();
+        const newX = currentPos.x + movement.x;
+        const newY = currentPos.y + movement.y;
+        
+        // Check world boundaries
+        const boundedX = Math.max(0, Math.min(newX, this.currentArea.width));
+        const boundedY = Math.max(0, Math.min(newY, this.currentArea.height));
+        
         // Store current position for collision resolution
         const prevX = gameState.player.x;
         const prevY = gameState.player.y;
         
-        // Calculate new position
-        const newX = prevX + movement.x;
-        const newY = prevY + movement.y;
-        
-        // Apply boundary constraints
-        const minX = gameState.player.radius || 15;
-        const minY = gameState.player.radius || 15;
-        const maxX = this.currentArea.width - (gameState.player.radius || 15);
-        const maxY = this.currentArea.height - (gameState.player.radius || 15);
-        
-        // Update position with boundary checks
-        gameState.player.x = Math.max(minX, Math.min(maxX, newX));
-        gameState.player.y = Math.max(minY, Math.min(maxY, newY));
+        // Update player position
+        gameState.player.setWorldPosition(boundedX, boundedY);
         
         // Check for collisions
-        if (this.collisionSystem) {
-            const collisions = this.collisionSystem.checkPlayerEnemyCollisions();
-            if (collisions) {
-                // If there's a collision, revert to previous position
-                gameState.player.x = prevX;
-                gameState.player.y = prevY;
-            }
+        if (this.collisionSystem.checkPlayerEnemyCollisions()) {
+            // If there's a collision, revert position
+            gameState.player.setWorldPosition(prevX, prevY);
+            return;
         }
         
-        // Log movement debug info periodically
-        if (this.positionLogCounter % 60 === 0) {
-            console.log('Movement Debug:', {
-                delta,
-                movement: {
-                    x: movement.x,
-                    y: movement.y,
-                    speed: gameState.playerSpeed
-                },
-                position: {
-                    previous: { x: prevX, y: prevY },
-                    current: { x: gameState.player.x, y: gameState.player.y }
-                },
-                boundaries: {
-                    min: { x: minX, y: minY },
-                    max: { x: maxX, y: maxY }
-                }
-            });
-        }
+        // Update camera to follow player
+        this.cameraManager.update(delta);
     }
 
     updateEntities(delta) {
@@ -703,142 +735,91 @@ class Game {
     }
 
     initializeArea(area) {
-        // Validate area parameters
         if (!area || !area.width || !area.height) {
             console.error('Invalid area configuration:', area);
             return;
         }
 
-        console.log('Initializing area:', {
-            id: area.id,
-            dimensions: { width: area.width, height: area.height },
-            backgroundColor: area.backgroundColor,
-            validSetup: {
-                backgroundLayer: !!this.backgroundLayer,
-                entityLayer: !!this.entityLayer,
-                worldContainer: !!this.worldContainer
-            }
-        });
-        
-        // Store previous player position if exists
-        const previousPlayerPos = gameState.player ? {
-            x: gameState.player.x,
-            y: gameState.player.y
-        } : null;
-        
-        // Clean up current area with validation
-        if (this.backgroundLayer) {
-            this.backgroundLayer.removeChildren();
-            this.backgroundLayer.visible = true;
-        }
-        if (this.entityLayer) {
-            // Keep player if it exists, remove other entities
-            const player = this.entityLayer.children.find(child => child === gameState.player);
-            this.entityLayer.removeChildren();
-            if (player) {
-                this.entityLayer.addChild(player);
-            }
-            this.entityLayer.visible = true;
-        }
-        if (this.bulletLayer) {
-            this.bulletLayer.removeChildren();
-            this.bulletLayer.visible = true;
-        }
-        if (this.effectsLayer) {
-            this.effectsLayer.removeChildren();
-            this.effectsLayer.visible = true;
-        }
-        
-        // Reset game entities
-        gameState.enemies = [];
-        gameState.bullets = [];
-        if (this.experienceManager) {
-            this.experienceManager.cleanup();
-        }
+        // Clean up existing entities
+        this.cleanupArea();
         
         // Create area background
-        const background = new PIXI.Graphics();
-        background
+        const background = new PIXI.Graphics()
             .fill({ color: area.backgroundColor })
             .rect(0, 0, area.width, area.height);
         background.label = 'areaBackground';
         background.zIndex = 0;
         background.eventMode = 'none';
-        background.visible = true;
         this.backgroundLayer.addChild(background);
         
-        // Create player if doesn't exist
-        if (!gameState.player) {
-            console.log('Creating new player...');
-            gameState.player = EntityManager.createPlayer(this.app);
-            
-            if (!gameState.player) {
-                console.error('Failed to create player instance');
-                return;
-            }
-            
-            // Set initial position to center
-            const centerX = Math.floor(area.width / 2);
-            const centerY = Math.floor(area.height / 2);
-            gameState.player.position.set(centerX, centerY);
-        } else if (previousPlayerPos) {
-            // Smoothly transition player position if coming from another area
-            const targetX = Math.floor(area.width / 2);
-            const targetY = Math.floor(area.height / 2);
-            
-            // Interpolate between previous position and target
-            const lerpFactor = 0.3; // Adjust for smoother/faster transition
-            gameState.player.x = previousPlayerPos.x + (targetX - previousPlayerPos.x) * lerpFactor;
-            gameState.player.y = previousPlayerPos.y + (targetY - previousPlayerPos.y) * lerpFactor;
-        }
+        // Set camera bounds
+        this.cameraManager.setBounds(area.width, area.height);
         
-        // Ensure player is properly set up
-        if (gameState.player) {
-            gameState.player.zIndex = 10;
-            gameState.player.visible = true;
-            
-            // Remove from previous parent if exists
-            if (gameState.player.parent) {
-                gameState.player.parent.removeChild(gameState.player);
-            }
-            
-            // Add to entity layer
-            this.entityLayer.addChild(gameState.player);
-            
-            // Center viewport on player with smooth transition
-            const targetX = -gameState.player.x + this.app.screen.width / 2;
-            const targetY = -gameState.player.y + this.app.screen.height / 2;
-            
-            // Clamp viewport position
-            const minX = -area.width + this.app.screen.width;
-            const minY = -area.height + this.app.screen.height;
-            
-            const currentX = this.worldContainer.x;
-            const currentY = this.worldContainer.y;
-            
-            // Smoothly interpolate world container position
-            const lerpFactor = 0.3;
-            this.worldContainer.x = currentX + (Math.max(Math.min(targetX, 0), minX) - currentX) * lerpFactor;
-            this.worldContainer.y = currentY + (Math.max(Math.min(targetY, 0), minY) - currentY) * lerpFactor;
-            
-            console.log('Player and camera positioned:', {
-                player: {
-                    position: { x: gameState.player.x, y: gameState.player.y },
-                    visible: gameState.player.visible,
-                    parent: gameState.player.parent?.label
-                },
-                camera: {
-                    position: { x: this.worldContainer.x, y: this.worldContainer.y },
-                    bounds: { minX, minY, maxX: 0, maxY: 0 }
-                }
-            });
-        }
+        // Create or update player
+        this.initializePlayer(area);
         
         // Create portals
         this.portalManager.createAreaPortals(area);
         
         // Show area info
         this.ui.showLevelInfo(area.name, area.description);
+    }
+
+    initializePlayer(area) {
+        if (!gameState.player) {
+            gameState.player = EntityManager.createPlayer(this.app);
+            if (!gameState.player) {
+                console.error('Failed to create player instance');
+                return;
+            }
+        }
+        
+        // Ensure player is properly set up
+        if (gameState.player) {
+            // Set proper rendering properties
+            gameState.player.zIndex = 10;
+            gameState.player.visible = true;
+            gameState.player.eventMode = 'static';
+            
+            // Position player at area center
+            const centerX = Math.round(area.width / 2);
+            const centerY = Math.round(area.height / 2);
+            
+            // Add player to entity layer if needed
+            if (gameState.player.parent !== this.entityLayer) {
+                if (gameState.player.parent) {
+                    gameState.player.parent.removeChild(gameState.player);
+                }
+                this.entityLayer.addChild(gameState.player);
+            }
+            
+            // Set player position in world coordinates
+            gameState.player.setWorldPosition(centerX, centerY);
+            
+            // Center camera on player
+            this.cameraManager.followPlayer();
+        }
+    }
+
+    cleanupArea() {
+        // Keep player if it exists
+        const player = gameState.player;
+        
+        // Clean up layers
+        [this.backgroundLayer, this.entityLayer, this.bulletLayer, 
+         this.portalLayer, this.effectsLayer].forEach(layer => {
+            if (layer) {
+                layer.removeChildren();
+                if (player && layer === this.entityLayer) {
+                    layer.addChild(player);
+                }
+            }
+        });
+        
+        // Reset game entities
+        gameState.enemies = [];
+        gameState.bullets = [];
+        this.experienceManager?.cleanup();
     }
 
     initializeWeapons() {

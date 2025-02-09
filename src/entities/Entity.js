@@ -47,6 +47,7 @@
  */
 
 /* eslint-disable no-unused-vars */
+import * as PIXI from 'pixi.js';
 import { ENEMY_TYPES, STYLES } from '../core/config.js';
 import { gameState } from '../core/gameState.js';
 
@@ -59,87 +60,58 @@ class Player extends PIXI.Container {
             return;
         }
         
-        console.log('Creating player instance...', { app: !!app });
-        
-        this.label = 'PlayerContainer';
-        
         // Set container properties
+        this.label = 'PlayerContainer';
         this.sortableChildren = true;
         this.zIndex = 10;
         this.eventMode = 'static';
         
         // Create player sprite using loaded texture
         const playerTexture = PIXI.Assets.get('player');
-        console.log('Player texture:', {
-            exists: !!playerTexture,
-            valid: playerTexture?.valid,
-            width: playerTexture?.width,
-            height: playerTexture?.height
-        });
+        if (gameState.debug) {
+            console.log('Player texture:', {
+                exists: !!playerTexture,
+                valid: playerTexture?.valid,
+                width: playerTexture?.width,
+                height: playerTexture?.height
+            });
+        }
 
-        // Create player body
+        // Create player body with proper transform handling
         if (!playerTexture) {
-            console.warn('Using fallback graphics for player');
-            // Create a fallback graphics for debugging
+            if (gameState.debug) console.warn('Using fallback graphics for player');
             const gfx = new PIXI.Graphics()
                 .fill({ color: 0x00ff88 })
                 .circle(0, 0, 20);
             this.body = gfx;
         } else {
-            this.body = new PIXI.Sprite(playerTexture);
-            // Set the sprite's scale to match the desired size
-            const desiredSize = 40; // diameter
+            this.body = PIXI.Sprite.from(playerTexture);
+            const desiredSize = 40;
             const scale = desiredSize / Math.max(playerTexture.width, playerTexture.height);
             this.body.scale.set(scale);
         }
         
+        // Set body properties with proper transform origin
         this.body.anchor.set(0.5);
         this.body.zIndex = 1;
         this.body.eventMode = 'none';
         this.body.label = 'PlayerBody';
         this.addChild(this.body);
         
-        console.log('Player body created:', {
-            type: this.body instanceof PIXI.Sprite ? 'Sprite' : 'Graphics',
-            position: { x: this.body.x, y: this.body.y },
-            scale: this.body.scale,
-            anchor: this.body.anchor,
-            parent: !!this.body.parent,
-            visible: this.body.visible,
-            alpha: this.body.alpha
-        });
-        
-        // Add glow effect
+        // Add glow effect with proper transform handling
         const glowTexture = PIXI.Assets.get('playerGlow');
-        console.log('Player glow texture:', {
-            exists: !!glowTexture,
-            valid: glowTexture?.valid,
-            width: glowTexture?.width,
-            height: glowTexture?.height
-        });
-
         if (glowTexture) {
-            this.glow = new PIXI.Sprite(glowTexture);
+            this.glow = PIXI.Sprite.from(glowTexture);
             this.glow.anchor.set(0.5);
             this.glow.zIndex = 0;
             this.glow.eventMode = 'none';
             this.glow.label = 'PlayerGlow';
-            // Scale glow to be slightly larger than the body
             const glowScale = (this.body.width * 1.25) / glowTexture.width;
             this.glow.scale.set(glowScale);
             this.addChild(this.glow);
-            
-            console.log('Player glow created:', {
-                position: { x: this.glow.x, y: this.glow.y },
-                scale: this.glow.scale,
-                anchor: this.glow.anchor,
-                parent: !!this.glow.parent,
-                visible: this.glow.visible,
-                alpha: this.glow.alpha
-            });
         }
         
-        // Create health bar container
+        // Create health bar container with proper screen-space positioning
         this.healthBarContainer = new PIXI.Container();
         this.healthBarContainer.position.set(-20, -35);
         this.healthBarContainer.zIndex = 2;
@@ -147,24 +119,19 @@ class Player extends PIXI.Container {
         this.healthBarContainer.label = 'PlayerHealthBarContainer';
         this.addChild(this.healthBarContainer);
         
-        // Health bar background
+        // Health bar background with proper bounds
         this.healthBarBg = new PIXI.Graphics()
             .fill({ color: 0x000000, alpha: 0.5 })
             .rect(0, 0, 40, 5);
         this.healthBarBg.label = 'PlayerHealthBarBg';
         this.healthBarContainer.addChild(this.healthBarBg);
         
-        // Health bar foreground
+        // Health bar foreground with proper bounds
         this.healthBarFg = new PIXI.Graphics()
             .fill({ color: 0x00FF00 })
             .rect(0, 0, 40, 5);
         this.healthBarFg.label = 'PlayerHealthBarFg';
         this.healthBarContainer.addChild(this.healthBarFg);
-        
-        // Set initial position
-        const initialX = Math.floor(app.screen.width / 2);
-        const initialY = Math.floor(app.screen.height / 2);
-        this.position.set(initialX, initialY);
         
         // Set properties
         this.health = 100;
@@ -173,14 +140,55 @@ class Player extends PIXI.Container {
         this.type = 'player';
         this.speed = 5;
         
-        console.log('Player container setup:', {
-            position: { x: this.x, y: this.y },
-            children: this.children.length,
-            visible: this.visible,
-            alpha: this.alpha,
-            bounds: this.getBounds(),
-            parent: !!this.parent
-        });
+        // Initialize transform matrix after all children are added
+        if (this.transform) {
+            this.transform.setFromMatrix(new PIXI.Matrix());
+        }
+        
+        // Ensure visibility
+        this.visible = true;
+        this.alpha = 1;
+        
+        if (gameState.debug) {
+            console.log('Player setup complete:', {
+                position: { x: this.x, y: this.y },
+                dimensions: {
+                    width: this.width,
+                    height: this.height,
+                    radius: this.radius
+                },
+                visibility: {
+                    visible: this.visible,
+                    alpha: this.alpha
+                },
+                components: {
+                    body: {
+                        type: this.body instanceof PIXI.Sprite ? 'Sprite' : 'Graphics',
+                        scale: this.body.scale,
+                        anchor: this.body.anchor,
+                        visible: this.body.visible
+                    },
+                    glow: this.glow ? {
+                        scale: this.glow.scale,
+                        alpha: this.glow.alpha,
+                        visible: this.glow.visible
+                    } : null,
+                    healthBar: {
+                        position: {
+                            x: this.healthBarContainer.x,
+                            y: this.healthBarContainer.y
+                        },
+                        visible: this.healthBarContainer.visible,
+                        children: this.healthBarContainer.children.length
+                    }
+                },
+                children: this.children.map(child => ({
+                    label: child.label,
+                    visible: child.visible,
+                    position: { x: child.x, y: child.y }
+                }))
+            });
+        }
     }
     
     updateHealthBar() {
@@ -227,13 +235,40 @@ class Player extends PIXI.Container {
     }
     
     setRotation(angle) {
+        // Set rotation and update transform
         this.rotation = angle;
-        // Update weapon indicator rotation if it exists
-        /*
-        if (this.weaponIndicator) {
-            this.weaponIndicator.rotation = angle;
+        this.transform.updateTransform(this.parent.transform);
+    }
+
+    getWorldPosition() {
+        // Use PixiJS's native transform system for accurate world position
+        return this.getGlobalPosition(new PIXI.Point(), true);
+    }
+
+    getScreenPosition() {
+        // Get screen position using parent's transform
+        return this.parent.toGlobal(this.position, undefined, true);
+    }
+
+    setWorldPosition(x, y) {
+        if (!this.parent) {
+            console.error('Cannot set world position: no parent container');
+            return;
         }
-        */
+
+        // Create a temporary point for position conversion
+        const worldPoint = new PIXI.Point(x, y);
+        
+        // Convert world coordinates to local using parent's transform
+        const localPos = this.parent.toLocal(worldPoint);
+        
+        // Set position using local coordinates
+        this.position.set(localPos.x, localPos.y);
+        
+        // Update transform
+        if (this.transform) {
+            this.transform.updateTransform(this.parent.transform);
+        }
     }
 }
 
@@ -241,13 +276,24 @@ export { Player };  // Explicit export
 
 export class EntityManager {
     static createPlayer(app) {
-        console.log('EntityManager.createPlayer called with app:', !!app);
+        if (gameState.debug) console.log('EntityManager.createPlayer called with app:', !!app);
         if (!app) {
             console.error('createPlayer called without app parameter');
             return null;
         }
         const player = new Player(app);
-        console.log('Player instance created:', !!player);
+        if (gameState.debug) {
+            console.log('Player instance created:', {
+                success: !!player,
+                type: player?.type,
+                position: player ? { x: player.x, y: player.y } : null,
+                dimensions: player ? {
+                    width: player.width,
+                    height: player.height,
+                    radius: player.radius
+                } : null
+            });
+        }
         return player;
     }
 
@@ -315,25 +361,27 @@ export class EntityManager {
 
     static createExperienceGem(x, y, value) {
         const container = new PIXI.Container();
+        container.label = 'ExperienceGemContainer';
+        container.sortableChildren = true;
+        container.eventMode = 'none';
         
         // Create glow effect
-        const glow = new PIXI.Graphics();
-        glow
+        const glow = new PIXI.Graphics()
             .fill({ color: STYLES.colors.exp, alpha: 0.3 })
             .circle(0, 0, 12);
+        glow.label = 'GemGlow';
         container.addChild(glow);
         
         // Create gem shape
-        const gem = new PIXI.Graphics();
-        const points = [
-            -6, 0,   // Left point
-            0, -8,   // Top point
-            6, 0,    // Right point
-            0, 8     // Bottom point
-        ];
-        gem
+        const gem = new PIXI.Graphics()
             .fill({ color: STYLES.colors.exp })
-            .poly(0, 0, points);
+            .poly(0, 0, [
+                -6, 0,   // Left point
+                0, -8,   // Top point
+                6, 0,    // Right point
+                0, 8     // Bottom point
+            ]);
+        gem.label = 'GemBody';
         container.addChild(gem);
         
         // Create value text
@@ -349,30 +397,31 @@ export class EntityManager {
         });
         valueText.anchor.set(0.5);
         valueText.y = -20;
+        valueText.label = 'GemText';
         container.addChild(valueText);
         
         // Set container position
         container.position.set(x, y);
         
-        // Add pulsing animation
+        // Add pulsing animation using shared ticker
         let pulseTime = Math.random() * Math.PI * 2;
-        container.ticker = new PIXI.Ticker();
-        container.ticker.add((delta) => {
+        const updatePulse = (delta) => {
             pulseTime += delta * 0.1;
             const scale = 1 + Math.sin(pulseTime) * 0.1;
             gem.scale.set(scale);
             glow.scale.set(scale);
             valueText.scale.set(scale);
-        });
-        container.ticker.start();
+        };
+        
+        // Use shared ticker for animation
+        PIXI.Ticker.shared.add(updatePulse);
 
         return {
             sprite: container,
             value: value,
             cleanup: () => {
-                if (container.ticker) {
-                    container.ticker.destroy();
-                }
+                PIXI.Ticker.shared.remove(updatePulse);
+                container.destroy({ children: true });
             }
         };
     }
@@ -380,85 +429,75 @@ export class EntityManager {
     static cleanup(app, entity) {
         if (!entity) return;
         
-        // Stop any active animations/tickers
-        if (entity.ticker) {
-            entity.ticker.destroy();
-        }
-        
-        // If the entity has a cleanup function, call it
-        if (entity.cleanup) {
-            entity.cleanup();
-        }
-        
         // Remove from parent
         if (entity.parent) {
             entity.parent.removeChild(entity);
         }
         
-        // Destroy the entity
-        entity.destroy({ children: true });
+        // Destroy the entity and all children
+        entity.destroy({ 
+            children: true,
+            texture: true,
+            baseTexture: false 
+        });
     }
 }
 
 export class Enemy extends PIXI.Container {
     constructor(type = 'BASIC', x = 0, y = 0, app) {
         super();
-        this.label = 'EnemyContainer';
         
-        const config = ENEMY_TYPES[type];
-        if (!config) {
-            console.error('Invalid enemy type:', type);
+        // Set container properties with proper transform handling
+        this.label = 'EnemyContainer';
+        this.sortableChildren = true;
+        this.zIndex = 5;
+        this.eventMode = 'none';
+        
+        // Initialize transform matrix
+        this.transform.setFromMatrix(new PIXI.Matrix());
+        
+        // Get enemy config
+        const enemyConfig = ENEMY_TYPES[type];
+        if (!enemyConfig) {
+            console.error(`Invalid enemy type: ${type}`);
             return;
         }
         
-        // Set container properties
-        this.sortableChildren = true;
-        this.zIndex = 5;
-        this.eventMode = 'static';
+        // Set enemy properties
+        this.type = type;
+        this.health = enemyConfig.health || 100;
+        this.maxHealth = this.health;
+        this.speed = enemyConfig.speed || 2;
+        this.radius = enemyConfig.size || 20;
+        this.experienceValue = enemyConfig.experience || 10;
+        this.isElite = false;
         
-        // Create enemy sprite using loaded texture
-        const textureName = type.toLowerCase() + 'Enemy';
+        // Create enemy sprite with proper transform handling
+        const textureName = enemyConfig.texture || 'basicEnemy';
         const enemyTexture = PIXI.Assets.get(textureName);
-        console.log('Enemy texture:', {
-            type,
-            textureName,
-            exists: !!enemyTexture,
-            valid: enemyTexture?.valid,
-            width: enemyTexture?.width,
-            height: enemyTexture?.height
-        });
-
+        
         if (!enemyTexture) {
-            console.error('Failed to get enemy texture:', textureName);
-            // Create fallback graphics
-            this.body = new PIXI.Graphics()
-                .fill({ color: config.color || 0xFF0000 })
-                .circle(0, 0, config.size);
+            if (gameState.debug) console.warn('Using fallback graphics for enemy');
+            const gfx = new PIXI.Graphics()
+                .fill({ color: enemyConfig.color || 0xFF0000 })
+                .circle(0, 0, this.radius);
+            this.body = gfx;
         } else {
-            this.body = new PIXI.Sprite(enemyTexture);
-            // Scale sprite to match desired size
-            const scale = (config.size * 2) / enemyTexture.width;
+            this.body = PIXI.Sprite.from(enemyTexture);
+            const scale = (this.radius * 2) / Math.max(enemyTexture.width, enemyTexture.height);
             this.body.scale.set(scale);
         }
         
+        // Set body properties with proper transform origin
         this.body.anchor.set(0.5);
         this.body.zIndex = 1;
         this.body.eventMode = 'none';
         this.body.label = 'EnemyBody';
         this.addChild(this.body);
         
-        console.log('Enemy body created:', {
-            type,
-            sprite: this.body instanceof PIXI.Sprite,
-            position: { x: this.body.x, y: this.body.y },
-            scale: this.body.scale,
-            size: config.size,
-            bounds: this.body.getBounds()
-        });
-        
-        // Create health bar container
+        // Create health bar with proper screen-space positioning
         this.healthBarContainer = new PIXI.Container();
-        this.healthBarContainer.position.set(-config.size, -config.size - 10);
+        this.healthBarContainer.position.set(-20, -30);
         this.healthBarContainer.zIndex = 2;
         this.healthBarContainer.eventMode = 'none';
         this.healthBarContainer.label = 'EnemyHealthBarContainer';
@@ -466,35 +505,20 @@ export class Enemy extends PIXI.Container {
         
         // Health bar background
         this.healthBarBg = new PIXI.Graphics()
-            .fill({ color: 0x000000, alpha: 0.5 })  // Default black background with transparency
-            .rect(0, 0, config.size * 2, 4);
+            .fill({ color: 0x000000, alpha: 0.5 })
+            .rect(0, 0, 40, 4);
         this.healthBarBg.label = 'EnemyHealthBarBg';
         this.healthBarContainer.addChild(this.healthBarBg);
         
         // Health bar foreground
         this.healthBarFg = new PIXI.Graphics()
-            .fill({ color: 0x00FF00 })  // Default green for health
-            .rect(0, 0, config.size * 2, 4);
+            .fill({ color: 0xFF0000 })
+            .rect(0, 0, 40, 4);
         this.healthBarFg.label = 'EnemyHealthBarFg';
         this.healthBarContainer.addChild(this.healthBarFg);
         
-        // Set position and properties
-        this.position.set(x, y);
-        this.type = type;
-        this.radius = config.size;
-        this.health = config.health;
-        this.maxHealth = config.health;
-        this.speed = config.speed;
-        this.experienceValue = config.experience;
-        
-        console.log('Enemy container setup:', {
-            type,
-            position: { x: this.x, y: this.y },
-            children: this.children.length,
-            bounds: this.getBounds(),
-            visible: this.visible,
-            parent: !!this.parent
-        });
+        // Set initial position with proper transform
+        this.setWorldPosition(x, y);
     }
     
     updateHealthBar() {
@@ -527,7 +551,7 @@ export class Enemy extends PIXI.Container {
         if (!this.eliteGlow) {
             const glowTexture = PIXI.Assets.get('eliteGlow');
             if (glowTexture) {
-                this.eliteGlow = new PIXI.Sprite(glowTexture);
+                this.eliteGlow = PIXI.Sprite.from(glowTexture);
                 this.eliteGlow.anchor.set(0.5);
                 this.eliteGlow.zIndex = -1;
                 // Scale glow to be slightly larger than the body
@@ -549,5 +573,19 @@ export class Enemy extends PIXI.Container {
         // Scale up the body
         this.body.scale.set(this.body.scale.x * 1.2);
         this.updateHealthBar();
+    }
+
+    setWorldPosition(x, y) {
+        // Convert world coordinates to local space using parent's transform
+        const localPos = this.parent.toLocal(new PIXI.Point(x, y), undefined, true);
+        this.position.set(localPos.x, localPos.y);
+        
+        // Update transform matrix
+        this.transform.updateTransform(this.parent.transform);
+    }
+
+    getWorldPosition() {
+        // Use PixiJS's native transform system for accurate world position
+        return this.getGlobalPosition(new PIXI.Point(), true);
     }
 } 

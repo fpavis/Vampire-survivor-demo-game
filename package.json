@@ -1,0 +1,25 @@
+{
+  "name": "vampire-survivor-demo-game",
+  "version": "1.0.0",
+  "description": "A fast-paced, browser-based survival game built with PixiJS where you fight endless waves of enemies, collect experience, and level up to become stronger.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pixi.js": "^8.7.3",
+    "pixi-viewport": "^6.0.3"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
+  },
+  "keywords": ["game", "pixijs", "survival"],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fpavis/Vampire-survivor-demo-game/issues"
+  },
+  "homepage": "https://github.com/fpavis/Vampire-survivor-demo-game#readme"
+}

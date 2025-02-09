@@ -37,9 +37,11 @@ import { Enemy } from '../entities/Entity.js';
 import { LEVEL_SCALING } from '../core/config.js';
 
 export class EnemyManager {
-    constructor(app, worldContainer) {
+    constructor(app, viewport, worldContainer, entityLayer) {
         this.app = app;
+        this.viewport = viewport;
         this.worldContainer = worldContainer;
+        this.entityLayer = entityLayer;
         this.debugCounter = 0;  // Add counter for debug logs
     }
 
@@ -66,7 +68,7 @@ export class EnemyManager {
         const deltaSeconds = Number((delta / 60).toFixed(4));
 
         // Calculate spawn chance with better precision
-        const baseSpawnRate = Number((spawnConfig.baseRate || 0.02).toFixed(4));
+        const baseSpawnRate = Number((spawnConfig.baseRate || 1.05).toFixed(4));
         const spawnChance = Number((baseSpawnRate * deltaSeconds).toFixed(4));
 
         // Debug logging - only log every 60 frames (approximately once per second)
@@ -109,17 +111,16 @@ export class EnemyManager {
             }
         }
 
+        // Get player's world position
+        const playerWorldPos = this.viewport.toWorld(gameState.player.position);
+        
         // Calculate spawn position with validation
         const angle = Math.random() * Math.PI * 2;
         const spawnDistance = Math.max(300, spawnConfig.spawnDistance || 600);
         
-        // Ensure player position is valid
-        const playerX = Number.isFinite(gameState.player.x) ? gameState.player.x : currentArea.width / 2;
-        const playerY = Number.isFinite(gameState.player.y) ? gameState.player.y : currentArea.height / 2;
-        
-        // Calculate spawn position
-        let spawnX = playerX + Math.cos(angle) * spawnDistance;
-        let spawnY = playerY + Math.sin(angle) * spawnDistance;
+        // Calculate spawn position in world coordinates
+        let spawnX = playerWorldPos.x + Math.cos(angle) * spawnDistance;
+        let spawnY = playerWorldPos.y + Math.sin(angle) * spawnDistance;
         
         // Clamp spawn position to area bounds with padding
         const padding = 50;
@@ -136,13 +137,17 @@ export class EnemyManager {
         const enemy = new Enemy(type, spawnX, spawnY, this.app);
         
         // Log spawn details for debugging
-        console.log('Enemy spawn details:', {
-            position: { x: spawnX, y: spawnY },
-            playerPos: { x: playerX, y: playerY },
-            distance: spawnDistance,
-            angle: angle,
-            type: type
-        });
+        if (gameState.debug) {
+            const screenPos = this.viewport.toScreen(new PIXI.Point(spawnX, spawnY));
+            console.log('Enemy spawn details:', {
+                world: { x: spawnX, y: spawnY },
+                screen: screenPos,
+                playerWorld: playerWorldPos,
+                distance: spawnDistance,
+                angle: angle,
+                type: type
+            });
+        }
 
         // Apply level scaling
         this.scaleEnemyWithLevel(enemy, Math.max(0, gameState.level - 1));
@@ -154,18 +159,21 @@ export class EnemyManager {
 
         // Add to game
         enemy.zIndex = 5;
-        this.worldContainer.addChild(enemy);
+        this.entityLayer.addChild(enemy);
         gameState.enemies.push(enemy);
 
-        console.log('Enemy spawned:', {
-            type,
-            position: { x: enemy.x, y: enemy.y },
-            health: enemy.health,
-            speed: enemy.speed,
-            isElite: enemy.isElite,
-            parent: !!enemy.parent,
-            visible: enemy.visible
-        });
+        if (gameState.debug) {
+            console.log('Enemy spawned:', {
+                type,
+                world: { x: enemy.x, y: enemy.y },
+                screen: this.viewport.toScreen(enemy.position),
+                health: enemy.health,
+                speed: enemy.speed,
+                isElite: enemy.isElite,
+                parent: !!enemy.parent,
+                visible: enemy.visible
+            });
+        }
     }
 
     scaleEnemyWithLevel(enemy, levelScale) {
@@ -184,15 +192,25 @@ export class EnemyManager {
     }
 
     updateEnemyPosition(enemy, delta) {
-        const dx = gameState.player.x - enemy.x;
-        const dy = gameState.player.y - enemy.y;
+        // Get world positions
+        const playerWorldPos = this.viewport.toWorld(gameState.player.position);
+        const enemyWorldPos = this.viewport.toWorld(enemy.position);
+        
+        // Calculate direction in world coordinates
+        const dx = playerWorldPos.x - enemyWorldPos.x;
+        const dy = playerWorldPos.y - enemyWorldPos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
         if (dist > 0) {
             const normalizedDx = dx / dist;
             const normalizedDy = dy / dist;
-            enemy.x += normalizedDx * enemy.speed * delta;
-            enemy.y += normalizedDy * enemy.speed * delta;
+            
+            // Update position in world coordinates
+            const newX = enemy.x + normalizedDx * enemy.speed * delta;
+            const newY = enemy.y + normalizedDy * enemy.speed * delta;
+            
+            // Set new position
+            enemy.position.set(newX, newY);
         }
     }
 } 

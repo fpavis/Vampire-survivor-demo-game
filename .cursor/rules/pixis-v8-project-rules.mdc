@@ -1,5 +1,5 @@
 ---
-description: 
+description: Rule for PixiJS V8 codebase
 globs: 
 ---
 
@@ -13,7 +13,8 @@ globs:
             - Prioritize code optimization and efficient resource management for smooth gameplay.
             - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasRendered).
             - Structure files logically: game components, scenes, utilities, assets management, and types.
-            -Projects based on PixiJS V8 version must follow V8 sytax rules without exception
+            -Projects based on PixiJS V8.x latest version must follow latest V8.x sytax rules without exception
+            - Rely as much as possible on the PixiJS framework and implemented tools before creating new
 
             Project Structure and Organization:
             - Organize code by feature directories (e.g., 'scenes/', 'entities/', 'systems/', 'assets/')

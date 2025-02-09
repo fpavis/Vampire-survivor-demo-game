@@ -29,16 +29,53 @@
  * @class
  */
 
+import * as PIXI from 'pixi.js';
 import { gameState } from '../core/gameState.js';
 import { LEVELS } from '../core/config.js';
 
 export class PortalManager {
-    constructor(app, worldContainer) {
+    constructor(app, viewport, worldContainer, portalLayer) {
         this.app = app;
+        this.viewport = viewport;
         this.worldContainer = worldContainer;
+        this.portalLayer = portalLayer;
         this.portals = [];
         this.transitionInProgress = false;
         this.ui = null;  // Will be set by Game class
+        
+        if (!this.viewport) {
+            console.error('PortalManager: Viewport not provided');
+            return;
+        }
+        
+        if (!this.worldContainer) {
+            console.error('PortalManager: WorldContainer not provided');
+            return;
+        }
+
+        if (!this.portalLayer) {
+            console.error('PortalManager: PortalLayer not provided');
+            return;
+        }
+
+        if (gameState.debug) {
+            console.log('PortalManager initialized:', {
+                viewport: {
+                    found: !!this.viewport,
+                    scale: this.viewport?.scale?.x,
+                    position: { x: this.viewport?.x, y: this.viewport?.y }
+                },
+                worldContainer: {
+                    found: !!this.worldContainer,
+                    children: this.worldContainer?.children?.length || 0
+                },
+                portalLayer: {
+                    found: !!this.portalLayer,
+                    zIndex: this.portalLayer?.zIndex,
+                    children: this.portalLayer?.children?.length || 0
+                }
+            });
+        }
     }
 
     setUI(ui) {
@@ -46,8 +83,25 @@ export class PortalManager {
     }
 
     createAreaPortals(area) {
+        if (!this.portalLayer) {
+            console.error('PortalManager: Cannot create portals - portalLayer not initialized');
+            return;
+        }
+
+        // Clear existing portals
+        this.portals.forEach(portal => {
+            if (portal.graphics?.parent) {
+                portal.graphics.parent.removeChild(portal.graphics);
+            }
+        });
         this.portals = [];
+        this.portalLayer.removeChildren();
         
+        if (!area?.connections) {
+            console.warn('PortalManager: No connections defined for area');
+            return;
+        }
+
         area.connections.forEach(targetAreaId => {
             const targetArea = LEVELS.find(level => level.id === targetAreaId);
             if (!targetArea) {
@@ -79,9 +133,23 @@ export class PortalManager {
             
             const graphics = this.createPortalGraphics(portal);
             if (graphics) {
-                this.worldContainer.addChild(graphics);
+                this.portalLayer.addChild(graphics);
                 portal.graphics = graphics;
                 this.portals.push(portal);
+                
+                if (gameState.debug) {
+                    const screenPos = this.viewport.toScreen(new PIXI.Point(portalX, portalY));
+                    console.log('Portal created:', {
+                        world: { x: portalX, y: portalY },
+                        screen: screenPos,
+                        target: targetArea.id,
+                        radius: portal.radius,
+                        layer: {
+                            children: this.portalLayer.children.length,
+                            visible: this.portalLayer.visible
+                        }
+                    });
+                }
             }
         });
     }
@@ -93,14 +161,17 @@ export class PortalManager {
         }
 
         const container = new PIXI.Container();
+        container.label = 'PortalContainer';
+        container.sortableChildren = true;
         
         // Create portal graphics
         const graphics = new PIXI.Graphics();
         graphics.fill({ color: 0x0088FF, alpha: 0.3 })
             .circle(0, 0, 30);
+        graphics.zIndex = 1;
         container.addChild(graphics);
         
-        // Add text label
+        // Add text label that stays fixed relative to portal
         const text = new PIXI.Text({
             text: portal.targetArea.name || 'Unknown Area',
             style: {
@@ -113,6 +184,7 @@ export class PortalManager {
         });
         text.anchor.set(0.5);
         text.y = -45;
+        text.zIndex = 2;
         container.addChild(text);
         
         container.position.set(portal.x, portal.y);
@@ -151,11 +223,14 @@ export class PortalManager {
     }
 
     checkPortalCollisions(currentArea, onTransition) {
-        if (this.transitionInProgress || !gameState.player) return;
+        if (this.transitionInProgress || !gameState.player || !this.viewport) return;
+        
+        // Get player position in world coordinates
+        const playerPos = gameState.player.position;
         
         for (const portal of this.portals) {
-            const dx = gameState.player.x - portal.x;
-            const dy = gameState.player.y - portal.y;
+            const dx = playerPos.x - portal.x;
+            const dy = playerPos.y - portal.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < portal.radius) {
@@ -164,13 +239,13 @@ export class PortalManager {
                     this.transitionToArea(targetArea, onTransition);
                     break;
                 } else if (targetArea) {
-                    this.ui.showMessage("Level requirement not met!", 0xFF0000);
+                    this.ui?.showMessage("Level requirement not met!", 0xFF0000);
                 }
             } else if (distance < portal.radius * 1.5) {
                 // Show hover info when near portal
                 const targetArea = LEVELS.find(level => level.id === portal.targetAreaId);
                 if (targetArea) {
-                    this.ui.showMessage(`${targetArea.name} - ${targetArea.description}`, 0xFFFFFF, 500);
+                    this.ui?.showMessage(`${targetArea.name} - ${targetArea.description}`, 0xFFFFFF, 500);
                 }
             }
         }

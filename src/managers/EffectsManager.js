@@ -31,12 +31,25 @@
  * @class
  */
 
+import * as PIXI from 'pixi.js';
 import { STYLES } from '../core/config.js';
 
 export class EffectsManager {
-    constructor(app, worldContainer) {
+    constructor(app, viewport, worldContainer, effectsLayer) {
         this.app = app;
+        this.viewport = viewport;
         this.worldContainer = worldContainer;
+        this.effectsLayer = effectsLayer;
+        
+        if (!this.worldContainer) {
+            console.error('EffectsManager: WorldContainer not provided');
+            return;
+        }
+        
+        if (!this.effectsLayer) {
+            console.error('EffectsManager: EffectsLayer not provided');
+            return;
+        }
     }
 
     createHitEffect(x, y) {
@@ -45,8 +58,19 @@ export class EffectsManager {
             .fill({ color: 0xFFFFFF, alpha: 0.5 })
             .circle(0, 0, 10);
         
-        effect.position.set(x, y);
-        this.worldContainer.addChild(effect);
+        // Convert to world coordinates if needed
+        const worldPos = this.viewport.toWorld(new PIXI.Point(x, y));
+        effect.position.set(worldPos.x, worldPos.y);
+        this.effectsLayer.addChild(effect);
+
+        if (gameState.debug) {
+            console.log('Hit effect created:', {
+                screen: { x, y },
+                world: worldPos,
+                alpha: effect.alpha,
+                visible: effect.visible
+            });
+        }
 
         // Animate and remove
         let scale = 1;
@@ -60,7 +84,7 @@ export class EffectsManager {
             if (alpha > 0) {
                 requestAnimationFrame(expand);
             } else {
-                this.worldContainer.removeChild(effect);
+                this.effectsLayer.removeChild(effect);
                 effect.destroy();
             }
         };
@@ -71,6 +95,9 @@ export class EffectsManager {
         const particles = [];
         const particleCount = STYLES.particles.DEATH.count;
         
+        // Convert to world coordinates if needed
+        const worldPos = this.viewport.toWorld(new PIXI.Point(x, y));
+        
         for (let i = 0; i < particleCount; i++) {
             const particle = new PIXI.Graphics();
             particle
@@ -80,20 +107,32 @@ export class EffectsManager {
             const angle = Math.random() * Math.PI * 2;
             const speed = STYLES.particles.DEATH.speed * (0.5 + Math.random() * 0.5);
             
-            particle.x = x;
-            particle.y = y;
+            particle.x = worldPos.x;
+            particle.y = worldPos.y;
             particle.vx = Math.cos(angle) * speed;
             particle.vy = Math.sin(angle) * speed;
             particle.alpha = 1;
             
-            this.worldContainer.addChild(particle);
+            this.effectsLayer.addChild(particle);
             particles.push(particle);
+        }
+        
+        if (gameState.debug) {
+            console.log('Death effect created:', {
+                screen: { x, y },
+                world: worldPos,
+                particles: particleCount,
+                visible: particles.every(p => p.visible)
+            });
         }
         
         this.animateParticles(particles, 0.02);
     }
 
     createDamageNumber(x, y, amount) {
+        // Convert to world coordinates if needed
+        const worldPos = this.viewport.toWorld(new PIXI.Point(x, y));
+        
         const text = new PIXI.Text({
             text: amount.toString(),
             style: {
@@ -105,8 +144,17 @@ export class EffectsManager {
             }
         });
         text.anchor.set(0.5);
-        text.position.set(x, y);
-        this.worldContainer.addChild(text);
+        text.position.set(worldPos.x, worldPos.y);
+        this.effectsLayer.addChild(text);
+
+        if (gameState.debug) {
+            console.log('Damage number created:', {
+                amount,
+                screen: { x, y },
+                world: worldPos,
+                visible: text.visible
+            });
+        }
 
         // Animate and remove
         let alpha = 1;
@@ -115,12 +163,12 @@ export class EffectsManager {
             alpha -= 0.02;
             yOffset -= 0.5;
             text.alpha = alpha;
-            text.y = y + yOffset;
+            text.y = worldPos.y + yOffset;
             
             if (alpha > 0) {
                 requestAnimationFrame(fadeOut);
             } else {
-                this.worldContainer.removeChild(text);
+                this.effectsLayer.removeChild(text);
                 text.destroy();
             }
         };
@@ -134,7 +182,7 @@ export class EffectsManager {
                 p.y += p.vy;
                 p.alpha -= fadeRate;
                 if (p.alpha <= 0) {
-                    this.worldContainer.removeChild(p);
+                    this.effectsLayer.removeChild(p);
                 }
             });
             
@@ -153,6 +201,18 @@ export class EffectsManager {
         // Apply flash color
         target.tint = color;
         
+        if (gameState.debug) {
+            const worldPos = this.viewport.toWorld(target.position);
+            const screenPos = this.viewport.toScreen(target.position);
+            console.log('Flash effect created:', {
+                target: target.label || 'unknown',
+                screen: screenPos,
+                world: worldPos,
+                color,
+                duration
+            });
+        }
+        
         // Reset after duration
         setTimeout(() => {
             if (target) {
@@ -167,6 +227,18 @@ export class EffectsManager {
         
         // Scale up
         target.scale.set(originalScale.x * scale, originalScale.y * scale);
+        
+        if (gameState.debug) {
+            const worldPos = this.viewport.toWorld(target.position);
+            const screenPos = this.viewport.toScreen(target.position);
+            console.log('Pulse effect created:', {
+                target: target.label || 'unknown',
+                screen: screenPos,
+                world: worldPos,
+                scale,
+                duration
+            });
+        }
         
         // Scale back down
         setTimeout(() => {

@@ -35,6 +35,7 @@
  * @class
  */
 
+import * as PIXI from 'pixi.js';
 import { STYLES } from '../core/config.js';
 import { gameState } from '../core/gameState.js';
 
@@ -58,6 +59,9 @@ export class UIManager {
         this.gameOverUI = new PIXI.Container();
         this.levelUpUI = new PIXI.Container();
         
+        // Create mouse coordinate overlay
+        this.mouseCoordOverlay = null;
+        
         // Debug flag
         this.debug = false;
     }
@@ -77,6 +81,9 @@ export class UIManager {
         
         // Setup event listeners
         this.setupEventListeners();
+        
+        // Initialize mouse coordinate overlay
+        this.initializeMouseCoordOverlay();
         
         console.log('UI container set and initialized:', {
             container: this.container ? 'set' : 'not set',
@@ -125,6 +132,8 @@ export class UIManager {
                 this.toggleSettings();
             } else if (e.key === 'p' || e.key === 'P') {
                 this.toggleDebugView();
+            } else if (e.key === 'c' || e.key === 'C') {
+                this.toggleCoordinateOverlay();
             }
         });
         
@@ -1733,5 +1742,71 @@ export class UIManager {
         this.gameplayUI.visible = true;
         this.gameOverUI.visible = false;
         this.levelUpUI.visible = false;
+    }
+
+    initializeMouseCoordOverlay() {
+        // Create container for mouse coordinates
+        this.mouseCoordOverlay = new PIXI.Container();
+        this.mouseCoordOverlay.zIndex = 9999; // Always on top
+        
+        // Create text for coordinates using v8 syntax
+        const coordStyle = {
+            fontSize: 12,
+            fill: 0xFFFFFF,
+            stroke: { 
+                color: 0x000000,
+                width: 3
+            },
+            fontFamily: 'Arial'
+        };
+        
+        this.coordText = new PIXI.Text({
+            text: '',
+            style: coordStyle
+        });
+        this.mouseCoordOverlay.addChild(this.coordText);
+        
+        // Add to container
+        this.container.addChild(this.mouseCoordOverlay);
+        
+        // Add mousemove listener
+        this.app.stage.eventMode = 'static';
+        this.app.stage.on('pointermove', this.updateMouseCoordinates.bind(this));
+    }
+
+    updateMouseCoordinates(event) {
+        if (!this.mouseCoordOverlay || !this.game.worldContainer) return;
+
+        // Get viewport coordinates
+        const viewportX = Math.round(event.global.x);
+        const viewportY = Math.round(event.global.y);
+
+        // Calculate world coordinates using CameraManager
+        const worldPos = this.game.cameraManager.screenToWorld(viewportX, viewportY);
+        const worldX = Math.round(worldPos.x);
+        const worldY = Math.round(worldPos.y);
+
+        // Update text content
+        this.coordText.text = `Viewport: (${viewportX}, ${viewportY})\nWorld: (${worldX}, ${worldY})`;
+        
+        // Position text next to cursor with offset
+        this.mouseCoordOverlay.position.set(
+            viewportX + 15, // Offset from cursor
+            viewportY + 15
+        );
+
+        // Keep coordinates within screen bounds
+        if (viewportX + this.coordText.width + 20 > this.app.screen.width) {
+            this.mouseCoordOverlay.x = viewportX - this.coordText.width - 15;
+        }
+        if (viewportY + this.coordText.height + 20 > this.app.screen.height) {
+            this.mouseCoordOverlay.y = viewportY - this.coordText.height - 15;
+        }
+    }
+
+    toggleCoordinateOverlay() {
+        if (this.mouseCoordOverlay) {
+            this.mouseCoordOverlay.visible = !this.mouseCoordOverlay.visible;
+        }
     }
 } 
