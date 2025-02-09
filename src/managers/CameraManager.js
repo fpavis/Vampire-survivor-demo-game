@@ -1,3 +1,35 @@
+/**
+ * @file CameraManager.js
+ * @description Manages the game camera, following the player and handling screen-to-world coordinate
+ * conversions. Controls the viewport and ensures smooth camera movement within world boundaries.
+ * 
+ * @module managers/CameraManager
+ * @requires core/config
+ * @requires core/gameState
+ * 
+ * Key Features:
+ * - Follows player movement
+ * - Handles camera boundaries
+ * - Converts between screen and world coordinates
+ * - Determines if entities are in view
+ * 
+ * Usage:
+ * ```js
+ * const cameraManager = new CameraManager(app, worldContainer);
+ * cameraManager.update();
+ * const worldPos = cameraManager.screenToWorld(screenX, screenY);
+ * const isVisible = cameraManager.isInView(entityX, entityY);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Adjust camera movement by modifying the update method
+ * - Change boundary behavior in the position clamping logic
+ * - Modify view checking by updating isInView parameters
+ * - Add camera effects by extending the update method
+ * 
+ * @class
+ */
+
 import { WORLD_CONFIG } from '../core/config.js';
 import { gameState } from '../core/gameState.js';
 

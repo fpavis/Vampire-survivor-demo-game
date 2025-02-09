@@ -1,3 +1,47 @@
+/**
+ * @file Weapon.js
+ * @description Manages weapon systems, including different weapon types, firing patterns,
+ * projectile creation, and weapon upgrades. Controls combat mechanics and damage dealing.
+ * 
+ * @module weapons/Weapon
+ * @requires core/gameState
+ * @requires core/config
+ * 
+ * Key Features:
+ * - Defines weapon types and properties
+ * - Manages firing patterns and timing
+ * - Handles weapon upgrades and scaling
+ * - Creates projectiles with properties
+ * - Controls damage calculation
+ * 
+ * Weapon Types:
+ * - PISTOL: Basic single-shot weapon
+ * - SHOTGUN: Spread pattern weapon
+ * - LASER: High-damage piercing beam
+ * - MACHINEGUN: Rapid-fire weapon
+ * 
+ * Usage:
+ * ```js
+ * // Create weapon
+ * const weapon = new Weapon('PISTOL');
+ * 
+ * // Fire weapon
+ * const projectiles = weapon.fire(origin, target, currentTime);
+ * 
+ * // Upgrade weapon
+ * weapon.upgrade('DAMAGE');
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new weapon types in WEAPON_CONFIGS
+ * - Create new firing patterns in WEAPON_PATTERNS
+ * - Add upgrade types in WEAPON_UPGRADES
+ * - Modify projectile properties
+ * - Implement new weapon mechanics
+ * 
+ * @class
+ */
+
 import { gameState } from '../core/gameState.js';
 import { INITIAL_STATE } from '../core/config.js';
 

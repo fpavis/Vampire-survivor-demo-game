@@ -1,17 +1,44 @@
+<!--
+/**
+ * @file index.html
+ * @description Main entry point for the Vampire Survivor Demo game. This file sets up the HTML structure,
+ * loads required dependencies, and initializes the game canvas.
+ * 
+ * Key Features:
+ * - Loads PIXI.js library for rendering
+ * - Sets up responsive game canvas
+ * - Configures viewport settings
+ * - Initializes game modules
+ * 
+ * Dependencies:
+ * - PIXI.js: 2D rendering engine
+ * - Game modules: Core game functionality
+ * 
+ * Structure:
+ * - Viewport configuration for responsive design
+ * - PIXI.js CDN import
+ * - Game module imports
+ * - Basic styling for fullscreen canvas
+ * 
+ * Usage:
+ * Simply open this file in a web browser to start the game.
+ * The game will automatically initialize and create a fullscreen canvas.
+ * 
+ * Note: Ensure all script paths are correct and dependencies are available
+ * before running the game.
+ */
+-->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Survival Game</title>
-    <script src="https://pixijs.download/v7.3.3/pixi.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vampire Survivor Demo</title>
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-        }
-        body {
-            width: 100vw;
-            height: 100vh;
             background-color: #000;
         }
         canvas {
@@ -20,6 +47,10 @@
     </style>
 </head>
 <body>
-    <script type="module" src="./src/core/Game.js"></script>
+    <!-- PIXI.js from CDN -->
+    <script src="https://pixijs.download/release/pixi.js"></script>
+    
+    <!-- Game initialization -->
+    <script type="module" src="src/core/Game.js"></script>
 </body>
 </html>

@@ -1,3 +1,36 @@
+/**
+ * @file CollisionSystem.js
+ * @description Handles all collision detection and resolution in the game, including player-enemy
+ * collisions, bullet-enemy collisions, and enemy-enemy collisions. Also manages damage application
+ * and death effects.
+ * 
+ * @module managers/CollisionSystem
+ * @requires core/config
+ * @requires entities/Entity
+ * @requires core/gameState
+ * 
+ * Key Features:
+ * - Detects and resolves various types of collisions
+ * - Handles damage application and health management
+ * - Manages entity death and cleanup
+ * - Controls knockback and push effects
+ * 
+ * Usage:
+ * ```js
+ * const collisionSystem = new CollisionSystem(app, worldContainer, effectsManager);
+ * collisionSystem.setGame(game);
+ * collisionSystem.checkCollisions();
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new collision types by creating new check methods
+ * - Modify collision response by updating handle methods
+ * - Adjust collision detection precision in getCollisionDetails
+ * - Implement new death effects in handleEnemyDeath
+ * 
+ * @class
+ */
+
 import { COLLISION_CONFIG, STYLES, WORLD_CONFIG } from '../core/config.js';
 import { EntityManager } from '../entities/Entity.js';
 import { gameState } from '../core/gameState.js';

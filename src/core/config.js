@@ -1,8 +1,50 @@
+/**
+ * @file config.js
+ * @description Central configuration module that defines all game constants, settings,
+ * and configuration objects. Controls game balance and feature settings.
+ * 
+ * @module core/config
+ * 
+ * Configuration Categories:
+ * - GAME_CONFIG: Core game settings and PIXI.js configuration
+ * - WORLD_CONFIG: World dimensions and boundaries
+ * - INITIAL_STATE: Starting game state values
+ * - ENEMY_TYPES: Enemy definitions and properties
+ * - LEVEL_SCALING: Progression and difficulty scaling
+ * - STYLES: Visual styling and UI configuration
+ * - SPAWN_CONFIG: Enemy spawning rules and rates
+ * - COLLISION_CONFIG: Collision detection settings
+ * - LEVELS: Area/level definitions and requirements
+ * 
+ * Usage:
+ * ```js
+ * import { GAME_CONFIG, ENEMY_TYPES, LEVEL_SCALING } from './config.js';
+ * 
+ * // Access configuration
+ * const worldWidth = WORLD_CONFIG.width;
+ * const enemyHealth = ENEMY_TYPES.BASIC.health;
+ * const levelMultiplier = LEVEL_SCALING.experienceMultiplier;
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new configuration categories as needed
+ * - Adjust values for game balance
+ * - Add new enemy types and properties
+ * - Define new level configurations
+ * - Extend scaling rules for progression
+ * 
+ * Note: This is a critical file for game balance and behavior.
+ * Changes here can have wide-ranging effects on gameplay.
+ * 
+ * @type {Object}
+ */
+
 // Base constants
 const BASE_SPAWN_DISTANCE = 600;
 const BASE_SPAWN_RATE = 0.02;
 const BASE_MAX_ENEMIES = 50;
 const BASE_ELITE_CHANCE = 0.1;
+const GRID_SIZE = 100;  // Grid cell size for background grid
 
 // Enemy type ratios
 const ENEMY_TYPE_RATIOS = {
@@ -157,7 +199,8 @@ export const STYLES = Object.freeze({
 export const WORLD_CONFIG = Object.freeze({
     width: 2000,
     height: 2000,
-    viewportPadding: 200
+    viewportPadding: 200,
+    gridSize: GRID_SIZE  // Add grid size to WORLD_CONFIG
 });
 
 // Collision configuration
@@ -298,7 +341,7 @@ export const LEVEL_CONFIGS = [
         backgroundColor: 0x1a1a1a,
         enemyRatios: { BASIC: 1 },
         maxEnemies: 20,
-        spawnRate: BASE_SPAWN_RATE * 0.6,
+        spawnRate: 0.05,  // Increased spawn rate for better testing
         eliteChance: 0,
         enemyModifiers: {
             health: 0.7,

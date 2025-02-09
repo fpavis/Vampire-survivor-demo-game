@@ -1,26 +1,102 @@
+/**
+ * @file EnemyManager.js
+ * @description Manages enemy spawning, behavior, and state updates. Handles enemy scaling with level,
+ * elite enemy creation, and enemy movement patterns. Controls the enemy population in each area.
+ * 
+ * @module managers/EnemyManager
+ * @requires core/gameState
+ * @requires entities/Entity
+ * @requires core/config
+ * 
+ * Key Features:
+ * - Controls enemy spawning rates and positions
+ * - Manages enemy scaling with player level
+ * - Handles elite enemy creation and modifications
+ * - Updates enemy positions and states
+ * - Controls enemy health bar displays
+ * 
+ * Usage:
+ * ```js
+ * const enemyManager = new EnemyManager(app, worldContainer);
+ * enemyManager.handleEnemySpawning(delta, currentArea);
+ * enemyManager.updateEnemies(delta);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new enemy types in the ENEMY_TYPES configuration
+ * - Modify spawn behavior in handleEnemySpawning
+ * - Adjust enemy scaling in scaleEnemyWithLevel
+ * - Implement new movement patterns in updateEnemyPosition
+ * - Add elite enemy variations in makeEliteEnemy
+ * 
+ * @class
+ */
+
 import { gameState } from '../core/gameState.js';
-import { EntityManager } from '../entities/Entity.js';
+import { Enemy } from '../entities/Entity.js';
 import { LEVEL_SCALING } from '../core/config.js';
 
 export class EnemyManager {
     constructor(app, worldContainer) {
         this.app = app;
         this.worldContainer = worldContainer;
+        this.debugCounter = 0;  // Add counter for debug logs
     }
 
     handleEnemySpawning(delta, currentArea) {
-        const spawnConfig = currentArea.getSpawnConfig();
-        if (gameState.enemies.length >= spawnConfig.maxEnemies) return;
+        // Ensure we have valid inputs
+        if (!currentArea || !gameState.player) {
+            console.log('Missing required data for spawning:', { currentArea: !!currentArea, player: !!gameState.player });
+            return;
+        }
 
-        const spawnChance = spawnConfig.baseRate * Math.pow(LEVEL_SCALING.enemySpawnRateScale, gameState.level - 1);
-        
-        if (Math.random() < spawnChance * delta) {
+        // Get spawn configuration
+        const spawnConfig = currentArea.getSpawnConfig();
+        if (!spawnConfig) {
+            console.error('No spawn config found for area');
+            return;
+        }
+
+        // Check enemy limit
+        if (gameState.enemies.length >= spawnConfig.maxEnemies) {
+            return;
+        }
+
+        // Convert delta to seconds with better precision
+        const deltaSeconds = Number((delta / 60).toFixed(4));
+
+        // Calculate spawn chance with better precision
+        const baseSpawnRate = Number((spawnConfig.baseRate || 0.02).toFixed(4));
+        const spawnChance = Number((baseSpawnRate * deltaSeconds).toFixed(4));
+
+        // Debug logging - only log every 60 frames (approximately once per second)
+        this.debugCounter = (this.debugCounter + 1) % 60;
+        if (this.debugCounter === 0) {
+            console.log('Spawn calculation:', {
+                deltaSeconds,
+                baseSpawnRate,
+                spawnChance,
+                currentEnemies: gameState.enemies.length,
+                maxEnemies: spawnConfig.maxEnemies,
+                spawnProbability: `${(spawnChance * 100).toFixed(2)}%`
+            });
+        }
+
+        // Roll for spawn with better precision
+        if (Number(Math.random().toFixed(4)) < spawnChance) {
+            console.log('Spawning enemy...');
             this.spawnEnemy(spawnConfig, currentArea);
         }
     }
 
     spawnEnemy(spawnConfig, currentArea) {
-        // Determine enemy type based on ratios
+        // Validate required parameters
+        if (!spawnConfig || !currentArea || !gameState.player) {
+            console.error('Missing required parameters for enemy spawn');
+            return;
+        }
+
+        // Determine enemy type
         const roll = Math.random();
         let type = 'BASIC';
         let cumulative = 0;
@@ -32,34 +108,64 @@ export class EnemyManager {
                 break;
             }
         }
+
+        // Calculate spawn position with validation
+        const angle = Math.random() * Math.PI * 2;
+        const spawnDistance = Math.max(300, spawnConfig.spawnDistance || 600);
+        
+        // Ensure player position is valid
+        const playerX = Number.isFinite(gameState.player.x) ? gameState.player.x : currentArea.width / 2;
+        const playerY = Number.isFinite(gameState.player.y) ? gameState.player.y : currentArea.height / 2;
         
         // Calculate spawn position
-        const angle = Math.random() * Math.PI * 2;
-        const spawnDistance = spawnConfig.spawnDistance;
-        const spawnX = gameState.player.x + Math.cos(angle) * spawnDistance;
-        const spawnY = gameState.player.y + Math.sin(angle) * spawnDistance;
+        let spawnX = playerX + Math.cos(angle) * spawnDistance;
+        let spawnY = playerY + Math.sin(angle) * spawnDistance;
         
-        // Ensure spawn is within area bounds
-        const x = Math.max(50, Math.min(currentArea.width - 50, spawnX));
-        const y = Math.max(50, Math.min(currentArea.height - 50, spawnY));
-        
-        // Create and configure enemy
-        let enemy = EntityManager.createEnemy(this.app, type, x, y);
-        
-        // Scale enemy stats with level
-        const levelScale = gameState.level - 1;
-        enemy = this.scaleEnemyWithLevel(enemy, levelScale);
-        
-        // Apply area-specific modifiers
-        enemy = currentArea.modifyEnemy(enemy);
-        
-        // Check for elite enemy
-        if (Math.random() < spawnConfig.eliteChance) {
-            enemy = this.makeEliteEnemy(enemy, spawnConfig.eliteModifiers);
+        // Clamp spawn position to area bounds with padding
+        const padding = 50;
+        spawnX = Math.max(padding, Math.min(currentArea.width - padding, spawnX));
+        spawnY = Math.max(padding, Math.min(currentArea.height - padding, spawnY));
+
+        // Validate final spawn position
+        if (!Number.isFinite(spawnX) || !Number.isFinite(spawnY)) {
+            console.error('Invalid spawn position calculated:', { spawnX, spawnY });
+            return;
         }
+
+        // Create enemy
+        const enemy = new Enemy(type, spawnX, spawnY, this.app);
         
+        // Log spawn details for debugging
+        console.log('Enemy spawn details:', {
+            position: { x: spawnX, y: spawnY },
+            playerPos: { x: playerX, y: playerY },
+            distance: spawnDistance,
+            angle: angle,
+            type: type
+        });
+
+        // Apply level scaling
+        this.scaleEnemyWithLevel(enemy, Math.max(0, gameState.level - 1));
+
+        // Check for elite enemy
+        if (Math.random() < (spawnConfig.eliteChance || 0.1)) {
+            enemy.makeElite();
+        }
+
+        // Add to game
+        enemy.zIndex = 5;
         this.worldContainer.addChild(enemy);
         gameState.enemies.push(enemy);
+
+        console.log('Enemy spawned:', {
+            type,
+            position: { x: enemy.x, y: enemy.y },
+            health: enemy.health,
+            speed: enemy.speed,
+            isElite: enemy.isElite,
+            parent: !!enemy.parent,
+            visible: enemy.visible
+        });
     }
 
     scaleEnemyWithLevel(enemy, levelScale) {
@@ -67,22 +173,13 @@ export class EnemyManager {
         enemy.maxHealth = enemy.health;
         enemy.speed *= Math.pow(LEVEL_SCALING.enemySpeedScale, levelScale);
         enemy.experienceValue = Math.floor(enemy.experienceValue * Math.pow(LEVEL_SCALING.experienceMultiplierPerLevel, levelScale));
-        return enemy;
-    }
-
-    makeEliteEnemy(enemy, eliteModifiers) {
-        enemy.tint = 0xFFD700; // Gold tint
-        enemy.health *= eliteModifiers.health;
-        enemy.maxHealth = enemy.health;
-        enemy.experienceValue *= eliteModifiers.experience;
-        enemy.speed *= eliteModifiers.speed;
+        enemy.updateHealthBar();
         return enemy;
     }
 
     updateEnemies(delta) {
         gameState.enemies.forEach(enemy => {
             this.updateEnemyPosition(enemy, delta);
-            this.updateEnemyHealthBar(enemy);
         });
     }
 
@@ -97,13 +194,5 @@ export class EnemyManager {
             enemy.x += normalizedDx * enemy.speed * delta;
             enemy.y += normalizedDy * enemy.speed * delta;
         }
-    }
-
-    updateEnemyHealthBar(enemy) {
-        const healthPercent = enemy.health / enemy.maxHealth;
-        enemy.healthBar.clear();
-        enemy.healthBar.beginFill(healthPercent < 0.3 ? 0xFF0000 : 0x00FF00);
-        enemy.healthBar.drawRect(-enemy.radius, -enemy.radius - 10, enemy.healthBarWidth * healthPercent, 4);
-        enemy.healthBar.endFill();
     }
 } 

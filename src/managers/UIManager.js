@@ -1,7 +1,40 @@
 /**
- * UI Manager class responsible for handling all game UI elements
- * Manages HUD, menus, overlays, and user interactions
+ * @file UIManager.js
+ * @description Manages all user interface elements, including HUD, menus, notifications,
+ * and interactive UI components. Handles UI updates, animations, and user interaction.
+ * 
+ * @module managers/UIManager
+ * @requires core/config
+ * @requires core/gameState
+ * 
+ * Key Features:
+ * - Creates and updates HUD elements (health, XP, score)
+ * - Manages menus and settings panels
+ * - Handles level-up UI and upgrade selection
+ * - Displays notifications and messages
+ * - Controls mobile UI elements (joystick)
+ * - Manages game over screen
+ * - Implements debug view
+ * 
+ * Usage:
+ * ```js
+ * const ui = new UIManager(app, game);
+ * ui.updateHealth(currentHealth, maxHealth);
+ * ui.showMessage("Level Up!", 0x00FF00);
+ * ui.showLevelUp(upgrades);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new UI elements by extending createUIElements
+ * - Modify UI styles in createBaseTextStyle
+ * - Add new UI animations and effects
+ * - Implement new menu types
+ * - Extend mobile support features
+ * - Add new debug information
+ * 
+ * @class
  */
+
 import { STYLES } from '../core/config.js';
 import { gameState } from '../core/gameState.js';
 
@@ -13,36 +46,73 @@ export class UIManager {
      */
     constructor(app, game) {
         this.app = app;
-        this.game = game;  // Store game instance for debug toggle
-        this.upgradeManager = null;  // Will be set later
+        this.game = game;
+        this.elements = {};
+        this.debugPanel = null;
+        this.joystick = null;
+        this.container = null;  // Will be set via setContainer
         
-        // Create main UI container with sorting
-        this.container = new PIXI.Container();
-        this.container.sortableChildren = true;
-        this.app.stage.addChild(this.container);
+        // Create separate containers for different UI states
+        this.gameplayUI = new PIXI.Container();
+        this.startScreenUI = new PIXI.Container();
+        this.gameOverUI = new PIXI.Container();
+        this.levelUpUI = new PIXI.Container();
         
-        // Initialize core UI components
+        // Debug flag
+        this.debug = false;
+    }
+
+    setContainer(container) {
+        this.container = container;
+        
+        // Add containers to main UI container now that it's set
+        this.container.addChild(this.gameplayUI);
+        this.container.addChild(this.startScreenUI);
+        this.container.addChild(this.gameOverUI);
+        this.container.addChild(this.levelUpUI);
+        
+        // Initialize UI
         this.initializeUI();
+        this.gameplayUI.visible = false;
         
         // Setup event listeners
         this.setupEventListeners();
+        
+        console.log('UI container set and initialized:', {
+            container: this.container ? 'set' : 'not set',
+            children: this.container.children.length
+        });
     }
 
     /**
      * Initialize all core UI components
      */
     initializeUI() {
-        // Create main UI elements
+        if (!this.container) {
+            console.error('UI container not set');
+            return;
+        }
+
+        // Create UI elements
         this.createUIElements();
         
-        // Create settings menu
-        this.settingsMenu = this.createSettingsMenu();
-        this.container.addChild(this.settingsMenu);
+        // Set up event listeners
+        this.setupEventListeners();
         
-        // Create joystick if on mobile
-        if (this.isMobileDevice()) {
-            this.createJoystick();
+        // Create debug panel if needed
+        if (gameState.debug) {
+            this.createDebugPanel();
         }
+        
+        // Check for mobile device and create joystick if needed
+        this.checkMobileDevice();
+        
+        console.log('UI initialized:', {
+            container: this.container ? 'set' : 'not set',
+            elements: Object.keys(this.elements),
+            debug: !!this.debugPanel,
+            joystick: !!this.joystick
+        });
     }
 
     /**
@@ -66,18 +136,36 @@ export class UIManager {
      * Handle window resize events
      */
     handleResize() {
-        // Update UI panel
-        if (this.elements) {
-            const panel = this.container.getChildAt(0);
-            panel.clear();
-            panel.beginFill(0x000000, 0.5);
-            panel.drawRoundedRect(5, 5, 200, 150, 10);
-            panel.endFill();
+        const padding = 20;
+        
+        // Position gameplay UI elements
+        this.gameplayUI.position.set(padding, padding);
+
+        // Position start screen UI
+        if (this.startScreenUI.visible) {
+            const centerX = this.app.screen.width / 2;
+            const centerY = this.app.screen.height / 2;
+            
+            // Center the start screen container
+            this.startScreenUI.position.set(centerX, centerY);
+            
+            // Update background to cover the entire screen
+            const background = this.startScreenUI.getChildByLabel('background');
+            if (background) {
+                background.clear();
+                background
+                    .fill({ color: 0x000000, alpha: 0.5 })
+                    .rect(0, 0, this.app.screen.width, this.app.screen.height);
+                background.position.set(-centerX, -centerY);
+            }
         }
 
-        // Update settings menu position
-        if (this.settingsMenu) {
-            this.settingsMenu.position.set(this.app.screen.width - 320, 60);
+        // Position debug panel if it exists
+        if (this.debugPanel) {
+            this.debugPanel.position.set(
+                this.app.screen.width - this.debugPanel.width - padding,
+                padding
+            );
         }
     }
 
@@ -87,14 +175,12 @@ export class UIManager {
     createUIElements() {
         // Create main UI panel background
         const panel = new PIXI.Graphics();
-        panel.beginFill(0x000000, 0.7);
-        panel.drawRoundedRect(5, 5, 250, 200, 10);
-        panel.endFill();
+        panel
+            .fill({ color: 0x000000, alpha: 0.7 })
+            .roundRect(5, 5, 250, 200, 10);
         panel.zIndex = 1;
         this.container.addChild(panel);
-
-        // Initialize elements container
-        this.elements = {};
+        this.elements.panel = panel;
 
         // Define base text style
         const textStyle = this.createBaseTextStyle();
@@ -111,13 +197,12 @@ export class UIManager {
         return {
             fontFamily: 'Arial',
             fontSize: 16,
-            fill: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 1,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 2,
-            dropShadowDistance: 1
+            fill: 0xFFFFFF,
+            stroke: {
+                color: 0x000000,
+                width: 2,
+                alignment: 0
+            }
         };
     }
 
@@ -126,34 +211,59 @@ export class UIManager {
      * @param {Object} textStyle - Base text style for UI elements
      */
     createUILayout(textStyle) {
-        let yPos = 15;
-        const SPACING = 30;
+        // If no textStyle provided, create default one
+        if (!textStyle) {
+            textStyle = {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                fill: 0xFFFFFF,
+                align: 'left'
+            };
+        }
 
-        // Create health section
-        this.createHealthSection(yPos, textStyle);
-        yPos += SPACING + 10;
+        // Starting position for UI elements
+        let yPos = 20;
+        const spacing = 50;
 
-        // Create weapon section
-        this.createWeaponSection(yPos, textStyle);
-        yPos += SPACING;
+        // Create and add each section to gameplayUI
+        const healthSection = this.createHealthSection(yPos, textStyle);
+        this.gameplayUI.addChild(healthSection);
+        this.elements.healthText = this.healthText;
+        this.elements.healthBar = this.healthBar;
+        yPos += spacing;
 
-        // Create level section
-        this.createLevelSection(yPos, textStyle);
-        yPos += SPACING;
+        const weaponSection = this.createWeaponSection(yPos, textStyle);
+        this.gameplayUI.addChild(weaponSection);
+        this.elements.weaponText = this.weaponText;
+        yPos += spacing;
 
-        // Create experience section
-        this.createExperienceSection(yPos, textStyle);
-        yPos += SPACING + 10;
+        const levelSection = this.createLevelSection(yPos, textStyle);
+        this.gameplayUI.addChild(levelSection);
+        this.elements.levelText = this.levelText;
+        yPos += spacing;
 
-        // Create score section
-        this.createScoreSection(yPos, textStyle);
-        yPos += SPACING;
+        const experienceSection = this.createExperienceSection(yPos, textStyle);
+        this.gameplayUI.addChild(experienceSection);
+        this.elements.experienceText = this.expText;
+        this.elements.xpBar = this.expBar;
+        yPos += spacing;
 
-        // Create stats section
-        this.createStatsSection(yPos, textStyle);
+        const scoreSection = this.createScoreSection(yPos, textStyle);
+        this.gameplayUI.addChild(scoreSection);
+        this.elements.scoreText = this.scoreText;
+        yPos += spacing;
 
-        // Add all elements to container
-        this.addElementsToContainer();
+        const statsSection = this.createStatsSection(yPos, textStyle);
+        this.gameplayUI.addChild(statsSection);
+        this.elements.statsText = this.statsText;
+
+        // Initially hide the gameplay UI
+        this.gameplayUI.visible = false;
+
+        // Position all UI elements
+        this.handleResize();
+
+        console.log('UI elements created:', Object.keys(this.elements));
     }
 
     /**
@@ -162,10 +272,25 @@ export class UIManager {
      * @param {Object} textStyle - Text style configuration
      */
     createHealthSection(yPos, textStyle) {
-        this.createIcon(15, yPos, 0xFF0000, '❤️');
-        this.elements.healthText = new PIXI.Text('Health: 100/100', textStyle);
-        this.elements.healthText.position.set(40, yPos);
-        this.elements.healthBar = this.createProgressBar(40, yPos + 20, 190, 6, 0xFF0000);
+        const container = new PIXI.Container();
+        container.position.set(0, yPos);
+        
+        // Create health text
+        this.healthText = new PIXI.Text({
+            text: 'Health: 100/100',
+            style: textStyle
+        });
+        container.addChild(this.healthText);
+        
+        // Create health bar
+        this.healthBar = new PIXI.Graphics();
+        this.healthBar.position.set(0, 25);
+        this.healthBar
+            .fill({ color: 0x00FF00 })
+            .rect(0, 0, 200, 20);
+        container.addChild(this.healthBar);
+        
+        return container;
     }
 
     /**
@@ -174,9 +299,16 @@ export class UIManager {
      * @param {Object} textStyle - Text style configuration
      */
     createWeaponSection(yPos, textStyle) {
-        this.createIcon(15, yPos, 0xFFFFFF, '🔫');
-        this.elements.weaponText = new PIXI.Text('Weapon: Pistol (1-4)', textStyle);
-        this.elements.weaponText.position.set(40, yPos);
+        const container = new PIXI.Container();
+        container.position.set(0, yPos);
+        
+        this.weaponText = new PIXI.Text({
+            text: 'Weapon: Pistol',
+            style: textStyle
+        });
+        container.addChild(this.weaponText);
+        
+        return container;
     }
 
     /**
@@ -185,9 +317,16 @@ export class UIManager {
      * @param {Object} textStyle - Text style configuration
      */
     createLevelSection(yPos, textStyle) {
-        this.createIcon(15, yPos, 0x00FF00, '📊');
-        this.elements.levelText = new PIXI.Text('Level: 1', textStyle);
-        this.elements.levelText.position.set(40, yPos);
+        const container = new PIXI.Container();
+        container.position.set(0, yPos);
+        
+        this.levelText = new PIXI.Text({
+            text: 'Level: 1',
+            style: textStyle
+        });
+        container.addChild(this.levelText);
+        
+        return container;
     }
 
     /**
@@ -196,10 +335,25 @@ export class UIManager {
      * @param {Object} textStyle - Text style configuration
      */
     createExperienceSection(yPos, textStyle) {
-        this.createIcon(15, yPos, 0xFF00FF, '💎');
-        this.elements.experienceText = new PIXI.Text('XP: 0/100', textStyle);
-        this.elements.experienceText.position.set(40, yPos);
-        this.elements.xpBar = this.createProgressBar(40, yPos + 20, 190, 6, 0x8800FF);
+        const container = new PIXI.Container();
+        container.position.set(0, yPos);
+        
+        // Create XP text
+        this.expText = new PIXI.Text({
+            text: 'XP: 0/100',
+            style: textStyle
+        });
+        container.addChild(this.expText);
+        
+        // Create XP bar
+        this.expBar = new PIXI.Graphics();
+        this.expBar.position.set(0, 25);
+        this.expBar
+            .fill({ color: 0xFF00FF })
+            .rect(0, 0, 200, 10);
+        container.addChild(this.expBar);
+        
+        return container;
     }
 
     /**
@@ -208,9 +362,16 @@ export class UIManager {
      * @param {Object} textStyle - Text style configuration
      */
     createScoreSection(yPos, textStyle) {
-        this.createIcon(15, yPos, 0xFFD700, '⭐');
-        this.elements.scoreText = new PIXI.Text('Score: 0', textStyle);
-        this.elements.scoreText.position.set(40, yPos);
+        const container = new PIXI.Container();
+        container.position.set(0, yPos);
+        
+        this.scoreText = new PIXI.Text({
+            text: 'Score: 0',
+            style: textStyle
+        });
+        container.addChild(this.scoreText);
+        
+        return container;
     }
 
     /**
@@ -219,9 +380,25 @@ export class UIManager {
      * @param {Object} textStyle - Text style configuration
      */
     createStatsSection(yPos, textStyle) {
-        const statsStyle = { ...textStyle, fontSize: 14 };
-        this.elements.statsText = new PIXI.Text('', statsStyle);
-        this.elements.statsText.position.set(15, yPos);
+        const container = new PIXI.Container();
+        container.position.set(0, yPos);
+        
+        // Create stats background
+        const background = new PIXI.Graphics();
+        background
+            .fill({ color: 0x000000, alpha: 0.3 })
+            .roundRect(0, 0, 200, 80, 10);
+        container.addChild(background);
+        
+        // Create stats text
+        this.statsText = new PIXI.Text({
+            text: 'Stats\nDamage: 20\nSpeed: 4.2\nFire Rate: 0.6',
+            style: textStyle
+        });
+        this.statsText.position.set(10, 10);
+        container.addChild(this.statsText);
+        
+        return container;
     }
 
     /**
@@ -232,9 +409,12 @@ export class UIManager {
      * @param {string} emoji - Emoji to use as icon
      */
     createIcon(x, y, color, emoji) {
-        const text = new PIXI.Text(emoji, {
-            fontSize: 20,
-            align: 'center'
+        const text = new PIXI.Text({
+            text: emoji,
+            style: {
+                fontSize: 20,
+                align: 'center'
+            }
         });
         text.position.set(x, y);
         text.zIndex = 2;
@@ -256,15 +436,13 @@ export class UIManager {
         
         // Background
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.5);
-        bg.drawRoundedRect(0, 0, width, height, height/2);
-        bg.endFill();
+        bg.fill({ color: 0x000000, alpha: 0.5 });
+        bg.roundRect(0, 0, width, height, height/2);
         
         // Progress
         const bar = new PIXI.Graphics();
-        bar.beginFill(color);
-        bar.drawRoundedRect(0, 0, width, height, height/2);
-        bar.endFill();
+        bar.fill({ color });
+        bar.roundRect(0, 0, width, height, height/2);
         
         container.addChild(bg, bar);
         container.position.set(x, y);
@@ -379,7 +557,7 @@ export class UIManager {
      */
     addElementsToContainer() {
         Object.values(this.elements).forEach(element => {
-            if (element instanceof PIXI.DisplayObject) {
+            if (element && element.position !== undefined) {
                 element.zIndex = 2;
                 this.container.addChild(element);
             }
@@ -427,10 +605,10 @@ export class UIManager {
      */
     createJoystickBase() {
         const base = new PIXI.Graphics();
-        base.beginFill(0x000000, 0.2);
-        base.lineStyle(2, 0xFFFFFF, 0.3);
-        base.drawCircle(0, 0, 130);
-        base.endFill();
+        base
+            .fill({ color: 0x000000, alpha: 0.2 })
+            .stroke({ width: 2, color: 0xFFFFFF, alpha: 0.3 })
+            .circle(0, 0, 130);
         return base;
     }
 
@@ -440,9 +618,9 @@ export class UIManager {
      */
     createJoystickStick() {
         const stick = new PIXI.Graphics();
-        stick.beginFill(0xFFFFFF, 0.3);
-        stick.drawCircle(0, 0, 50);
-        stick.endFill();
+        stick
+            .fill({ color: 0xFFFFFF, alpha: 0.3 })
+            .circle(0, 0, 50);
         return stick;
     }
 
@@ -665,9 +843,8 @@ export class UIManager {
         
         // Create semi-transparent background
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.7);
-        bg.drawRoundedRect(0, 0, 200, 160, 10);
-        bg.endFill();
+        bg.fill({ color: 0x000000, alpha: 0.7 })
+            .roundRect(0, 0, 200, 160, 10);
         this.debugLegend.addChild(bg);
 
         const legendStyle = {
@@ -732,18 +909,21 @@ export class UIManager {
 
     createSettingsBackground(menu) {
         const panel = new PIXI.Graphics();
-        panel.beginFill(0x000000, 0.8);
-        panel.drawRoundedRect(0, 0, 300, 400, 10);
-        panel.endFill();
+        panel
+            .fill({ color: 0x000000, alpha: 0.8 })
+            .roundRect(0, 0, 300, 400, 10);
         panel.eventMode = 'static';
         menu.addChild(panel);
     }
 
     createSettingsTitle(menu) {
-        const titleText = new PIXI.Text('Settings', {
-            fontSize: 24,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold'
+        const titleText = new PIXI.Text({
+            text: 'Settings',
+            style: {
+                fontSize: 24,
+                fill: 0xFFFFFF,
+                fontWeight: 'bold'
+            }
         });
         titleText.anchor.set(0.5, 0);
         titleText.position.set(menu.width / 2, 20);
@@ -806,22 +986,25 @@ export class UIManager {
         container.cursor = 'pointer';
         container.position.set(20, y);
 
-        const labelText = new PIXI.Text(label, {
-            fontSize: 16,
-            fill: 0xFFFFFF
+        const labelText = new PIXI.Text({
+            text: label,
+            style: {
+                fontSize: 16,
+                fill: 0xFFFFFF
+            }
         });
         container.addChild(labelText);
 
         const checkbox = new PIXI.Graphics();
-        checkbox.lineStyle(2, 0xFFFFFF);
-        checkbox.drawRect(150, 0, 20, 20);
-        checkbox.endFill();
+        checkbox
+            .stroke({ width: 2, color: 0xFFFFFF })
+            .rect(150, 0, 20, 20);
         container.addChild(checkbox);
 
         const check = new PIXI.Graphics();
-        check.beginFill(0x00FF00);
-        check.drawRect(153, 3, 14, 14);
-        check.endFill();
+        check
+            .fill({ color: 0x00FF00 })
+            .rect(153, 3, 14, 14);
         check.visible = false;
         container.addChild(check);
 
@@ -838,24 +1021,27 @@ export class UIManager {
         container.position.set(20, y);
 
         // Label
-        const labelText = new PIXI.Text(label, {
-            fontSize: 16,
-            fill: 0xFFFFFF
+        const labelText = new PIXI.Text({
+            text: label,
+            style: {
+                fontSize: 16,
+                fill: 0xFFFFFF
+            }
         });
         container.addChild(labelText);
 
         // Track
         const track = new PIXI.Graphics();
-        track.beginFill(0x666666);
-        track.drawRect(0, 30, 260, 4);
-        track.endFill();
+        track
+            .fill({ color: 0x666666 })
+            .rect(0, 30, 260, 4);
         container.addChild(track);
 
         // Handle
         const handle = new PIXI.Graphics();
-        handle.beginFill(0xFFFFFF);
-        handle.drawCircle(0, 0, 8);
-        handle.endFill();
+        handle
+            .fill({ color: 0xFFFFFF })
+            .circle(0, 0, 8);
         handle.eventMode = 'static';
         handle.cursor = 'pointer';
         
@@ -924,9 +1110,9 @@ export class UIManager {
      */
     createGameOverOverlay(container) {
         const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0);
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
+        overlay
+            .fill({ color: 0x000000, alpha: 0 })
+            .rect(0, 0, this.app.screen.width, this.app.screen.height);
         container.addChild(overlay);
 
         // Animate overlay fade in
@@ -934,9 +1120,9 @@ export class UIManager {
         const fadeIn = () => {
             alpha += 0.05;
             overlay.clear();
-            overlay.beginFill(0x000000, Math.min(0.8, alpha));
-            overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-            overlay.endFill();
+            overlay
+                .fill({ color: 0x000000, alpha: Math.min(0.8, alpha) })
+                .rect(0, 0, this.app.screen.width, this.app.screen.height);
 
             if (alpha < 0.8) requestAnimationFrame(fadeIn);
         };
@@ -948,31 +1134,24 @@ export class UIManager {
      * @param {PIXI.Container} container - Game over screen container
      */
     createGameOverContent(container) {
-        // Game over text with effects
-        const gameOverText = new PIXI.Text('GAME OVER', {
-            fontSize: 64,
-            fill: ['#FF0000', '#880000'], // Gradient fill
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 6,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 10,
-            dropShadowDistance: 5
+        const gameOverText = new PIXI.Text({
+            text: 'GAME OVER',
+            style: {
+                fontSize: 64,
+                fill: { gradient: ['#FF0000', '#880000'] },
+                fontWeight: 'bold',
+                stroke: { color: '#000000', width: 6 },
+                dropShadow: true,
+                dropShadowColor: '#000000',
+                dropShadowBlur: 10,
+                dropShadowDistance: 5
+            }
         });
         gameOverText.anchor.set(0.5);
         gameOverText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 100);
 
         // Stats container
         const statsContainer = this.createGameOverStats();
-
-        // Add pulsing animation to game over text
-        const pulseText = () => {
-            gameOverText.scale.x = 1 + Math.sin(Date.now() / 300) * 0.1;
-            gameOverText.scale.y = gameOverText.scale.x;
-            requestAnimationFrame(pulseText);
-        };
-        pulseText();
 
         container.addChild(gameOverText, statsContainer);
     }
@@ -987,10 +1166,11 @@ export class UIManager {
 
         // Stats background
         const statsBg = new PIXI.Graphics();
-        statsBg.beginFill(0x000000, 0.5);
-        statsBg.lineStyle(2, 0x444444);
-        statsBg.drawRoundedRect(-150, -60, 300, 120, 10);
-        statsBg.endFill();
+        statsBg
+            .fill({ color: 0x000000, alpha: 0.5 })
+            .stroke({ width: 2, color: 0x444444 })
+            .roundRect(-150, -60, 300, 120, 10);
+
         statsContainer.addChild(statsBg);
 
         // Stats text style
@@ -1001,11 +1181,17 @@ export class UIManager {
         };
 
         // Create stats text
-        const finalScoreText = new PIXI.Text(`Score: ${gameState.score}`, statsStyle);
+        const finalScoreText = new PIXI.Text({
+            text: `Score: ${gameState.score}`,
+            style: statsStyle
+        });
         finalScoreText.anchor.set(0.5);
         finalScoreText.position.set(0, -30);
 
-        const levelText = new PIXI.Text(`Level Reached: ${gameState.level}`, statsStyle);
+        const levelText = new PIXI.Text({
+            text: `Level Reached: ${gameState.level}`,
+            style: statsStyle
+        });
         levelText.anchor.set(0.5);
         levelText.position.set(0, 10);
 
@@ -1023,19 +1209,22 @@ export class UIManager {
 
         // Button background
         const buttonBg = new PIXI.Graphics();
-        buttonBg.beginFill(0x00AA00);
-        buttonBg.lineStyle(3, 0x00FF00);
-        buttonBg.drawRoundedRect(-100, -25, 200, 50, 15);
-        buttonBg.endFill();
+        buttonBg
+            .fill({ color: 0x00AA00 })
+            .stroke({ width: 3, color: 0x00FF00 })
+            .roundRect(-100, -25, 200, 50, 15);
 
         // Button text
-        const buttonText = new PIXI.Text('Play Again', {
-            fontSize: 28,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowDistance: 2
+        const buttonText = new PIXI.Text({
+            text: 'Play Again',
+            style: {
+                fontSize: 28,
+                fill: 0xFFFFFF,
+                fontWeight: 'bold',
+                dropShadow: true,
+                dropShadowColor: '#000000',
+                dropShadowDistance: 2
+            }
         });
         buttonText.anchor.set(0.5);
 
@@ -1128,27 +1317,21 @@ export class UIManager {
 
     createLevelUpContent(upgrades) {
         // Level up text with glow effect
-        const levelUpText = new PIXI.Text('LEVEL UP!', {
-            fontSize: 48,
-            fill: ['#FFD700', '#FFA500'], // Gold gradient
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 4,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 10,
-            dropShadowDistance: 5
+        const levelUpText = new PIXI.Text({
+            text: 'LEVEL UP!',
+            style: {
+                fontSize: 48,
+                fill: { gradient: ['#FFD700', '#FFA500'] },
+                fontWeight: 'bold',
+                stroke: { color: '#000000', width: 4 },
+                dropShadow: true,
+                dropShadowColor: '#000000',
+                dropShadowBlur: 10,
+                dropShadowDistance: 5
+            }
         });
         levelUpText.anchor.set(0.5);
         levelUpText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 120);
-
-        // Add pulsing animation to level up text
-        const pulseText = () => {
-            levelUpText.scale.x = 1 + Math.sin(Date.now() / 200) * 0.1;
-            levelUpText.scale.y = levelUpText.scale.x;
-            requestAnimationFrame(pulseText);
-        };
-        pulseText();
 
         // Create upgrade options
         this.createUpgradeOptions(upgrades, levelUpText);
@@ -1163,15 +1346,17 @@ export class UIManager {
             
             // Background for option
             const bg = new PIXI.Graphics();
-            bg.beginFill(0x333333, 0.8);
-            bg.lineStyle(2, 0x666666);
-            bg.drawRoundedRect(-150, -30, 300, 60, 10);
-            bg.endFill();
+            bg.fill({ color: 0x333333, alpha: 0.8 });
+            bg.setStrokeStyle({ width: 2, color: 0x666666 });
+            bg.roundRect(-150, -30, 300, 60, 10);
             
-            const text = new PIXI.Text(upgrade.text, {
-                fontSize: 20,
-                fill: 0xFFFFFF,
-                align: 'center'
+            const text = new PIXI.Text({
+                text: upgrade.text,
+                style: {
+                    fontSize: 20,
+                    fill: 0xFFFFFF,
+                    align: 'center'
+                }
             });
             text.anchor.set(0.5);
 
@@ -1185,34 +1370,17 @@ export class UIManager {
             container.eventMode = 'static';
             container.cursor = 'pointer';
             
-            // Add hover and click handlers
-            container.on('pointerover', () => {
-                selectedIndex = index;
-                updateSelection();
-            });
-            
-            container.on('pointerdown', () => {
-                // Apply selected upgrade
-                upgrade.action();
-                
-                // Cleanup
-                cleanup();
-                
-                // Complete level up
-                if (this.upgradeManager) {
-                    this.upgradeManager.handleLevelUp();
-                }
-            });
-
             return container;
         });
 
         // Update the instruction text
-        const instructionText = new PIXI.Text(
-            'Use ↑↓ or touch/click to select\nSPACE or tap/click to confirm', {
-            fontSize: 16,
-            fill: 0xCCCCCC,
-            align: 'center'
+        const instructionText = new PIXI.Text({
+            text: 'Use ↑↓ or touch/click to select\nSPACE or tap/click to confirm',
+            style: {
+                fontSize: 16,
+                fill: 0xCCCCCC,
+                align: 'center'
+            }
         });
         instructionText.anchor.set(0.5);
         instructionText.position.set(
@@ -1228,70 +1396,22 @@ export class UIManager {
                 
                 if (index === selectedIndex) {
                     bg.clear();
-                    bg.beginFill(0x666666, 0.9);
-                    bg.lineStyle(2, 0xFFD700);
-                    bg.drawRoundedRect(-150, -30, 300, 60, 10);
-                    bg.endFill();
+                    bg.fill({ color: 0x666666, alpha: 0.9 });
+                    bg.setStrokeStyle({ width: 2, color: 0xFFD700 });
+                    bg.roundRect(-150, -30, 300, 60, 10);
                     text.style.fill = 0xFFD700;
                     container.filters = null;
                     container.scale.set(1.1);
                 } else {
                     bg.clear();
-                    bg.beginFill(0x333333, 0.8);
-                    bg.lineStyle(2, 0x666666);
-                    bg.drawRoundedRect(-150, -30, 300, 60, 10);
-                    bg.endFill();
+                    bg.fill({ color: 0x333333, alpha: 0.8 });
+                    bg.setStrokeStyle({ width: 2, color: 0x666666 });
+                    bg.roundRect(-150, -30, 300, 60, 10);
                     text.style.fill = 0xFFFFFF;
                     container.filters = [new PIXI.BlurFilter(1)];
                     container.scale.set(1);
                 }
             });
-        };
-
-        // Cleanup function
-        const cleanup = () => {
-            window.removeEventListener('keydown', handleKeyPress);
-            // Remove all level up UI elements
-            this.app.stage.removeChild(levelUpText, instructionText);
-            optionContainers.forEach(container => this.app.stage.removeChild(container));
-            // Remove the dark overlay (it's the first child of the stage)
-            const overlay = this.app.stage.children.find(child => 
-                child instanceof PIXI.Graphics && 
-                child.alpha > 0 && 
-                child.width === this.app.screen.width && 
-                child.height === this.app.screen.height
-            );
-            if (overlay) {
-                this.app.stage.removeChild(overlay);
-            }
-            // Reset game state
-            gameState.levelUp = false;
-        };
-
-        // Handle key events
-        const handleKeyPress = (e) => {
-            switch(e.key) {
-                case 'ArrowUp':
-                    selectedIndex = (selectedIndex - 1 + upgrades.length) % upgrades.length;
-                    updateSelection();
-                    break;
-                case 'ArrowDown':
-                    selectedIndex = (selectedIndex + 1) % upgrades.length;
-                    updateSelection();
-                    break;
-                case ' ':  // Space key
-                    // Apply selected upgrade
-                    upgrades[selectedIndex].action();
-                    
-                    // Cleanup
-                    cleanup();
-                    
-                    // Complete level up
-                    if (this.upgradeManager) {
-                        this.upgradeManager.handleLevelUp();
-                    }
-                    break;
-            }
         };
 
         // Add all elements to stage
@@ -1300,8 +1420,6 @@ export class UIManager {
 
         // Initial selection update
         updateSelection();
-
-        window.addEventListener('keydown', handleKeyPress);
     }
 
     cleanupLevelUp(container) {
@@ -1320,32 +1438,35 @@ export class UIManager {
 
         // Create semi-transparent background
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.7);
-        bg.drawRect(0, 0, this.app.screen.width, 80);
-        bg.endFill();
+        bg.fill({ color: 0x000000, alpha: 0.7 })
+            .rect(0, 0, this.app.screen.width, 80);
         container.addChild(bg);
 
         // Create level name text
-        const nameText = new PIXI.Text(levelName, {
-            fontFamily: 'Arial',
-            fontSize: 32,
-            fill: 0xFFD700,
-            align: 'center',
-            stroke: 0x000000,
-            strokeThickness: 4
+        const nameText = new PIXI.Text({
+            text: levelName,
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 32,
+                fill: 0xFFD700,
+                align: 'center',
+                stroke: { color: '#000000', width: 4 }
+            }
         });
         nameText.anchor.set(0.5);
         nameText.position.set(this.app.screen.width / 2, 20);
         container.addChild(nameText);
 
         // Create description text
-        const descText = new PIXI.Text(description, {
-            fontFamily: 'Arial',
-            fontSize: 20,
-            fill: 0xFFFFFF,
-            align: 'center',
-            stroke: 0x000000,
-            strokeThickness: 3
+        const descText = new PIXI.Text({
+            text: description,
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 20,
+                fill: 0xFFFFFF,
+                align: 'center',
+                stroke: { color: '#000000', width: 3 }
+            }
         });
         descText.anchor.set(0.5);
         descText.position.set(this.app.screen.width / 2, 55);
@@ -1423,31 +1544,33 @@ export class UIManager {
 
         // Create semi-transparent background
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.7);
-        bg.drawRoundedRect(0, 0, 200, 360, 10);
-        bg.endFill();
+        bg.fill({ color: 0x000000, alpha: 0.7 })
+            .roundRect(0, 0, 200, 360, 10);
         this.debugPanel.addChild(bg);
 
         // Create title
-        const titleStyle = {
-            fontFamily: 'Arial',
-            fontSize: 16,
-            fill: 0xFFD700,
-            fontWeight: 'bold'
-        };
-        const title = new PIXI.Text('Debug Stats', titleStyle);
+        const title = new PIXI.Text({
+            text: 'Debug Stats',
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                fill: 0xFFD700,
+                fontWeight: 'bold'
+            }
+        });
         title.position.set(10, 10);
         this.debugPanel.addChild(title);
 
         // Create stats text with sections
-        const textStyle = {
-            fontFamily: 'Arial',
-            fontSize: 14,
-            fill: 0xFFFFFF,
-            lineHeight: 20
-        };
-
-        this.statsText = new PIXI.Text('', textStyle);
+        this.statsText = new PIXI.Text({
+            text: '',
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 14,
+                fill: 0xFFFFFF,
+                lineHeight: 20
+            }
+        });
         this.statsText.position.set(10, 35);
         this.debugPanel.addChild(this.statsText);
 
@@ -1465,13 +1588,15 @@ export class UIManager {
     }
 
     showMessage(text, color = 0xFFFFFF, duration = 2000) {
-        const message = new PIXI.Text(text, {
-            fontFamily: 'Arial',
-            fontSize: 24,
-            fill: color,
-            align: 'center',
-            stroke: 0x000000,
-            strokeThickness: 4
+        const message = new PIXI.Text({
+            text: text,
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 24,
+                fill: color,
+                stroke: 0x000000,
+                strokeThickness: 4
+            }
         });
         
         message.anchor.set(0.5);
@@ -1512,5 +1637,101 @@ export class UIManager {
             }
         };
         fadeIn();
+    }
+
+    showStartScreen(onStartGame) {
+        console.log('Showing start screen');
+        
+        // Hide other UI elements
+        this.gameplayUI.visible = false;
+        this.gameOverUI.visible = false;
+        this.levelUpUI.visible = false;
+        
+        // Create container for start screen
+        const startScreen = new PIXI.Container();
+        startScreen.sortableChildren = true;
+        startScreen.eventMode = 'static';
+        
+        // Create semi-transparent background
+        const bg = new PIXI.Graphics()
+            .fill({ color: 0x000000, alpha: 0.7 })
+            .rect(0, 0, this.app.screen.width, this.app.screen.height);
+        startScreen.addChild(bg);
+        
+        // Create title text
+        const title = new PIXI.Text({
+            text: 'Vampire Survivor Demo',
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 48,
+                fill: 0xFFFFFF,
+                align: 'center',
+                dropShadow: true,
+                dropShadowColor: 0x000000,
+                dropShadowDistance: 4
+            }
+        });
+        title.anchor.set(0.5);
+        title.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
+        startScreen.addChild(title);
+        
+        // Create start button
+        const button = new PIXI.Container();
+        button.eventMode = 'static';
+        button.cursor = 'pointer';
+        
+        const buttonBg = new PIXI.Graphics()
+            .fill({ color: 0x00FF00 })
+            .roundRect(0, 0, 200, 60, 10);
+        
+        const buttonText = new PIXI.Text({
+            text: 'Start Game',
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 24,
+                fill: 0xFFFFFF,
+                align: 'center'
+            }
+        });
+        buttonText.anchor.set(0.5);
+        buttonText.position.set(100, 30);
+        
+        button.addChild(buttonBg);
+        button.addChild(buttonText);
+        button.position.set(
+            this.app.screen.width / 2 - 100,
+            this.app.screen.height * 0.6
+        );
+        
+        // Add button interaction
+        button.on('pointerdown', () => {
+            console.log('Start button clicked');
+            this.container.removeChild(startScreen);
+            this.showGameplayUI();  // Show gameplay UI
+            if (onStartGame) {
+                console.log('Calling onStartGame callback');
+                onStartGame();
+            }
+        });
+        
+        button.on('pointerover', () => {
+            buttonBg.tint = 0x00CC00;
+        });
+        
+        button.on('pointerout', () => {
+            buttonBg.tint = 0xFFFFFF;
+        });
+        
+        startScreen.addChild(button);
+        this.container.addChild(startScreen);
+        
+        console.log('Start screen setup complete');
+    }
+
+    showGameplayUI() {
+        console.log('Showing gameplay UI');
+        this.gameplayUI.visible = true;
+        this.gameOverUI.visible = false;
+        this.levelUpUI.visible = false;
     }
 } 

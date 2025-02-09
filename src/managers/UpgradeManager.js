@@ -1,3 +1,36 @@
+/**
+ * @file UpgradeManager.js
+ * @description Manages the player upgrade system, including level-up bonuses, stat improvements,
+ * and upgrade selection UI. Controls the progression and power scaling of the player.
+ * 
+ * @module managers/UpgradeManager
+ * @requires core/gameState
+ * @requires core/config
+ * 
+ * Key Features:
+ * - Generates random upgrade options
+ * - Handles level-up stat increases
+ * - Manages upgrade selection UI
+ * - Controls player progression
+ * - Implements upgrade scaling
+ * 
+ * Usage:
+ * ```js
+ * const upgradeManager = new UpgradeManager(ui);
+ * const upgrades = upgradeManager.getRandomUpgrades();
+ * upgradeManager.handleLevelUp();
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new upgrade types in the upgrade pool
+ * - Modify upgrade effects and scaling
+ * - Adjust level-up bonuses
+ * - Implement new progression systems
+ * - Add upgrade combinations or paths
+ * 
+ * @class
+ */
+
 import { gameState } from '../core/gameState.js';
 import { LEVEL_SCALING } from '../core/config.js';
 

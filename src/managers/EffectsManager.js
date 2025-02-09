@@ -1,3 +1,36 @@
+/**
+ * @file EffectsManager.js
+ * @description Manages visual effects and particle systems in the game, including hit effects,
+ * death animations, damage numbers, and other visual feedback elements.
+ * 
+ * @module managers/EffectsManager
+ * @requires core/config
+ * 
+ * Key Features:
+ * - Creates particle effects for hits and deaths
+ * - Displays floating damage numbers
+ * - Manages visual feedback effects
+ * - Handles effect cleanup and lifecycle
+ * - Controls visual polish and game feel
+ * 
+ * Usage:
+ * ```js
+ * const effectsManager = new EffectsManager(app, worldContainer);
+ * effectsManager.createHitEffect(x, y);
+ * effectsManager.createDamageNumber(x, y, damage);
+ * effectsManager.createDeathEffect(x, y);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new particle effects by creating new effect methods
+ * - Modify particle behavior in animateParticles
+ * - Adjust visual styles in STYLES configuration
+ * - Implement new animation types for different effects
+ * - Add screen shake or other game feel elements
+ * 
+ * @class
+ */
+
 import { STYLES } from '../core/config.js';
 
 export class EffectsManager {
@@ -7,29 +40,31 @@ export class EffectsManager {
     }
 
     createHitEffect(x, y) {
-        const particles = [];
-        const particleCount = STYLES.particles.HIT.count;
+        const effect = new PIXI.Graphics();
+        effect
+            .fill({ color: 0xFFFFFF, alpha: 0.5 })
+            .circle(0, 0, 10);
         
-        for (let i = 0; i < particleCount; i++) {
-            const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.HIT.color);
-            particle.drawCircle(0, 0, 2);
-            particle.endFill();
+        effect.position.set(x, y);
+        this.worldContainer.addChild(effect);
+
+        // Animate and remove
+        let scale = 1;
+        let alpha = 0.5;
+        const expand = () => {
+            scale += 0.1;
+            alpha -= 0.05;
+            effect.scale.set(scale);
+            effect.alpha = alpha;
             
-            const angle = (Math.PI * 2 * i) / particleCount;
-            const speed = STYLES.particles.HIT.speed;
-            
-            particle.x = x;
-            particle.y = y;
-            particle.vx = Math.cos(angle) * speed;
-            particle.vy = Math.sin(angle) * speed;
-            particle.alpha = 1;
-            
-            this.worldContainer.addChild(particle);
-            particles.push(particle);
-        }
-        
-        this.animateParticles(particles, 0.05);
+            if (alpha > 0) {
+                requestAnimationFrame(expand);
+            } else {
+                this.worldContainer.removeChild(effect);
+                effect.destroy();
+            }
+        };
+        expand();
     }
 
     createDeathEffect(x, y) {
@@ -38,9 +73,9 @@ export class EffectsManager {
         
         for (let i = 0; i < particleCount; i++) {
             const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.DEATH.color);
-            particle.drawCircle(0, 0, 3);
-            particle.endFill();
+            particle
+                .fill({ color: STYLES.particles.DEATH.color })
+                .circle(0, 0, 3);
             
             const angle = Math.random() * Math.PI * 2;
             const speed = STYLES.particles.DEATH.speed * (0.5 + Math.random() * 0.5);
@@ -58,54 +93,38 @@ export class EffectsManager {
         this.animateParticles(particles, 0.02);
     }
 
-    createDamageNumber(x, y, damage) {
-        const container = new PIXI.Container();
-        container.x = x;
-        container.y = y;
-
-        // Create the damage text with outline
-        const text = new PIXI.Text(Math.round(damage), {
-            fontFamily: 'Arial',
-            fontSize: 16,
-            fill: 0xFF0000,
-            stroke: 0x000000,
-            strokeThickness: 3,
-            align: 'center'
+    createDamageNumber(x, y, amount) {
+        const text = new PIXI.Text({
+            text: amount.toString(),
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 16,
+                fill: 0xFFFFFF,
+                stroke: { color: 0x000000, width: 2 },
+                align: 'center'
+            }
         });
         text.anchor.set(0.5);
-        container.addChild(text);
+        text.position.set(x, y);
+        this.worldContainer.addChild(text);
 
-        // Add to world container
-        this.worldContainer.addChild(container);
-
-        // Animation variables
-        let lifetime = 0;
-        const TOTAL_LIFETIME = 60; // frames
-        const moveSpeed = 1;
-        const fadeStart = 30; // when to start fading
-
-        // Create animation ticker
-        const ticker = new PIXI.Ticker();
-        ticker.add((delta) => {
-            lifetime += delta;
+        // Animate and remove
+        let alpha = 1;
+        let yOffset = 0;
+        const fadeOut = () => {
+            alpha -= 0.02;
+            yOffset -= 0.5;
+            text.alpha = alpha;
+            text.y = y + yOffset;
             
-            // Move upward
-            container.y -= moveSpeed * delta;
-            
-            // Start fading after fadeStart frames
-            if (lifetime > fadeStart) {
-                const fadeProgress = (lifetime - fadeStart) / (TOTAL_LIFETIME - fadeStart);
-                container.alpha = 1 - fadeProgress;
+            if (alpha > 0) {
+                requestAnimationFrame(fadeOut);
+            } else {
+                this.worldContainer.removeChild(text);
+                text.destroy();
             }
-            
-            // Remove when animation is complete
-            if (lifetime >= TOTAL_LIFETIME) {
-                ticker.destroy();
-                this.worldContainer.removeChild(container);
-                container.destroy({ children: true });
-            }
-        });
-        ticker.start();
+        };
+        fadeOut();
     }
 
     animateParticles(particles, fadeRate) {

@@ -1,3 +1,34 @@
+/**
+ * @file ExperienceManager.js
+ * @description Manages the experience system, including experience gem collection, leveling up,
+ * and the magnetic pull effect that draws nearby experience gems to the player.
+ * 
+ * @module managers/ExperienceManager
+ * @requires core/gameState
+ * 
+ * Key Features:
+ * - Handles experience gem collection and magnetism
+ * - Manages experience point accumulation
+ * - Triggers level-up events
+ * - Controls gem cleanup during area transitions
+ * 
+ * Usage:
+ * ```js
+ * const expManager = new ExperienceManager(app, worldContainer);
+ * expManager.setUI(uiManager);
+ * expManager.setUpgradeManager(upgradeManager);
+ * expManager.updateExperienceGems(delta);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Adjust magnetRange and magnetSpeed to modify gem collection behavior
+ * - Modify collectGem method to change experience collection effects
+ * - Add new experience-related features by extending the update loop
+ * - Implement different experience scaling by modifying the collection logic
+ * 
+ * @class
+ */
+
 import { gameState } from '../core/gameState.js';
 
 export class ExperienceManager {

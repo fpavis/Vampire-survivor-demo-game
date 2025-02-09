@@ -1,3 +1,35 @@
+/**
+ * @file InputManager.js
+ * @description Handles all user input including keyboard, mouse, and touch controls.
+ * Manages player movement, weapon switching, and provides cross-platform input support.
+ * 
+ * @module managers/InputManager
+ * @requires core/gameState
+ * 
+ * Key Features:
+ * - Handles keyboard WASD/Arrow key movement
+ * - Processes mouse/touch input for movement
+ * - Manages weapon switching hotkeys
+ * - Supports virtual joystick for mobile
+ * - Provides normalized movement vectors
+ * 
+ * Usage:
+ * ```js
+ * const inputManager = new InputManager(app, worldContainer);
+ * inputManager.handleWeaponSwitch(callback);
+ * const movement = inputManager.getMovementDirection(delta, playerSpeed, joystick);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new input methods by extending bindEvents
+ * - Modify control schemes in getMovementDirection
+ * - Add new hotkeys in handleWeaponSwitch
+ * - Implement custom touch controls
+ * - Add gamepad support
+ * 
+ * @class
+ */
+
 import { gameState } from '../core/gameState.js';
 
 export class InputManager {
@@ -49,6 +81,8 @@ export class InputManager {
     }
 
     getMovementDirection(delta, playerSpeed, joystick = null) {
+        if (!gameState.player) return { x: 0, y: 0 };
+
         let dx = 0;
         let dy = 0;
         const speed = playerSpeed * delta;
@@ -82,13 +116,22 @@ export class InputManager {
         // Normalize movement if using keyboard or mouse (not joystick)
         if ((dx !== 0 || dy !== 0) && (!joystick || !joystick.active)) {
             const length = Math.sqrt(dx * dx + dy * dy);
-            dx = dx / length;
-            dy = dy / length;
+            if (length > 0) { // Only normalize if length is greater than 0
+                dx = dx / length;
+                dy = dy / length;
+            } else {
+                dx = 0;
+                dy = 0;
+            }
         }
 
+        // Ensure final values are valid numbers
+        const finalX = dx * speed;
+        const finalY = dy * speed;
+        
         return {
-            x: dx * speed,
-            y: dy * speed
+            x: isNaN(finalX) ? 0 : finalX,
+            y: isNaN(finalY) ? 0 : finalY
         };
     }
 } 

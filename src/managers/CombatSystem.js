@@ -1,3 +1,34 @@
+/**
+ * @file CombatSystem.js
+ * @description Manages all combat-related functionality including weapon firing, projectile management,
+ * and target acquisition. This system coordinates attacks between the player and enemies.
+ * 
+ * @module managers/CombatSystem
+ * @requires core/gameState
+ * @requires entities/Entity
+ * 
+ * Key Features:
+ * - Handles weapon firing mechanics and timing
+ * - Manages projectile creation and movement
+ * - Implements target acquisition logic
+ * - Controls projectile lifecycle and cleanup
+ * 
+ * Usage:
+ * ```js
+ * const combatSystem = new CombatSystem(app, worldContainer);
+ * combatSystem.handleCombat(delta);
+ * combatSystem.updateProjectiles(delta);
+ * ```
+ * 
+ * Modification Guidelines:
+ * - Add new weapon types by extending the createProjectiles method
+ * - Modify targeting behavior in findClosestEnemy
+ * - Implement new projectile effects in updateProjectiles
+ * - Add different combat mechanics by extending handleCombat
+ * 
+ * @class
+ */
+
 import { gameState } from '../core/gameState.js';
 import { EntityManager } from '../entities/Entity.js';
 
@@ -29,13 +60,18 @@ export class CombatSystem {
     createProjectiles(projectiles) {
         projectiles.forEach(projectile => {
             const sprite = new PIXI.Graphics();
-            sprite.beginFill(projectile.color);
-            sprite.drawCircle(0, 0, projectile.size);
-            sprite.endFill();
+            sprite
+                .fill({ color: projectile.color })
+                .circle(0, 0, projectile.size);
+            
             sprite.x = projectile.x;
             sprite.y = projectile.y;
+            sprite.zIndex = 8;  // Above enemies, below player
             
+            // Add to world container
             this.worldContainer.addChild(sprite);
+            
+            // Add to game state
             gameState.bullets.push({
                 sprite,
                 dx: projectile.dx,
@@ -45,6 +81,12 @@ export class CombatSystem {
                 range: projectile.range,
                 distanceTraveled: 0,
                 size: projectile.size || 5
+            });
+            
+            console.log('Projectile created:', {
+                position: { x: sprite.x, y: sprite.y },
+                damage: projectile.damage,
+                parent: sprite.parent === this.worldContainer ? 'worldContainer' : 'unknown'
             });
         });
     }
