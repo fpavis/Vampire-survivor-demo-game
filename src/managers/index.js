@@ -1,48 +1,34 @@
 /**
- * @file index.js
- * @description Managers module exports that provide access to all game management systems.
- * Centralizes access to systems that control different aspects of gameplay.
+ * @file managers/index.js
+ * @description Exports all game manager classes
  * 
- * @module managers
+ * Available Managers:
+ * - InputManager: Handles user input and movement
+ * - UIManager: Manages game UI elements and HUD
+ * - EnemyManager: Controls enemy spawning and behavior
+ * - BulletManager: Handles projectile creation and updates
+ * - EffectsManager: Manages visual effects and particles
+ * - PortalManager: Controls area transitions and portals
+ * - ExperienceManager: Handles experience orbs and leveling
+ * - UpgradeManager: Manages player upgrades and abilities
  * 
- * Key Exports:
- * - CameraManager: Controls viewport and camera movement
- * - CollisionSystem: Handles collision detection and resolution
- * - CombatSystem: Manages combat mechanics and weapons
- * - EffectsManager: Controls visual effects and particles
- * - EnemyManager: Handles enemy spawning and behavior
- * - ExperienceManager: Manages XP collection and leveling
- * - InputManager: Processes player input
- * - PortalManager: Controls area transitions
- * - UIManager: Manages game interface
- * - UpgradeManager: Handles player upgrades
+ * Note: Viewport and camera functionality is now handled by ViewportSystem
+ * in the systems directory.
  * 
- * Usage:
- * ```js
- * import {
- *   CameraManager,
- *   CollisionSystem,
- *   EnemyManager,
- *   // ... other managers
- * } from './managers';
+ * Example Usage:
+ * ```javascript
+ * import { InputManager, UIManager } from './managers';
  * 
- * // Initialize managers
- * const camera = new CameraManager(app, worldContainer);
- * const enemies = new EnemyManager(app, worldContainer);
+ * const input = new InputManager(app);
+ * const ui = new UIManager(app, game);
  * ```
- * 
- * Note: This is a barrel file that consolidates all game management systems.
- * Import from here to get access to all manager functionality.
  */
 
-// Export all manager modules
-export * from './CameraManager.js';
-export * from './CollisionSystem.js';
-export * from './CombatSystem.js';
-export * from './EffectsManager.js';
-export * from './EnemyManager.js';
-export * from './ExperienceManager.js';
 export * from './InputManager.js';
-export * from './PortalManager.js';
 export * from './UIManager.js';
+export * from './EnemyManager.js';
+export * from './BulletManager.js';
+export * from './EffectsManager.js';
+export * from './PortalManager.js';
+export * from './ExperienceManager.js';
 export * from './UpgradeManager.js'; 

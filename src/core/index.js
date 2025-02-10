@@ -31,4 +31,13 @@
 // Export core modules
 export { Game } from './Game.js';
 export { gameState } from './gameState.js';
-export * from './config.js'; 
+export { 
+    GAME_CONFIG,
+    WORLD_CONFIG,
+    ENEMY_TYPES,
+    LEVEL_SCALING,
+    STYLES,
+    SPAWN_CONFIG,
+    COLLISION_CONFIG,
+    LEVELS
+} from './config.js'; 

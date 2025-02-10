@@ -46,161 +46,111 @@ export class UIManager {
      * @param {Game} game - The main game instance
      */
     constructor(app, game) {
+        if (!app || !game) {
+            throw new Error('UIManager: Required dependencies not provided');
+        }
+
         this.app = app;
         this.game = game;
-        this.elements = {};
-        this.debugPanel = null;
-        this.joystick = null;
-        this.container = null;  // Will be set via setContainer
         
-        // Create separate containers for different UI states
-        this.gameplayUI = new PIXI.Container();
-        this.startScreenUI = new PIXI.Container();
-        this.gameOverUI = new PIXI.Container();
-        this.levelUpUI = new PIXI.Container();
+        // Create main UI container
+        this.container = new PIXI.Container();
+        this.container.label = 'UIContainer';
+        this.container.sortableChildren = true;
+        this.app.stage.addChild(this.container);
         
-        // Create mouse coordinate overlay
-        this.mouseCoordOverlay = null;
-        
-        // Debug flag
-        this.debug = false;
-    }
+        // Create layer containers with proper hierarchy
+        this.layers = {
+            background: new PIXI.Container(),
+            gameplay: new PIXI.Container(),
+            startScreen: new PIXI.Container(),
+            gameOver: new PIXI.Container(),
+            levelUp: new PIXI.Container(),
+            debug: new PIXI.Container(),
+            notifications: new PIXI.Container()
+        };
 
-    setContainer(container) {
-        this.container = container;
+        // Configure layers
+        Object.entries(this.layers).forEach(([name, layer], index) => {
+            layer.label = `UI-${name}`;
+            layer.sortableChildren = true;
+            layer.zIndex = index * 10; // Ensure proper layering
+            this.container.addChild(layer);
+        });
+
+        // Initialize collections
+        this.elements = new Map();
+        this.sharedGraphics = new Map();
         
-        // Add containers to main UI container now that it's set
-        this.container.addChild(this.gameplayUI);
-        this.container.addChild(this.startScreenUI);
-        this.container.addChild(this.gameOverUI);
-        this.container.addChild(this.levelUpUI);
+        // Create shared graphics for reuse
+        this.createSharedGraphics();
         
+        // Initialize UI state
+        this.state = {
+            isDebugVisible: false,
+            isCoordOverlayVisible: false,
+            isPaused: false
+        };
+
         // Initialize UI
         this.initializeUI();
-        this.gameplayUI.visible = false;
         
         // Setup event listeners
         this.setupEventListeners();
         
-        // Initialize mouse coordinate overlay
-        this.initializeMouseCoordOverlay();
-        
-        console.log('UI container set and initialized:', {
-            container: this.container ? 'set' : 'not set',
-            children: this.container.children.length
-        });
+        if (gameState.debug) {
+            console.log('UIManager initialized:', {
+                container: this.container ? 'created' : 'failed',
+                layers: Object.keys(this.layers),
+                elements: this.elements.size
+            });
+        }
+    }
+
+    /**
+     * Create shared graphics resources
+     * @private
+     */
+    createSharedGraphics() {
+        // Panel backgrounds
+        this.sharedGraphics.set('panelBg', new PIXI.Graphics()
+            .fill({ color: 0x000000, alpha: 0.7 })
+            .roundRect(0, 0, 1, 1, 10)); // Unit rectangle for scaling
+
+        // Progress bars
+        this.sharedGraphics.set('progressBar', new PIXI.Graphics()
+            .fill({ color: 0xFFFFFF })
+            .roundRect(0, 0, 1, 1, 5)); // Unit rectangle for scaling
+
+        // Buttons
+        this.sharedGraphics.set('button', new PIXI.Graphics()
+            .fill({ color: 0x333333 })
+            .stroke({ width: 2, color: 0x666666 })
+            .roundRect(0, 0, 1, 1, 10)); // Unit rectangle for scaling
     }
 
     /**
      * Initialize all core UI components
+     * @private
      */
     initializeUI() {
-        if (!this.container) {
-            console.error('UI container not set');
-            return;
-        }
-
-        // Create UI elements
-        this.createUIElements();
-        
-        // Set up event listeners
-        this.setupEventListeners();
-        
-        // Create debug panel if needed
-        if (gameState.debug) {
-            this.createDebugPanel();
-        }
-        
-        // Check for mobile device and create joystick if needed
-        this.checkMobileDevice();
-        
-        console.log('UI initialized:', {
-            container: this.container ? 'set' : 'not set',
-            elements: Object.keys(this.elements),
-            debug: !!this.debugPanel,
-            joystick: !!this.joystick
-        });
-    }
-
-    /**
-     * Setup global event listeners
-     */
-    setupEventListeners() {
-        // Add keyboard shortcuts
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.toggleSettings();
-            } else if (e.key === 'p' || e.key === 'P') {
-                this.toggleDebugView();
-            } else if (e.key === 'c' || e.key === 'C') {
-                this.toggleCoordinateOverlay();
-            }
-        });
-        
-        // Handle window resize
-        window.addEventListener('resize', () => this.handleResize());
-    }
-
-    /**
-     * Handle window resize events
-     */
-    handleResize() {
-        const padding = 20;
-        
-        // Position gameplay UI elements
-        this.gameplayUI.position.set(padding, padding);
-
-        // Position start screen UI
-        if (this.startScreenUI.visible) {
-            const centerX = this.app.screen.width / 2;
-            const centerY = this.app.screen.height / 2;
-            
-            // Center the start screen container
-            this.startScreenUI.position.set(centerX, centerY);
-            
-            // Update background to cover the entire screen
-            const background = this.startScreenUI.getChildByLabel('background');
-            if (background) {
-                background.clear();
-                background
-                    .fill({ color: 0x000000, alpha: 0.5 })
-                    .rect(0, 0, this.app.screen.width, this.app.screen.height);
-                background.position.set(-centerX, -centerY);
-            }
-        }
-
-        // Position debug panel if it exists
-        if (this.debugPanel) {
-            this.debugPanel.position.set(
-                this.app.screen.width - this.debugPanel.width - padding,
-                padding
-            );
-        }
-    }
-
-    /**
-     * Create main UI elements (health, weapon, level, etc.)
-     */
-    createUIElements() {
-        // Create main UI panel background
-        const panel = new PIXI.Graphics();
-        panel
-            .fill({ color: 0x000000, alpha: 0.7 })
-            .roundRect(5, 5, 250, 200, 10);
-        panel.zIndex = 1;
-        this.container.addChild(panel);
-        this.elements.panel = panel;
-
-        // Define base text style
+        // Create base text style
         const textStyle = this.createBaseTextStyle();
 
-        // Create and position all UI elements
-        this.createUILayout(textStyle);
+        // Create UI elements
+        this.createUIElements(textStyle);
+        
+        // Initially hide gameplay UI
+        this.layers.gameplay.visible = false;
+        
+        // Position all UI elements
+        this.handleResize();
     }
 
     /**
      * Create base text style for UI elements
      * @returns {Object} PIXI.TextStyle configuration
+     * @private
      */
     createBaseTextStyle() {
         return {
@@ -213,6 +163,103 @@ export class UIManager {
                 alignment: 0
             }
         };
+    }
+
+    /**
+     * Setup global event listeners
+     * @private
+     */
+    setupEventListeners() {
+        // Add keyboard shortcuts
+        window.addEventListener('keydown', this.handleKeyPress.bind(this));
+        
+        // Handle window resize
+        window.addEventListener('resize', this.handleResize.bind(this));
+    }
+
+    /**
+     * Handle keyboard events
+     * @param {KeyboardEvent} e - Keyboard event
+     * @private
+     */
+    handleKeyPress(e) {
+        switch (e.key.toLowerCase()) {
+            case 'escape':
+                this.toggleSettings();
+                break;
+            case 'p':
+                this.toggleDebugView();
+                break;
+            case 'c':
+                this.toggleCoordinateOverlay();
+                break;
+        }
+    }
+
+    /**
+     * Handle window resize events
+     * @private
+     */
+    handleResize() {
+        const width = this.app.screen.width;
+        const height = this.app.screen.height;
+        const padding = 20;
+
+        // Update container bounds
+        this.container.width = width;
+        this.container.height = height;
+
+        // Update each layer
+        Object.values(this.layers).forEach(layer => {
+            layer.width = width;
+            layer.height = height;
+        });
+
+        // Update UI elements positions
+        this.updateUIPositions(width, height, padding);
+    }
+
+    /**
+     * Update UI element positions after resize
+     * @param {number} width - Screen width
+     * @param {number} height - Screen height
+     * @param {number} padding - Padding from edges
+     * @private
+     */
+    updateUIPositions(width, height, padding) {
+        // Update gameplay UI
+        if (this.elements.has('gameplayPanel')) {
+            const panel = this.elements.get('gameplayPanel');
+            panel.position.set(padding, padding);
+        }
+
+        // Update debug panel
+        if (this.elements.has('debugPanel')) {
+            const panel = this.elements.get('debugPanel');
+            panel.position.set(width - panel.width - padding, padding);
+        }
+
+        // Update notifications
+        if (this.layers.notifications) {
+            this.layers.notifications.position.set(width / 2, height / 4);
+        }
+    }
+
+    /**
+     * Create main UI elements (health, weapon, level, etc.)
+     */
+    createUIElements(textStyle) {
+        // Create main UI panel background
+        const panel = new PIXI.Graphics();
+        panel
+            .fill({ color: 0x000000, alpha: 0.7 })
+            .roundRect(5, 5, 250, 200, 10);
+        panel.zIndex = 1;
+        this.container.addChild(panel);
+        this.elements.panel = panel;
+
+        // Create and position all UI elements
+        this.createUILayout(textStyle);
     }
 
     /**
@@ -236,38 +283,38 @@ export class UIManager {
 
         // Create and add each section to gameplayUI
         const healthSection = this.createHealthSection(yPos, textStyle);
-        this.gameplayUI.addChild(healthSection);
+        this.layers.gameplay.addChild(healthSection);
         this.elements.healthText = this.healthText;
         this.elements.healthBar = this.healthBar;
         yPos += spacing;
 
         const weaponSection = this.createWeaponSection(yPos, textStyle);
-        this.gameplayUI.addChild(weaponSection);
+        this.layers.gameplay.addChild(weaponSection);
         this.elements.weaponText = this.weaponText;
         yPos += spacing;
 
         const levelSection = this.createLevelSection(yPos, textStyle);
-        this.gameplayUI.addChild(levelSection);
+        this.layers.gameplay.addChild(levelSection);
         this.elements.levelText = this.levelText;
         yPos += spacing;
 
         const experienceSection = this.createExperienceSection(yPos, textStyle);
-        this.gameplayUI.addChild(experienceSection);
+        this.layers.gameplay.addChild(experienceSection);
         this.elements.experienceText = this.expText;
         this.elements.xpBar = this.expBar;
         yPos += spacing;
 
         const scoreSection = this.createScoreSection(yPos, textStyle);
-        this.gameplayUI.addChild(scoreSection);
+        this.layers.gameplay.addChild(scoreSection);
         this.elements.scoreText = this.scoreText;
         yPos += spacing;
 
         const statsSection = this.createStatsSection(yPos, textStyle);
-        this.gameplayUI.addChild(statsSection);
+        this.layers.gameplay.addChild(statsSection);
         this.elements.statsText = this.statsText;
 
         // Initially hide the gameplay UI
-        this.gameplayUI.visible = false;
+        this.layers.gameplay.visible = false;
 
         // Position all UI elements
         this.handleResize();
@@ -1652,9 +1699,9 @@ export class UIManager {
         console.log('Showing start screen');
         
         // Hide other UI elements
-        this.gameplayUI.visible = false;
-        this.gameOverUI.visible = false;
-        this.levelUpUI.visible = false;
+        this.layers.gameplay.visible = false;
+        this.layers.gameOver.visible = false;
+        this.layers.levelUp.visible = false;
         
         // Create container for start screen
         const startScreen = new PIXI.Container();
@@ -1739,9 +1786,9 @@ export class UIManager {
 
     showGameplayUI() {
         console.log('Showing gameplay UI');
-        this.gameplayUI.visible = true;
-        this.gameOverUI.visible = false;
-        this.levelUpUI.visible = false;
+        this.layers.gameplay.visible = true;
+        this.layers.gameOver.visible = false;
+        this.layers.levelUp.visible = false;
     }
 
     initializeMouseCoordOverlay() {
@@ -1781,13 +1828,14 @@ export class UIManager {
         const viewportX = Math.round(event.global.x);
         const viewportY = Math.round(event.global.y);
 
-        // Calculate world coordinates using CameraManager
-        const worldPos = this.game.cameraManager.screenToWorld(viewportX, viewportY);
+        // Calculate world coordinates using ViewportSystem
+        const worldPos = this.game.viewportSystem.screenToWorld(viewportX, viewportY);
         const worldX = Math.round(worldPos.x);
         const worldY = Math.round(worldPos.y);
 
-        // Update text content
-        this.coordText.text = `Viewport: (${viewportX}, ${viewportY})\nWorld: (${worldX}, ${worldY})`;
+        // Update coordinate display text
+        this.coordText.text = `Viewport: (${Math.round(viewportX)}, ${Math.round(viewportY)})
+World: (${worldX}, ${worldY})`;
         
         // Position text next to cursor with offset
         this.mouseCoordOverlay.position.set(

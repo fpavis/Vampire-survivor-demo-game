@@ -1,7 +1,7 @@
 /**
  * @file Weapon.js
  * @description Manages weapon systems, including different weapon types, firing patterns,
- * projectile creation, and weapon upgrades. Controls combat mechanics and damage dealing.
+ * and projectile creation. Controls combat mechanics and damage dealing.
  * 
  * @module weapons/Weapon
  * @requires core/gameState
@@ -45,15 +45,55 @@
 import { gameState } from '../core/gameState.js';
 import { INITIAL_STATE } from '../core/config.js';
 
+// Projectile type definitions
+export const PROJECTILE_TYPES = {
+    BASIC: {
+        name: 'Basic',
+        textureKey: 'bullet',
+        glowTextureKey: 'bulletGlow',
+        size: 5,
+        glowScale: 1.5,
+        glowColor: 0xffdd00,
+        zIndex: 8
+    },
+    LASER: {
+        name: 'Laser',
+        textureKey: 'laserBeam',
+        glowTextureKey: 'laserGlow',
+        size: 6,
+        glowScale: 2.0,
+        glowColor: 0x00ffff,
+        zIndex: 9,
+        trail: true
+    },
+    SHOTGUN_PELLET: {
+        name: 'Shotgun Pellet',
+        textureKey: 'pellet',
+        glowTextureKey: 'pelletGlow',
+        size: 4,
+        glowScale: 1.2,
+        glowColor: 0xff8800,
+        zIndex: 8
+    },
+    MACHINE_GUN: {
+        name: 'Machine Gun',
+        textureKey: 'bullet',
+        glowTextureKey: 'bulletGlow',
+        size: 3,
+        glowScale: 1.3,
+        glowColor: 0xff0000,
+        zIndex: 8
+    }
+};
+
 // Weapon configurations
-const WEAPON_CONFIGS = {
+export const WEAPON_CONFIGS = {
     PISTOL: {
         name: 'Pistol',
         damage: 20,
         fireRate: 500,
         projectileSpeed: 8,
-        projectileSize: 5,
-        color: 0xFFFF00,
+        projectileType: 'BASIC',
         pattern: 'single',
         range: 500,
         piercing: false
@@ -63,8 +103,7 @@ const WEAPON_CONFIGS = {
         damage: 15,
         fireRate: 800,
         projectileSpeed: 7,
-        projectileSize: 4,
-        color: 0xFF8800,
+        projectileType: 'SHOTGUN_PELLET',
         pattern: 'spread',
         range: 300,
         piercing: false
@@ -74,8 +113,7 @@ const WEAPON_CONFIGS = {
         damage: 25,
         fireRate: 1000,
         projectileSpeed: 12,
-        projectileSize: 6,
-        color: 0x00FFFF,
+        projectileType: 'LASER',
         pattern: 'beam',
         range: 600,
         piercing: true
@@ -85,8 +123,7 @@ const WEAPON_CONFIGS = {
         damage: 10,
         fireRate: 200,
         projectileSpeed: 10,
-        projectileSize: 3,
-        color: 0xFF0000,
+        projectileType: 'MACHINE_GUN',
         pattern: 'rapid',
         range: 400,
         piercing: false
@@ -183,6 +220,13 @@ export class Weapon {
         Object.keys(WEAPON_UPGRADES).forEach(upgrade => {
             this.upgrades.set(upgrade, 0);
         });
+
+        // Get projectile type configuration
+        this.projectileConfig = PROJECTILE_TYPES[this.projectileType];
+        if (!this.projectileConfig) {
+            console.error(`Invalid projectile type: ${this.projectileType}`);
+            this.projectileConfig = PROJECTILE_TYPES.BASIC;
+        }
     }
 
     canFire(currentTime) {
@@ -191,37 +235,64 @@ export class Weapon {
         return currentTime - this.lastFireTime >= actualFireRate;
     }
 
-    fire(origin, target, currentTime) {
-        if (!this.canFire(currentTime)) return [];
-
-        this.lastFireTime = currentTime;
-        const pattern = WEAPON_PATTERNS[this.pattern];
-        if (!pattern) return [];
-
-        const projectiles = pattern(this, Math.atan2(target.y - origin.y, target.x - origin.x));
-        return projectiles.map(proj => this.createProjectile(origin, proj));
-    }
-
     createProjectile(origin, projConfig) {
         const speed = projConfig.speed || this.projectileSpeed;
         // Add random damage variation (±12%)
-        const damageVariation = 0.88 + (Math.random() * 0.24); // Random between 0.88 and 1.12
+        const damageVariation = 0.88 + (Math.random() * 0.24);
         const baseDamage = projConfig.damage * (gameState.attackDamage / INITIAL_STATE.attackDamage);
         const finalDamage = Math.round(baseDamage * damageVariation);
 
+        // Get projectile type configuration
+        const projectileConfig = PROJECTILE_TYPES[this.projectileType];
+        if (!projectileConfig) {
+            console.warn(`Invalid projectile type: ${this.projectileType}, using BASIC`);
+            projectileConfig = PROJECTILE_TYPES.BASIC;
+        }
+
+        // Create bullet configuration that matches BulletManager's expectations
         return {
             x: origin.x,
             y: origin.y,
             dx: Math.cos(projConfig.angle) * speed,
             dy: Math.sin(projConfig.angle) * speed,
             damage: finalDamage,
-            size: this.projectileSize,
-            color: this.color,
             piercing: projConfig.piercing || false,
             range: projConfig.range || this.range,
-            distanceTraveled: 0,
-            active: true
+            pattern: this.pattern,
+            weaponType: this.name,
+            // Include all projectile type visual properties
+            ...projectileConfig,
+            // Allow weapon upgrades to modify projectile appearance
+            size: projectileConfig.size * (this.projectileSize || 1),
+            glowScale: projectileConfig.glowScale * (this.projectileSize || 1)
         };
+    }
+
+    /**
+     * Creates projectiles based on weapon pattern and current state
+     * @param {Object} origin - Starting position {x, y}
+     * @param {Object} target - Target direction {x, y}
+     * @param {number} currentTime - Current game time
+     * @returns {Array} Array of projectile configurations
+     */
+    fire(origin, target, currentTime) {
+        if (!this.canFire(currentTime)) return [];
+
+        this.lastFireTime = currentTime;
+
+        // Calculate base angle from origin to target
+        const angle = Math.atan2(target.y, target.x);
+        
+        // Get pattern configuration
+        const pattern = WEAPON_PATTERNS[this.pattern];
+        if (!pattern) {
+            console.warn(`Invalid pattern: ${this.pattern}, using single`);
+            return [this.createProjectile(origin, { angle, ...this })];
+        }
+
+        // Create projectiles based on pattern
+        const projectileConfigs = pattern(this, angle);
+        return projectileConfigs.map(config => this.createProjectile(origin, config));
     }
 
     upgrade(type) {

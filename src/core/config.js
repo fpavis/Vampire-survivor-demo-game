@@ -81,7 +81,17 @@ export const GAME_CONFIG = Object.freeze({
     height: window.innerHeight,
     backgroundColor: 0x1a1a1a,
     antialias: true,
-    resizeTo: window
+    resizeTo: window,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+    preference: 'webgl',  // or 'webgpu' if targeting modern browsers
+    hello: true,  // enables PixiJS welcome message for debugging
+    defaultRenderOptions: {
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+        antialias: true,
+        backgroundAlpha: 1
+    }
 });
 
 export const SPAWN_CONFIG = Object.freeze({
@@ -128,7 +138,8 @@ export const INITIAL_STATE = Object.freeze({
     attackDamage: INITIAL_PLAYER_STATS.ATTACK_DAMAGE,
     healthRegen: 0,
     score: 0,
-    XP_TO_LEVEL: INITIAL_PLAYER_STATS.XP_TO_LEVEL
+    XP_TO_LEVEL: INITIAL_PLAYER_STATS.XP_TO_LEVEL,
+    debug: true
 });
 
 // Level scaling factors
@@ -230,107 +241,7 @@ export const COLLISION_CONFIG = Object.freeze({
     impulse: Object.freeze(COLLISION_SETTINGS.IMPULSE)
 });
 
-// Area/Level class to manage different zones in the game
-export class Level {
-    constructor(config) {
-        this.id = config.id;
-        this.name = config.name;
-        this.description = config.description;
-        
-        // Area dimensions and position
-        this.x = config.x || 0;
-        this.y = config.y || 0;
-        this.width = config.width || WORLD_CONFIG.width;
-        this.height = config.height || WORLD_CONFIG.height;
-        
-        // Area visual theme
-        this.backgroundColor = config.backgroundColor || STYLES.colors.background;
-        this.borderColor = config.borderColor || 0x333333;
-        
-        // Enemy spawn configuration
-        this.spawnRate = config.spawnRate || BASE_SPAWN_RATE;
-        this.maxEnemies = config.maxEnemies || BASE_MAX_ENEMIES;
-        this.eliteChance = config.eliteChance || BASE_ELITE_CHANCE;
-        
-        // Enemy type ratios for this area
-        this.enemyRatios = config.enemyRatios || { ...ENEMY_TYPE_RATIOS };
-        
-        // Area-specific enemy modifiers
-        this.enemyModifiers = {
-            health: config.enemyModifiers?.health || 1,
-            speed: config.enemyModifiers?.speed || 1,
-            damage: config.enemyModifiers?.damage || 1,
-            experience: config.enemyModifiers?.experience || 1
-        };
-        
-        // Portal/Connection configuration
-        this.connections = config.connections || [];
-        
-        // Area completion requirements
-        this.requirements = config.requirements || null;
-        
-        // Special area features
-        this.features = config.features || [];
-        
-        // Area state - set isUnlocked based on requirements
-        this.isUnlocked = config.id === 'starting_grounds' || config.isUnlocked === true;
-        this.isCompleted = false;
-    }
-
-    // Get spawn configuration for this area
-    getSpawnConfig() {
-        return {
-            baseRate: this.spawnRate,
-            maxEnemies: this.maxEnemies,
-            typeRatios: this.enemyRatios,
-            eliteChance: this.eliteChance,
-            eliteModifiers: ELITE_MODIFIERS,
-            spawnDistance: BASE_SPAWN_DISTANCE
-        };
-    }
-
-    // Apply area-specific modifiers to an enemy
-    modifyEnemy(enemy) {
-        enemy.health *= this.enemyModifiers.health;
-        enemy.maxHealth = enemy.health;
-        enemy.speed *= this.enemyModifiers.speed;
-        enemy.experienceValue = Math.floor(enemy.experienceValue * this.enemyModifiers.experience);
-        return enemy;
-    }
-
-    // Check if player can enter this area
-    canEnter(gameState) {
-        if (!this.requirements) return true;
-        
-        return this.requirements.every(req => {
-            switch (req.type) {
-                case 'level':
-                    return gameState.level >= req.value;
-                case 'score':
-                    return gameState.score >= req.value;
-                case 'kill_count':
-                    return gameState.killCount >= req.value;
-                default:
-                    return true;
-            }
-        });
-    }
-
-    // Create a portal to another area
-    createPortal(targetAreaId, x, y) {
-        return {
-            x,
-            y,
-            targetAreaId,
-            radius: 40,
-            color: 0x00ffff,
-            pulseSpeed: 0.02,
-            pulseRange: 0.2
-        };
-    }
-}
-
-// Define area configurations
+// Area/Level configurations
 export const LEVEL_CONFIGS = [
     {
         id: 'starting_grounds',
@@ -338,10 +249,12 @@ export const LEVEL_CONFIGS = [
         description: "A safe area to learn the basics",
         x: 0,
         y: 0,
+        width: 2000,
+        height: 2000,
         backgroundColor: 0x1a1a1a,
         enemyRatios: { BASIC: 1 },
         maxEnemies: 20,
-        spawnRate: 0.05,  // Increased spawn rate for better testing
+        spawnRate: 0.05,
         eliteChance: 0,
         enemyModifiers: {
             health: 0.7,
@@ -355,8 +268,10 @@ export const LEVEL_CONFIGS = [
         id: 'forest_edge',
         name: "Forest Edge",
         description: "The outskirts of a mysterious forest",
-        x: WORLD_CONFIG.width,
+        x: 2000,
         y: 0,
+        width: 2000,
+        height: 2000,
         backgroundColor: 0x1a2f1a,
         enemyRatios: { BASIC: 0.7, FAST: 0.3 },
         maxEnemies: 30,
@@ -374,8 +289,10 @@ export const LEVEL_CONFIGS = [
         id: 'deep_forest',
         name: "Deep Forest",
         description: "Dense forest teeming with stronger enemies",
-        x: WORLD_CONFIG.width * 2,
+        x: 4000,
         y: 0,
+        width: 2000,
+        height: 2000,
         backgroundColor: 0x152815,
         enemyRatios: { BASIC: 0.5, FAST: 0.3, TANK: 0.2 },
         maxEnemies: 40,
@@ -393,8 +310,10 @@ export const LEVEL_CONFIGS = [
         id: 'ancient_ruins',
         name: "Ancient Ruins",
         description: "Mysterious ruins filled with powerful enemies",
-        x: WORLD_CONFIG.width * 2,
-        y: WORLD_CONFIG.height,
+        x: 4000,
+        y: 2000,
+        width: 2000,
+        height: 2000,
         backgroundColor: 0x2a2a3a,
         enemyRatios: { BASIC: 0.4, FAST: 0.3, TANK: 0.3 },
         maxEnemies: 45,
@@ -410,5 +329,17 @@ export const LEVEL_CONFIGS = [
     }
 ];
 
-// Create area instances
-export const LEVELS = LEVEL_CONFIGS.map(config => new Level(config)); 
+// Export level configurations directly
+export { LEVEL_CONFIGS as LEVELS };
+
+// Layer configuration for rendering order
+export const LAYER_CONFIG = {
+    BACKGROUND: 'background',
+    GRID: 'grid',
+    GAME_OBJECTS: 'gameObjects',
+    ENEMIES: 'enemies',
+    PLAYER: 'player',
+    BULLETS: 'bullets',
+    EFFECTS: 'effects',
+    UI: 'ui'
+}; 

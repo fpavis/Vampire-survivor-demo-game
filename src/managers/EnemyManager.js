@@ -5,7 +5,6 @@
  * 
  * @module managers/EnemyManager
  * @requires core/gameState
- * @requires entities/Entity
  * @requires core/config
  * 
  * Key Features:
@@ -32,9 +31,108 @@
  * @class
  */
 
+import * as PIXI from 'pixi.js';
 import { gameState } from '../core/gameState.js';
-import { Enemy } from '../entities/Entity.js';
-import { LEVEL_SCALING } from '../core/config.js';
+import { ENEMY_TYPES, LEVEL_SCALING } from '../core/config.js';
+
+/**
+ * Enemy entity with type-based configuration and health management
+ * @extends PIXI.Container
+ */
+class Enemy extends PIXI.Container {
+    constructor(type = 'BASIC', x = 0, y = 0) {
+        super();
+        
+        const config = ENEMY_TYPES[type];
+        if (!config) return;
+        
+        // Core setup
+        this.zIndex = 5;
+        this.eventMode = 'none';
+        this.type = type;
+        
+        // Create sprite using texture cache
+        const texture = PIXI.Assets.get(config.texture || 'basicEnemy');
+        this.sprite = texture ? 
+            new PIXI.Sprite(texture) : 
+            this.createFallbackSprite(config);
+            
+        // Optimize sprite properties
+        this.sprite.anchor.set(0.5);
+        this.addChild(this.sprite);
+        
+        // Setup health bar
+        this.setupHealthBar();
+        
+        // Game properties
+        this.health = config.health || 100;
+        this.maxHealth = this.health;
+        this.speed = config.speed || 2;
+        this.experienceValue = config.experience || 10;
+        
+        // Set position and hitArea
+        this.position.set(x, y);
+        this.hitArea = new PIXI.Circle(0, 0, config.size || 20);
+    }
+    
+    createFallbackSprite(config) {
+        const graphics = new PIXI.Graphics()
+            .fill({ color: config.color || 0xFF0000 })
+            .circle(0, 0, config.size || 20);
+        return graphics;
+    }
+    
+    setupHealthBar() {
+        this.healthBar = new PIXI.Graphics();
+        this.healthBar.y = -30;
+        this.addChild(this.healthBar);
+        this.updateHealthBar();
+    }
+    
+    updateHealthBar() {
+        const width = 40;
+        const height = 4;
+        const healthPercent = this.health / this.maxHealth;
+        
+        this.healthBar.clear()
+            .fill({ color: 0x000000, alpha: 0.5 })
+            .rect(-width/2, 0, width, height)
+            .fill({ color: healthPercent < 0.3 ? 0xFF0000 : 0x00FF00 })
+            .rect(-width/2, 0, width * healthPercent, height);
+    }
+    
+    takeDamage(amount) {
+        this.health = Math.max(0, this.health - amount);
+        this.updateHealthBar();
+        
+        PIXI.Tween.to(this, { alpha: 0.5 }, 100)
+            .yoyo(true)
+            .start();
+            
+        return this.health <= 0;
+    }
+
+    makeElite() {
+        this.isElite = true;
+        this.health *= 1.5;
+        this.maxHealth = this.health;
+        this.speed *= 1.2;
+        this.experienceValue *= 2;
+        
+        // Visual indication of elite status
+        this.sprite.tint = 0xFFD700; // Gold tint
+        this.scale.set(1.2); // 20% larger
+        
+        this.updateHealthBar();
+    }
+
+    getWorldPosition() {
+        return {
+            x: this.position.x,
+            y: this.position.y
+        };
+    }
+}
 
 export class EnemyManager {
     constructor(app, viewport, worldContainer, entityLayer) {
@@ -98,6 +196,15 @@ export class EnemyManager {
             return;
         }
 
+        // Get player's position directly
+        const playerPos = gameState.player.getWorldPosition();
+        if (!Number.isFinite(playerPos.x) || !Number.isFinite(playerPos.y)) {
+            console.error('Invalid player position:', playerPos);
+            // Use center of area as fallback
+            playerPos.x = currentArea.width / 2;
+            playerPos.y = currentArea.height / 2;
+        }
+
         // Determine enemy type
         const roll = Math.random();
         let type = 'BASIC';
@@ -110,45 +217,47 @@ export class EnemyManager {
                 break;
             }
         }
-
-        // Get player's world position
-        const playerWorldPos = this.viewport.toWorld(gameState.player.position);
         
         // Calculate spawn position with validation
         const angle = Math.random() * Math.PI * 2;
         const spawnDistance = Math.max(300, spawnConfig.spawnDistance || 600);
         
         // Calculate spawn position in world coordinates
-        let spawnX = playerWorldPos.x + Math.cos(angle) * spawnDistance;
-        let spawnY = playerWorldPos.y + Math.sin(angle) * spawnDistance;
+        let spawnX = playerPos.x + Math.cos(angle) * spawnDistance;
+        let spawnY = playerPos.y + Math.sin(angle) * spawnDistance;
+        
+        // Validate calculated positions
+        if (!Number.isFinite(spawnX) || !Number.isFinite(spawnY)) {
+            console.error('Invalid initial spawn calculation:', {
+                playerPos,
+                angle,
+                spawnDistance,
+                calculated: { x: spawnX, y: spawnY }
+            });
+            // Use fallback position at area edge
+            spawnX = Math.random() * currentArea.width;
+            spawnY = Math.random() * currentArea.height;
+        }
         
         // Clamp spawn position to area bounds with padding
         const padding = 50;
         spawnX = Math.max(padding, Math.min(currentArea.width - padding, spawnX));
         spawnY = Math.max(padding, Math.min(currentArea.height - padding, spawnY));
 
-        // Validate final spawn position
-        if (!Number.isFinite(spawnX) || !Number.isFinite(spawnY)) {
-            console.error('Invalid spawn position calculated:', { spawnX, spawnY });
-            return;
-        }
-
-        // Create enemy
-        const enemy = new Enemy(type, spawnX, spawnY, this.app);
-        
-        // Log spawn details for debugging
         if (gameState.debug) {
-            const screenPos = this.viewport.toScreen(new PIXI.Point(spawnX, spawnY));
-            console.log('Enemy spawn details:', {
-                world: { x: spawnX, y: spawnY },
-                screen: screenPos,
-                playerWorld: playerWorldPos,
-                distance: spawnDistance,
-                angle: angle,
-                type: type
+            console.log('Spawn position calculated:', {
+                player: playerPos,
+                spawn: { x: spawnX, y: spawnY },
+                area: {
+                    width: currentArea.width,
+                    height: currentArea.height
+                }
             });
         }
 
+        // Create enemy
+        const enemy = new Enemy(type, spawnX, spawnY);
+        
         // Apply level scaling
         this.scaleEnemyWithLevel(enemy, Math.max(0, gameState.level - 1));
 
@@ -165,8 +274,7 @@ export class EnemyManager {
         if (gameState.debug) {
             console.log('Enemy spawned:', {
                 type,
-                world: { x: enemy.x, y: enemy.y },
-                screen: this.viewport.toScreen(enemy.position),
+                position: { x: enemy.x, y: enemy.y },
                 health: enemy.health,
                 speed: enemy.speed,
                 isElite: enemy.isElite,
