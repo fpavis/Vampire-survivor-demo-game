@@ -556,7 +556,6 @@ class Game {
     }
 
 checkCollisions() {
-    console.error("***** CHECKCOLLISIONS FUNCTION ENTERED *****");
     // Helper function for AABB collision detection
     function checkAABBCollision(rect1, rect2) {
         return rect1.x < rect2.x + rect2.width &&
@@ -572,6 +571,7 @@ checkCollisions() {
         if (!bullet || !bullet.sprite || bullet.sprite.destroyed || !bullet.sprite.transform) {
             continue;
         }
+
         console.log("Bullet for collision:", bullet.sprite); // Existing log
         const bulletBounds = bullet.sprite.getBounds();
         console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds))); // Existing log
@@ -589,6 +589,7 @@ checkCollisions() {
                 console.warn('Unknown or invalid enemy type in bullet-enemy collision:', enemy.type, enemy);
                 continue;
             }
+
             console.log("Enemy for collision (vs bullet):", enemy); // Modified log
             const enemyBounds = enemy.getBounds();
             console.log("Enemy Bounds for Bullet Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
@@ -596,6 +597,7 @@ checkCollisions() {
             if (checkAABBCollision(bulletBounds, enemyBounds)) {
                 console.log("Bullet-Enemy AABB collision DETECTED! Bullet:", bullet.sprite.x, bullet.sprite.y, "Enemy:", enemy.x, enemy.y); // Modified log
                 console.log("Processing bullet-enemy collision response..."); // New log
+
                 this.createHitEffect(bullet.sprite.x, bullet.sprite.y); // Effect at bullet position
                 enemy.health -= gameState.attackDamage;
 
@@ -651,6 +653,7 @@ checkCollisions() {
         if (checkAABBCollision(playerBounds, enemyBounds)) {
             console.log("Player-Enemy AABB collision DETECTED! Player:", gameState.player.x, gameState.player.y, "Enemy:", enemy.x, enemy.y); // Modified log
             console.log("Processing player-enemy collision response..."); // New log
+
             gameState.health -= 0.5;
             this.triggerDamageFlash();
             this.ui.updateHealth(gameState.health, gameState.maxHealth);
