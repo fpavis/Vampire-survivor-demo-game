@@ -571,9 +571,11 @@ checkCollisions() {
         if (!bullet || !bullet.sprite || bullet.sprite.destroyed || !bullet.sprite.transform) {
             continue;
         }
-        console.log("Bullet for collision:", bullet.sprite);
+
+        console.log("Bullet for collision:", bullet.sprite); // Existing log
         const bulletBounds = bullet.sprite.getBounds();
-        console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds)));
+        console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds))); // Existing log
+
 
         for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
             const enemy = gameState.enemies[eIndex];
@@ -588,12 +590,15 @@ checkCollisions() {
                 console.warn('Unknown or invalid enemy type in bullet-enemy collision:', enemy.type, enemy);
                 continue;
             }
-            console.log("Enemy for bullet collision:", enemy);
+
+            console.log("Enemy for collision (vs bullet):", enemy); // Modified log
             const enemyBounds = enemy.getBounds();
-            console.log("Enemy Bounds for Bullet Collision:", JSON.parse(JSON.stringify(enemyBounds)));
+            console.log("Enemy Bounds for Bullet Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
 
             if (checkAABBCollision(bulletBounds, enemyBounds)) {
-                console.log("Bullet-Enemy AABB collision DETECTED!");
+                console.log("Bullet-Enemy AABB collision DETECTED! Bullet:", bullet.sprite.x, bullet.sprite.y, "Enemy:", enemy.x, enemy.y); // Modified log
+                console.log("Processing bullet-enemy collision response..."); // New log
+
                 this.createHitEffect(bullet.sprite.x, bullet.sprite.y); // Effect at bullet position
                 enemy.health -= gameState.attackDamage;
 
@@ -639,15 +644,18 @@ checkCollisions() {
             return;
         }
 
-        console.log("Player for collision:", gameState.player);
+
+        console.log("Player for collision:", gameState.player); // Existing log
         const playerBounds = gameState.player.getBounds();
-        console.log("Player Bounds:", JSON.parse(JSON.stringify(playerBounds)));
-        console.log("Enemy for collision:", enemy);
+        console.log("Player Bounds:", JSON.parse(JSON.stringify(playerBounds))); // Existing log
+        console.log("Enemy for collision (vs player):", enemy); // Modified log
         const enemyBounds = enemy.getBounds();
-        console.log("Enemy Bounds for Player Collision:", JSON.parse(JSON.stringify(enemyBounds)));
+        console.log("Enemy Bounds for Player Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
 
         if (checkAABBCollision(playerBounds, enemyBounds)) {
-            console.log("Player-Enemy AABB collision DETECTED!");
+            console.log("Player-Enemy AABB collision DETECTED! Player:", gameState.player.x, gameState.player.y, "Enemy:", enemy.x, enemy.y); // Modified log
+            console.log("Processing player-enemy collision response..."); // New log
+
             gameState.health -= 0.5;
             this.triggerDamageFlash();
             this.ui.updateHealth(gameState.health, gameState.maxHealth);
