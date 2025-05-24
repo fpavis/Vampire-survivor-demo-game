@@ -108,13 +108,13 @@ export class EntityManager {
 
         } else if (typeKey === 'FAST') {
             // Elongated diamond shape
-            enemyBody.path(
+            const points = [
                 0, -size,        // Top point
                 size * 0.6, 0,   // Right point
                 0, size,         // Bottom point
                 -size * 0.6, 0   // Left point
-            );
-            enemyBody.closePath();
+            ];
+            enemyBody.poly(points);
             enemyBody.fill(type.color);
             enemyBody.stroke({width: 1, color: 0xFFFFFF, alpha: 0.5});
         } else { // Default to circle if type not recognized
