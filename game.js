@@ -55,6 +55,7 @@ class Game {
         const oldGrid = this.worldContainer.children.find(child => child.name === 'grid');
         if (oldGrid) {
             this.worldContainer.removeChild(oldGrid);
+            oldGrid.destroy(); // Added this line
         }
 
         const grid = new PIXI.Graphics();
@@ -63,7 +64,6 @@ class Game {
         const width = worldSized ? WORLD_CONFIG.width : this.app.screen.width;
         const height = worldSized ? WORLD_CONFIG.height : this.app.screen.height;
         
-        grid.path(); // Start path
         // Vertical lines
         for (let i = 0; i < width; i += 50) {
             grid.moveTo(i, 0);
