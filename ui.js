@@ -570,9 +570,9 @@ export class UIManager {
             // Convert global pointer position to slider's local coordinates
             const newPoint = event.getLocalPosition(slider);
             let xPos = Math.max(0, Math.min(100, newPoint.x));
-            handle.position.x = x;
+            handle.position.x = xPos; // Corrected
             
-            const value = min + (x / 100) * (max - min);
+            const value = min + (xPos / 100) * (max - min); // Corrected
             onChange(Math.round(value / step) * step);
         });
         
@@ -591,9 +591,6 @@ export class UIManager {
             handle.position.x = percent * 100;
         };
         updateSliderVisual(initial); // Set initial position
-
-            onChange(Math.round(value / step) * step);
-        });
 
         return slider;
     }
