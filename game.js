@@ -956,7 +956,7 @@ class Game {
             // Dynamic color: Start bright yellow, fade to orange
             particle.initialColor = { r: 255, g: 255, b: 0 }; // Yellow
             particle.targetColor = { r: 255, g: 165, b: 0 }; // Orange
-            particle.fill(PIXI.utils.rgb2hex([particle.initialColor.r/255, particle.initialColor.g/255, particle.initialColor.b/255]));
+            particle.fill(PIXI.Color.shared.setValue([particle.initialColor.r/255, particle.initialColor.g/255, particle.initialColor.b/255]).toNumber());
             
             const angle = Math.random() * Math.PI * 2; // Random direction for more spread
             const speed = baseSpeed * (0.7 + Math.random() * 0.6); // Vary speed: 70% to 130% of base
@@ -1006,7 +1006,7 @@ class Game {
                 } else {
                      p.rect(-p.geometry.width/2, -p.geometry.height/2, p.geometry.width, p.geometry.height);
                 }
-                p.fill(PIXI.utils.rgb2hex([r/255, g/255, b/255]));
+                p.fill(PIXI.Color.shared.setValue([r/255, g/255, b/255]).toNumber());
             }
             
             if (particles.length === 0) {
