@@ -572,9 +572,7 @@ checkCollisions() {
             continue;
         }
 
-        console.log("Bullet for collision:", bullet.sprite); // Existing log
         const bulletBounds = bullet.sprite.getBounds();
-        console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds))); // Existing log
 
         for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
             const enemy = gameState.enemies[eIndex];
@@ -590,13 +588,28 @@ checkCollisions() {
                 continue;
             }
 
-            console.log("Enemy for collision (vs bullet):", enemy); // Modified log
             const enemyBounds = enemy.getBounds();
-            console.log("Enemy Bounds for Bullet Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
 
             if (checkAABBCollision(bulletBounds, enemyBounds)) {
-                console.log("Bullet-Enemy AABB collision DETECTED! Bullet:", bullet.sprite.x, bullet.sprite.y, "Enemy:", enemy.x, enemy.y); // Modified log
-                console.log("Processing bullet-enemy collision response..."); // New log
+                if (GAME_CONFIG.LOG_COLLISIONS) {
+                    console.log({
+                        type: "Collision-BulletEnemy",
+                        timestamp: Date.now(),
+                        bullet: {
+                            x: bullet.sprite.x,
+                            y: bullet.sprite.y,
+                            bounds: JSON.parse(JSON.stringify(bulletBounds))
+                        },
+                        enemy: {
+                            type: enemy.type,
+                            x: enemy.x,
+                            y: enemy.y,
+                            healthBeforeHit: enemy.health,
+                            bounds: JSON.parse(JSON.stringify(enemyBounds))
+                        },
+                        message: "Bullet-Enemy AABB collision DETECTED and processing."
+                    });
+                }
 
                 this.createHitEffect(bullet.sprite.x, bullet.sprite.y); // Effect at bullet position
                 enemy.health -= gameState.attackDamage;
@@ -643,16 +656,30 @@ checkCollisions() {
             return;
         }
 
-        console.log("Player for collision:", gameState.player); // Existing log
         const playerBounds = gameState.player.getBounds();
-        console.log("Player Bounds:", JSON.parse(JSON.stringify(playerBounds))); // Existing log
-        console.log("Enemy for collision (vs player):", enemy); // Modified log
         const enemyBounds = enemy.getBounds();
-        console.log("Enemy Bounds for Player Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
 
         if (checkAABBCollision(playerBounds, enemyBounds)) {
-            console.log("Player-Enemy AABB collision DETECTED! Player:", gameState.player.x, gameState.player.y, "Enemy:", enemy.x, enemy.y); // Modified log
-            console.log("Processing player-enemy collision response..."); // New log
+            if (GAME_CONFIG.LOG_COLLISIONS) {
+                console.log({
+                    type: "Collision-PlayerEnemy",
+                    timestamp: Date.now(),
+                    player: {
+                        x: gameState.player.x,
+                        y: gameState.player.y,
+                        healthBeforeHit: gameState.health,
+                        bounds: JSON.parse(JSON.stringify(playerBounds))
+                    },
+                    enemy: {
+                        type: enemy.type,
+                        x: enemy.x,
+                        y: enemy.y,
+                        health: enemy.health,
+                        bounds: JSON.parse(JSON.stringify(enemyBounds))
+                    },
+                    message: "Player-Enemy AABB collision DETECTED and processing."
+                });
+            }
 
             gameState.health -= 0.5;
             this.triggerDamageFlash();
@@ -1225,6 +1252,31 @@ checkCollisions() {
                     enemy2.x -= pushX;
                     enemy2.y -= pushY;
 
+                    if (GAME_CONFIG.LOG_COLLISIONS) {
+                        console.log({
+                            type: "Collision-EnemySeparation",
+                            timestamp: Date.now(),
+                            enemy1: {
+                                type: enemy1.type,
+                                x: enemy1.x - pushX, // Log position before push for clarity
+                                y: enemy1.y - pushY,
+                                newX: enemy1.x,
+                                newY: enemy1.y
+                            },
+                            enemy2: {
+                                type: enemy2.type,
+                                x: enemy2.x + pushX, // Log position before push for clarity
+                                y: enemy2.y + pushY,
+                                newX: enemy2.x,
+                                newY: enemy2.y
+                            },
+                            distance: dist,
+                            collisionDistance: collisionDist,
+                            overlap: overlap,
+                            message: "Enemy-Enemy separation: Overlap detected and resolved."
+                        });
+                    }
+
                     // Optional: Add slight damping to enemy movement if they are being pushed
                     // This can prevent them from "jittering" too much when clumped.
                     // For example, slightly reduce their speed or apply a counter-force.
@@ -1232,12 +1284,40 @@ checkCollisions() {
                     // enemy2.vx *= 0.95; enemy2.vy *= 0.95;
                     // This would require enemies to have vx/vy properties managed in updateEntities
                 } else if (dist === 0) { // Handle exact overlap case
+                    const initialEnemy1X = enemy1.x;
+                    const initialEnemy1Y = enemy1.y;
+                    const initialEnemy2X = enemy2.x;
+                    const initialEnemy2Y = enemy2.y;
+
                     const pushX = (Math.random() - 0.5) * 0.5; // Small random push
                     const pushY = (Math.random() - 0.5) * 0.5;
                     enemy1.x += pushX;
                     enemy1.y += pushY;
                     enemy2.x -= pushX;
                     enemy2.y -= pushY;
+
+                    if (GAME_CONFIG.LOG_COLLISIONS) {
+                        console.log({
+                            type: "Collision-EnemySeparation",
+                            timestamp: Date.now(),
+                            enemy1: {
+                                type: enemy1.type,
+                                x: initialEnemy1X,
+                                y: initialEnemy1Y,
+                                newX: enemy1.x,
+                                newY: enemy1.y
+                            },
+                            enemy2: {
+                                type: enemy2.type,
+                                x: initialEnemy2X,
+                                y: initialEnemy2Y,
+                                newX: enemy2.x,
+                                newY: enemy2.y
+                            },
+                            distance: dist,
+                            message: "Enemy-Enemy separation: Exact overlap detected and resolved with random push."
+                        });
+                    }
                 }
             }
         }

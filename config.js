@@ -3,7 +3,8 @@ export const GAME_CONFIG = {
     height: window.innerHeight,
     backgroundColor: 0x1a1a1a,
     antialias: true,
-    resizeTo: window
+    resizeTo: window,
+    LOG_COLLISIONS: true // Flag to enable/disable collision logging
 };
 
 export const SPAWN_CONFIG = {
