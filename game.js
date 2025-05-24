@@ -544,7 +544,9 @@ class Game {
             
             for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
                 const enemy = gameState.enemies[eIndex];
-                if (!enemy) continue; // Enemy might have been cleaned up
+                if (!bullet || !bullet.sprite || !enemy) {
+                    continue; // Skip this iteration if bullet, bullet.sprite, or enemy is null/undefined
+                }
 
                 const dx = bullet.sprite.x - enemy.x;
                 const dy = bullet.sprite.y - enemy.y;
@@ -578,7 +580,9 @@ class Game {
 
         // Player-enemy collisions
         gameState.enemies.forEach(enemy => {
-            if (!enemy || !gameState.player) return;
+            if (!enemy || !gameState.player) {
+                return; // Skip this iteration if enemy or player is null/undefined
+            }
             const dx = gameState.player.x - enemy.x;
             const dy = gameState.player.y - enemy.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -977,7 +981,7 @@ class Game {
         }
         
         const animate = (ticker) => {
-            const deltaSeconds = ticker.deltaTime / PIXI.settings.TARGET_FPMS / 1000; // Correct delta in seconds
+            const deltaSeconds = ticker.deltaMS / 1000; // Correct delta in seconds
 
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
@@ -1033,7 +1037,7 @@ class Game {
         let flashAge = 0;
         const flashLifetime = 0.1; // seconds
         const flashTicker = (ticker) => {
-            const deltaSeconds = ticker.deltaTime / PIXI.settings.TARGET_FPMS / 1000;
+            const deltaSeconds = ticker.deltaMS / 1000;
             flashAge += deltaSeconds;
             if (flashAge >= flashLifetime) {
                 this.worldContainer.removeChild(flash);
@@ -1088,7 +1092,7 @@ class Game {
         }
         
         const animate = (ticker) => {
-            const deltaSeconds = ticker.deltaTime / PIXI.settings.TARGET_FPMS / 1000;
+            const deltaSeconds = ticker.deltaMS / 1000;
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
                 p.age += deltaSeconds;
@@ -1180,7 +1184,7 @@ class Game {
             // Correct way to get deltaMS in PixiJS v8 ticker is ticker.deltaMS or ticker.deltaTime (if you adjust for TARGET_FPMS)
             // Assuming ticker.deltaMS is available and provides milliseconds
             // If not, use ticker.deltaTime and convert: elapsed += (ticker.deltaTime / PIXI.settings.TARGET_FPMS) * 1000;
-             elapsed += ticker.deltaMS || (ticker.deltaTime / PIXI.Ticker.targetFPMS) * 1000;
+             elapsed += ticker.deltaMS;
 
 
             const progress = Math.min(elapsed / flashDuration, 1);
