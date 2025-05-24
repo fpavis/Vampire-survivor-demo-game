@@ -544,8 +544,8 @@ class Game {
             
             for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
                 const enemy = gameState.enemies[eIndex];
-                if (!bullet || !bullet.sprite || !enemy) {
-                    continue; // Skip this iteration if bullet, bullet.sprite, or enemy is null/undefined
+                if (!bullet || !bullet.sprite || bullet.sprite.destroyed || !enemy || enemy.destroyed) {
+                    continue; 
                 }
 
                 const dx = bullet.sprite.x - enemy.x;
@@ -580,8 +580,8 @@ class Game {
 
         // Player-enemy collisions
         gameState.enemies.forEach(enemy => {
-            if (!enemy || !gameState.player) {
-                return; // Skip this iteration if enemy or player is null/undefined
+            if (!enemy || enemy.destroyed || !gameState.player || gameState.player.destroyed) {
+                return; 
             }
             const dx = gameState.player.x - enemy.x;
             const dy = gameState.player.y - enemy.y;
@@ -952,8 +952,12 @@ class Game {
             const shapeType = Math.random();
 
             if (shapeType < 0.6) { // 60% chance for circle
+                particle.shapeType = 'circle';
+                particle.shapeSize = size;
                 particle.circle(0, 0, size);
             } else { // 40% chance for square
+                particle.shapeType = 'rect';
+                particle.shapeSize = size; // Assuming square particles, so width and height are 'size'
                 particle.rect(-size / 2, -size / 2, size, size);
             }
             
@@ -1005,10 +1009,11 @@ class Game {
                 const g = p.initialColor.g + (p.targetColor.g - p.initialColor.g) * lifeRatio;
                 const b = p.initialColor.b + (p.targetColor.b - p.initialColor.b) * lifeRatio;
                 p.clear(); // Clear previous fill
-                if (p.geometry.type === PIXI.SHAPES.CIRC) { // Check shape type to redraw correctly
-                     p.circle(0,0, p.geometry.radius);
-                } else {
-                     p.rect(-p.geometry.width/2, -p.geometry.height/2, p.geometry.width, p.geometry.height);
+                if (p.shapeType === 'circle') {
+                     p.circle(0, 0, p.shapeSize);
+                } else if (p.shapeType === 'rect') {
+                     // Assuming square particles where width and height are p.shapeSize
+                     p.rect(-p.shapeSize / 2, -p.shapeSize / 2, p.shapeSize, p.shapeSize);
                 }
                 p.fill(PIXI.Color.shared.setValue([r/255, g/255, b/255]).toNumber());
             }
