@@ -318,6 +318,7 @@ class Game {
     }
 
     gameLoop(delta) { // delta is now passed from ticker
+    console.log(`gameLoop active - delta: ${delta}, gameOver: ${gameState.gameOver}, levelUp: ${gameState.levelUp}, paused: ${gameState.paused}`);
         if (gameState.gameOver || gameState.levelUp || gameState.paused) return;
 
         this.handleMovement(delta);
@@ -464,7 +465,6 @@ class Game {
             // Assuming enemy.healthBar is a PIXI.Graphics object
             enemy.healthBar.clear(); // Clear previous drawing
             enemy.healthBar.roundRect(0, 0, ENEMY_TYPES[enemy.type].size * 2, 5, 2);
-            enemy.healthBar.fill(STYLES.colors.healthBar.background); // Background
             enemy.healthBar.roundRect(0, 0, healthPercent * (ENEMY_TYPES[enemy.type].size * 2), 5, 2);
             enemy.healthBar.fill(healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health); // Foreground
         });
@@ -537,37 +537,47 @@ class Game {
     }
 
 checkCollisions() {
+    // Helper function for AABB collision detection
+    function checkAABBCollision(rect1, rect2) {
+        return rect1.x < rect2.x + rect2.width &&
+               rect1.x + rect1.width > rect2.x &&
+               rect1.y < rect2.y + rect2.height &&
+               rect1.y + rect1.height > rect2.y;
+    }
+
     // Bullet-enemy collisions with proper cleanup
     for (let bIndex = gameState.bullets.length - 1; bIndex >= 0; bIndex--) {
         const bullet = gameState.bullets[bIndex];
         // Guard for bullet's sprite and transform before entering inner loop
         if (!bullet || !bullet.sprite || bullet.sprite.destroyed || !bullet.sprite.transform) {
-            continue; 
+            continue;
         }
-        
+        console.log("Bullet for collision:", bullet.sprite);
+        const bulletBounds = bullet.sprite.getBounds();
+        console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds)));
+
         for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
             const enemy = gameState.enemies[eIndex];
 
             // Guard for enemy's state and transform
             if (!enemy || enemy.destroyed || !enemy.transform) {
-                continue; 
+                continue;
             }
 
             // Type check for enemy (after confirming enemy and enemy.transform exist)
             if (!enemy.type || !ENEMY_TYPES[enemy.type]) {
                 console.warn('Unknown or invalid enemy type in bullet-enemy collision:', enemy.type, enemy);
-                continue; 
+                continue;
             }
-            
-            const dx = bullet.sprite.x - enemy.x;
-            const dy = bullet.sprite.y - enemy.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const collisionDist = ENEMY_TYPES[enemy.type].size + 5; 
+            console.log("Enemy for bullet collision:", enemy);
+            const enemyBounds = enemy.getBounds();
+            console.log("Enemy Bounds for Bullet Collision:", JSON.parse(JSON.stringify(enemyBounds)));
 
-            if (dist < collisionDist) {
-                this.createHitEffect(bullet.sprite.x, bullet.sprite.y);
+            if (checkAABBCollision(bulletBounds, enemyBounds)) {
+                console.log("Bullet-Enemy AABB collision DETECTED!");
+                this.createHitEffect(bullet.sprite.x, bullet.sprite.y); // Effect at bullet position
                 enemy.health -= gameState.attackDamage;
-                
+
                 EntityManager.cleanup(this.app, bullet.sprite);
                 gameState.bullets.splice(bIndex, 1); 
 
@@ -602,39 +612,54 @@ checkCollisions() {
         if (!enemy || enemy.destroyed || 
             !gameState.player || gameState.player.destroyed ||
             !enemy.transform || !gameState.player.transform) { // Transform checks
-            return; 
+            return;
         }
 
         if (!enemy.type || !ENEMY_TYPES[enemy.type]) { // Type check
             console.warn('Unknown or invalid enemy type in player-enemy collision:', enemy.type, enemy);
-            return; 
+            return;
         }
-        
-        const enemyRadius = ENEMY_TYPES[enemy.type].size;
-        const dx = gameState.player.x - enemy.x;
-        const dy = gameState.player.y - enemy.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const playerRadius = 15; 
-        const collisionThreshold = (playerRadius + enemyRadius) * 0.8; 
 
-        if (dist < collisionThreshold) { 
-            gameState.health -= 0.5; 
-            this.triggerDamageFlash(); 
+        console.log("Player for collision:", gameState.player);
+        const playerBounds = gameState.player.getBounds();
+        console.log("Player Bounds:", JSON.parse(JSON.stringify(playerBounds)));
+        console.log("Enemy for collision:", enemy);
+        const enemyBounds = enemy.getBounds();
+        console.log("Enemy Bounds for Player Collision:", JSON.parse(JSON.stringify(enemyBounds)));
+
+        if (checkAABBCollision(playerBounds, enemyBounds)) {
+            console.log("Player-Enemy AABB collision DETECTED!");
+            gameState.health -= 0.5;
+            this.triggerDamageFlash();
             this.ui.updateHealth(gameState.health, gameState.maxHealth);
 
-            const overlap = collisionThreshold - dist;
-            const pushForce = overlap * 0.5; 
+            // Basic pushback (can be refined later if needed)
+            // Calculate center points for a more intuitive pushback direction
+            const enemyCenterX = enemyBounds.x + enemyBounds.width / 2;
+            const playerCenterX = playerBounds.x + playerBounds.width / 2;
+            const enemyCenterY = enemyBounds.y + enemyBounds.height / 2;
+            const playerCenterY = playerBounds.y + playerBounds.height / 2;
 
-            if (dist > 0) { 
-                const pushBackDx = (enemy.x - gameState.player.x) / dist;
-                const pushBackDy = (enemy.y - gameState.player.y) / dist;
-                
-                enemy.x += pushBackDx * pushForce;
-                enemy.y += pushBackDy * pushForce;
+            const dx = playerCenterX - enemyCenterX;
+            const dy = playerCenterY - enemyCenterY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const pushForce = 2; // Simplified push force
 
-                gameState.player.x -= pushBackDx * pushForce;
-                gameState.player.y -= pushBackDy * pushForce;
+            if (dist > 0) {
+                const pushBackDx = (dx / dist) * pushForce;
+                const pushBackDy = (dy / dist) * pushForce;
+
+                enemy.x -= pushBackDx; // Push enemy away from player
+                enemy.y -= pushBackDy;
+                gameState.player.x += pushBackDx; // Push player away from enemy
+                gameState.player.y += pushBackDy;
+
+                // Keep player in world bounds after pushback
+                gameState.player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, gameState.player.x));
+                gameState.player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, gameState.player.y));
+                // Optional: Keep enemy in world bounds too, if necessary
             }
+
 
             if (gameState.health <= 0 && !gameState.gameOver) {
                 gameState.health = 0;
