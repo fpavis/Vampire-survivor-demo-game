@@ -576,7 +576,6 @@ checkCollisions() {
         const bulletBounds = bullet.sprite.getBounds();
         console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds))); // Existing log
 
-
         for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
             const enemy = gameState.enemies[eIndex];
 
@@ -643,7 +642,6 @@ checkCollisions() {
             console.warn('Unknown or invalid enemy type in player-enemy collision:', enemy.type, enemy);
             return;
         }
-
 
         console.log("Player for collision:", gameState.player); // Existing log
         const playerBounds = gameState.player.getBounds();
