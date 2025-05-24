@@ -74,9 +74,54 @@ class Game {
             grid.moveTo(0, i);
             grid.lineTo(width, i);
         }
-        grid.stroke({ width: 1, color: 0x333333, alpha: 0.3 }); // Apply stroke
+
+        let hasPathData = false;
+        // Check buildCmds first as it's the most direct representation of queued drawing operations
+        if (grid.context && grid.context.buildCmds && grid.context.buildCmds.length > 0) {
+            hasPathData = true;
+        } 
+        // Fallback check for points, though buildCmds should be preferred for v8+
+        else if (grid.context && grid.context.path && grid.context.path.points && grid.context.path.points.length > 0) {
+            console.warn('grid.context.buildCmds was empty, falling back to points check for hasPathData.');
+            hasPathData = true;
+        }
+
+        // Debugging logs
+        console.log('Updating grid. worldSized:', worldSized, 'Calculated Width:', width, 'Calculated Height:', height);
+        console.log('Grid object instance before stroke decision:', grid);
+        console.log('--- Grid Object Details (console.dir) ---');
+        console.dir(grid);
+        console.log('-----------------------------------------');
+
+        if (grid.context) {
+            console.log('Grid context exists. Path data (if available):', grid.context.path);
+            console.log('Grid context build commands/instructions (if available):', grid.context.buildCmds || grid.context.instructions);
+            try {
+                console.log('Stringified grid.context.path (first level):', JSON.stringify(grid.context.path, (key, value) => {
+                    if (value instanceof PIXI.Matrix) return '[PIXI.Matrix]';
+                    if (value instanceof PIXI.Point) return `[PIXI.Point x:${value.x} y:${value.y}]`;
+                    if (value instanceof PIXI.GraphicsPath && key !== '') return '[PIXI.GraphicsPath]';
+                    if (typeof value === 'number' && !isFinite(value)) return String(value);
+                    if (value instanceof PIXI.Polygon) return '[PIXI.Polygon with ' + value.points.length + ' points]';
+                    return value;
+                }, 2));
+            } catch (e) {
+                console.warn('Could not stringify grid.context.path:', e.message);
+            }
+        } else {
+            console.warn('Grid context (grid.context) is undefined before stroke decision.');
+        }
+        console.log('Path data check: hasPathData =', hasPathData);
         
-        this.worldContainer.addChildAt(grid, 1);
+        if (hasPathData) {
+            console.log('About to call grid.stroke()');
+            grid.stroke({ width: 1, color: 0x333333, alpha: 0.3 }); 
+            console.log('grid.stroke() call completed.');
+            this.worldContainer.addChildAt(grid, 1);
+        } else {
+            console.log('Skipping grid.stroke() and addChildAt() because no path data was generated (e.g., dimensions too small).');
+            grid.destroy(); // Clean up the unused Graphics object
+        }
     }
 
     showStartScreen() {
