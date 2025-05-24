@@ -63,6 +63,10 @@ class Game {
         
         const width = worldSized ? WORLD_CONFIG.width : this.app.screen.width;
         const height = worldSized ? WORLD_CONFIG.height : this.app.screen.height;
+
+        // --- New: Set line style on context ---
+        grid.lineStyle(1, 0x333333, 0.3); 
+        // ---
         
         // Vertical lines
         for (let i = 0; i < width; i += 50) {
@@ -76,15 +80,10 @@ class Game {
         }
 
         let hasPathData = false;
-        // Check buildCmds first as it's the most direct representation of queued drawing operations
-        if (grid.context && grid.context.buildCmds && grid.context.buildCmds.length > 0) {
-            hasPathData = true;
-        } 
-        // Fallback check for points, though buildCmds should be preferred for v8+
-        else if (grid.context && grid.context.path && grid.context.path.points && grid.context.path.points.length > 0) {
-            console.warn('grid.context.buildCmds was empty, falling back to points check for hasPathData.');
+        if (grid.context && grid.context.buildCmds && Array.isArray(grid.context.buildCmds) && grid.context.buildCmds.length > 0) {
             hasPathData = true;
         }
+        // The console.warn related to the fallback (else if block) has been removed.
 
         // Debugging logs
         console.log('Updating grid. worldSized:', worldSized, 'Calculated Width:', width, 'Calculated Height:', height);
@@ -115,7 +114,9 @@ class Game {
         
         if (hasPathData) {
             console.log('About to call grid.stroke()');
-            grid.stroke({ width: 1, color: 0x333333, alpha: 0.3 }); 
+            // --- Modified stroke call ---
+            grid.stroke(); // Use context's style, no arguments
+            // ---
             console.log('grid.stroke() call completed.');
             this.worldContainer.addChildAt(grid, 1);
         } else {

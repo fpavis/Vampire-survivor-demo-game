@@ -33,7 +33,13 @@ export class EntityManager {
             const x3 = Math.cos(angle - 0.1) * (playerRadius + chevronSize);
             const y3 = Math.sin(angle - 0.1) * (playerRadius + chevronSize);
             
-            playerBody.path(x1, y1, x2, y2, x3, y3, x1, y1);
+            // Define the points for the polygon (triangle)
+            const chevronPoints = [
+                x1, y1,
+                x2, y2,
+                x3, y3
+            ];
+            playerBody.poly(chevronPoints);
             playerBody.fill({color: 0xFFFFFF, alpha: 0.9});
         }
         
