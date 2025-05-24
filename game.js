@@ -536,90 +536,114 @@ class Game {
         return dist > 1000; // Remove bullets when they're far from the player
     }
 
-    checkCollisions() {
-        // Bullet-enemy collisions with proper cleanup
-        for (let bIndex = gameState.bullets.length - 1; bIndex >= 0; bIndex--) {
-            const bullet = gameState.bullets[bIndex];
-            if (!bullet || !bullet.sprite) continue; // Bullet might have been cleaned up
+checkCollisions() {
+    // Bullet-enemy collisions with proper cleanup
+    for (let bIndex = gameState.bullets.length - 1; bIndex >= 0; bIndex--) {
+        const bullet = gameState.bullets[bIndex];
+        // Guard for bullet's sprite and transform before entering inner loop
+        if (!bullet || !bullet.sprite || bullet.sprite.destroyed || !bullet.sprite.transform) {
+            continue; 
+        }
+        
+        for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
+            const enemy = gameState.enemies[eIndex];
+
+            // Guard for enemy's state and transform
+            if (!enemy || enemy.destroyed || !enemy.transform) {
+                continue; 
+            }
+
+            // Type check for enemy (after confirming enemy and enemy.transform exist)
+            if (!enemy.type || !ENEMY_TYPES[enemy.type]) {
+                console.warn('Unknown or invalid enemy type in bullet-enemy collision:', enemy.type, enemy);
+                continue; 
+            }
             
-            for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
-                const enemy = gameState.enemies[eIndex];
-                if (!bullet || !bullet.sprite || bullet.sprite.destroyed || !enemy || enemy.destroyed) {
-                    continue; 
-                }
+            const dx = bullet.sprite.x - enemy.x;
+            const dy = bullet.sprite.y - enemy.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const collisionDist = ENEMY_TYPES[enemy.type].size + 5; 
 
-                const dx = bullet.sprite.x - enemy.x;
-                const dy = bullet.sprite.y - enemy.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const collisionDist = ENEMY_TYPES[enemy.type].size + 5; // 5 is bullet radius approximation
+            if (dist < collisionDist) {
+                this.createHitEffect(bullet.sprite.x, bullet.sprite.y);
+                enemy.health -= gameState.attackDamage;
+                
+                EntityManager.cleanup(this.app, bullet.sprite);
+                gameState.bullets.splice(bIndex, 1); 
 
-                if (dist < collisionDist) {
-                    this.createHitEffect(bullet.sprite.x, bullet.sprite.y);
-                    enemy.health -= gameState.attackDamage;
+                if (enemy.health <= 0) {
+                    // Access enemy properties before cleanup
+                    const deathX = enemy.x;
+                    const deathY = enemy.y;
+                    const enemyTypeForExp = enemy.type; // Save type before cleanup might nullify it
+                    const experienceValue = enemy.experienceValue;
+
+                    this.createDeathEffect(deathX, deathY);
+                    EntityManager.cleanup(this.app, enemy);
+                    gameState.enemies.splice(eIndex, 1);
                     
-                    EntityManager.cleanup(this.app, bullet.sprite);
-                    gameState.bullets.splice(bIndex, 1);
-
-                    if (enemy.health <= 0) {
-                        this.createDeathEffect(enemy.x, enemy.y);
-                        EntityManager.cleanup(this.app, enemy);
-                        gameState.enemies.splice(eIndex, 1);
-                        gameState.score += ENEMY_TYPES[enemy.type].experience * 2;
-                        gameState.kills++; // Increment kills
-                        this.ui.updateScore(gameState.score);
-                        this.ui.updateKillCounter(gameState.kills); // Update UI
-
-                        const gem = EntityManager.createExperienceGem(this.app, enemy.x, enemy.y, enemy.experienceValue);
+                    if (ENEMY_TYPES[enemyTypeForExp]) { // Check if type is still valid for experience calculation
+                        gameState.score += ENEMY_TYPES[enemyTypeForExp].experience * 2;
+                        const gem = EntityManager.createExperienceGem(this.app, deathX, deathY, experienceValue);
                         gameState.experienceGems.push(gem);
                         this.worldContainer.addChild(gem.sprite);
                     }
-                    break; // Bullet can only hit one enemy
+                    gameState.kills++; 
+                    this.ui.updateScore(gameState.score);
+                    this.ui.updateKillCounter(gameState.kills); 
                 }
+                break; 
             }
         }
-
-        // Player-enemy collisions
-        gameState.enemies.forEach(enemy => {
-            if (!enemy || enemy.destroyed || !gameState.player || gameState.player.destroyed) {
-                return; 
-            }
-            const dx = gameState.player.x - enemy.x;
-            const dy = gameState.player.y - enemy.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const playerRadius = 15; // Approximate player radius
-            const enemyRadius = ENEMY_TYPES[enemy.type].size;
-            const collisionThreshold = (playerRadius + enemyRadius) * 0.8; // 80% of sum of radii
-
-            if (dist < collisionThreshold) { 
-                gameState.health -= 0.5; // Player takes damage
-                this.triggerDamageFlash(); 
-                this.ui.updateHealth(gameState.health, gameState.maxHealth);
-
-                const overlap = collisionThreshold - dist;
-                const pushForce = overlap * 0.5; // How much to push in total, apply half to each or full to one
-
-                if (dist > 0) { // Avoid division by zero
-                    const pushBackDx = (enemy.x - gameState.player.x) / dist;
-                    const pushBackDy = (enemy.y - gameState.player.y) / dist;
-                    
-                    // Push enemy away
-                    enemy.x += pushBackDx * pushForce;
-                    enemy.y += pushBackDy * pushForce;
-
-                    // Push player away (player's boundary check in handleMovement will correct if needed)
-                    gameState.player.x -= pushBackDx * pushForce;
-                    gameState.player.y -= pushBackDy * pushForce;
-                }
-
-
-                if (gameState.health <= 0 && !gameState.gameOver) {
-                    gameState.health = 0;
-                    this.ui.updateHealth(0, gameState.maxHealth);
-                    this.showGameOver();
-                }
-            }
-        });
     }
+
+    // Player-enemy collisions
+    gameState.enemies.forEach(enemy => {
+        if (!enemy || enemy.destroyed || 
+            !gameState.player || gameState.player.destroyed ||
+            !enemy.transform || !gameState.player.transform) { // Transform checks
+            return; 
+        }
+
+        if (!enemy.type || !ENEMY_TYPES[enemy.type]) { // Type check
+            console.warn('Unknown or invalid enemy type in player-enemy collision:', enemy.type, enemy);
+            return; 
+        }
+        
+        const enemyRadius = ENEMY_TYPES[enemy.type].size;
+        const dx = gameState.player.x - enemy.x;
+        const dy = gameState.player.y - enemy.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const playerRadius = 15; 
+        const collisionThreshold = (playerRadius + enemyRadius) * 0.8; 
+
+        if (dist < collisionThreshold) { 
+            gameState.health -= 0.5; 
+            this.triggerDamageFlash(); 
+            this.ui.updateHealth(gameState.health, gameState.maxHealth);
+
+            const overlap = collisionThreshold - dist;
+            const pushForce = overlap * 0.5; 
+
+            if (dist > 0) { 
+                const pushBackDx = (enemy.x - gameState.player.x) / dist;
+                const pushBackDy = (enemy.y - gameState.player.y) / dist;
+                
+                enemy.x += pushBackDx * pushForce;
+                enemy.y += pushBackDy * pushForce;
+
+                gameState.player.x -= pushBackDx * pushForce;
+                gameState.player.y -= pushBackDy * pushForce;
+            }
+
+            if (gameState.health <= 0 && !gameState.gameOver) {
+                gameState.health = 0;
+                this.ui.updateHealth(0, gameState.maxHealth);
+                this.showGameOver();
+            }
+        }
+    });
+}
 
     updateExperienceGems(delta) {
         if (gameState.pendingExperience === undefined) {
