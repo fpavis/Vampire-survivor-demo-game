@@ -318,6 +318,7 @@ class Game {
     }
 
     gameLoop(delta) { // delta is now passed from ticker
+    console.log(`gameLoop active - delta: ${delta}, gameOver: ${gameState.gameOver}, levelUp: ${gameState.levelUp}, paused: ${gameState.paused}`);
         if (gameState.gameOver || gameState.levelUp || gameState.paused) return;
 
         this.handleMovement(delta);
