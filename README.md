@@ -18,9 +18,12 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - Keyboard (Arrow Keys)
   - Mouse (Click and Hold)
   - Touch Screen Support
-- **Particle Effects**: Visual feedback for hits and enemy deaths
+- **Particle Effects**: Enhanced visual feedback for hits and enemy deaths
 - **Infinite World**: Large scrolling game world with dynamic camera
 - **Modern UI**: Clean, responsive interface with health bars and status effects
+- **Enhanced Graphics**: Improved visuals for player, enemies, projectiles, and particle effects.
+- **Player Damage Feedback**: Visual screen flash when the player takes damage.
+- **Kill Counter**: Displays the number of defeated enemies.
 
 ## 🚀 Getting Started
 
@@ -75,7 +78,7 @@ http://localhost:8000
 
 ## 🛠️ Built With
 
-- [PixiJS](https://pixijs.com/) - 2D WebGL renderer
+- [PixiJS v8.9.2](https://pixijs.com/) - 2D WebGL renderer
 - Modern JavaScript (ES6+)
 - HTML5 Canvas
 - CSS3

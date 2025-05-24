@@ -7,24 +7,41 @@ export class EntityManager {
         const container = new PIXI.Container();
         
         // Main player circle with gradient
-        const player = new PIXI.Graphics();
-        const gradient = new PIXI.Graphics();
+        const playerBody = new PIXI.Graphics();
+        const playerRadius = 18;
+
+        // Concentric circles for depth/energy
+        playerBody.circle(0, 0, playerRadius);
+        playerBody.fill({ color: STYLES.colors.player, alpha: 0.5 });
+        playerBody.circle(0, 0, playerRadius * 0.8);
+        playerBody.fill({ color: STYLES.colors.player, alpha: 0.7 });
+        playerBody.circle(0, 0, playerRadius * 0.6);
+        playerBody.fill({ color: STYLES.colors.player, alpha: 1 });
+        playerBody.circle(0, 0, playerRadius * 0.3);
+        playerBody.fill({ color: 0xFFFFFF, alpha: 0.8 });
+
+
+        // Small chevrons/triangles on the perimeter
+        const chevronCount = 3;
+        const chevronSize = 5;
+        for (let i = 0; i < chevronCount; i++) {
+            const angle = (i / chevronCount) * Math.PI * 2;
+            const x1 = Math.cos(angle) * (playerRadius + 1);
+            const y1 = Math.sin(angle) * (playerRadius + 1);
+            const x2 = Math.cos(angle + 0.1) * (playerRadius + chevronSize);
+            const y2 = Math.sin(angle + 0.1) * (playerRadius + chevronSize);
+            const x3 = Math.cos(angle - 0.1) * (playerRadius + chevronSize);
+            const y3 = Math.sin(angle - 0.1) * (playerRadius + chevronSize);
+            
+            playerBody.path(x1, y1, x2, y2, x3, y3, x1, y1);
+            playerBody.fill({color: 0xFFFFFF, alpha: 0.9});
+        }
         
-        // Create gradient effect
-        gradient.beginFill(STYLES.colors.player);
-        gradient.drawCircle(0, 0, 18);
-        gradient.endFill();
-        gradient.beginFill(0xffffff, 0.3);
-        gradient.drawCircle(0, 0, 15);
-        gradient.endFill();
-        
-        // Add glow effect
         const glow = new PIXI.Graphics();
-        glow.beginFill(STYLES.colors.player, 0.2);
-        glow.drawCircle(0, 0, 25);
-        glow.endFill();
+        glow.circle(0, 0, playerRadius * 1.4); // Adjusted glow size
+        glow.fill({ color: STYLES.colors.player, alpha: 0.2 });
         
-        container.addChild(glow, gradient);
+        container.addChild(glow, playerBody);
         container.x = app.screen.width / 2;
         container.y = app.screen.height / 2;
         
@@ -46,32 +63,75 @@ export class EntityManager {
         const container = new PIXI.Container();
         
         // Create enemy body with gradient
-        const enemy = new PIXI.Graphics();
-        enemy.beginFill(type.color);
-        enemy.drawCircle(0, 0, type.size);
-        enemy.endFill();
-        enemy.beginFill(0xffffff, 0.2);
-        enemy.drawCircle(0, 0, type.size * 0.7);
-        enemy.endFill();
+        const enemyBody = new PIXI.Graphics();
+        const size = type.size;
+
+        if (typeKey === 'BASIC') {
+            // Hexagon with inner core
+            const points = [];
+            for (let i = 0; i < 6; i++) {
+                points.push(Math.cos(i * Math.PI / 3) * size, Math.sin(i * Math.PI / 3) * size);
+            }
+            enemyBody.poly(points);
+            enemyBody.fill(type.color);
+            enemyBody.stroke({width: 2, color: 0x000000, alpha: 0.5}); // Border
+
+            enemyBody.circle(0,0, size * 0.4);
+            enemyBody.fill({color: 0xFFFFFF, alpha: 0.3});
+            enemyBody.circle(0,0, size * 0.2);
+            enemyBody.fill(type.color);
+
+
+        } else if (typeKey === 'TANK') {
+            // Thick-bordered octagon with "armor plate" details
+            const points = [];
+            for (let i = 0; i < 8; i++) {
+                points.push(Math.cos(i * Math.PI / 4) * size, Math.sin(i * Math.PI / 4) * size);
+            }
+            enemyBody.poly(points);
+            enemyBody.fill({color: type.color, alpha: 0.7});
+            enemyBody.stroke({width: size * 0.2, color: type.color, alpha: 1}); // Thick border
+
+            // Armor plates (simplified as lines/rects for graphics)
+            for (let i = 0; i < 4; i++) {
+                const angle = i * Math.PI / 2 + Math.PI / 8;
+                enemyBody.moveTo(Math.cos(angle) * size * 0.5, Math.sin(angle) * size * 0.5);
+                enemyBody.lineTo(Math.cos(angle) * size * 0.9, Math.sin(angle) * size * 0.9);
+                enemyBody.stroke({width: 2, color: 0x000000, alpha: 0.4});
+            }
+
+        } else if (typeKey === 'FAST') {
+            // Elongated diamond shape
+            enemyBody.path(
+                0, -size,        // Top point
+                size * 0.6, 0,   // Right point
+                0, size,         // Bottom point
+                -size * 0.6, 0   // Left point
+            );
+            enemyBody.closePath();
+            enemyBody.fill(type.color);
+            enemyBody.stroke({width: 1, color: 0xFFFFFF, alpha: 0.5});
+        } else { // Default to circle if type not recognized
+            enemyBody.circle(0, 0, size);
+            enemyBody.fill(type.color);
+            enemyBody.circle(0, 0, size * 0.7);
+            enemyBody.fill({ color: 0xffffff, alpha: 0.2 });
+        }
         
-        // Create health bar container
         const healthBarContainer = new PIXI.Container();
         const healthBarBg = new PIXI.Graphics();
         const healthBarFg = new PIXI.Graphics();
         
-        // Health bar background
-        healthBarBg.beginFill(STYLES.colors.healthBar.background);
-        healthBarBg.lineStyle(1, STYLES.colors.healthBar.border);
-        healthBarBg.drawRoundedRect(-type.size, -type.size - 10, type.size * 2, 5, 2);
-        healthBarBg.endFill();
+        const healthBarYOffset = -(size + 10);
+        healthBarBg.roundRect(-size, healthBarYOffset, size * 2, 5, 2);
+        healthBarBg.fill(STYLES.colors.healthBar.background);
+        healthBarBg.stroke({ width: 1, color: STYLES.colors.healthBar.border });
         
-        // Health bar foreground
-        healthBarFg.beginFill(STYLES.colors.healthBar.health);
-        healthBarFg.drawRoundedRect(-type.size, -type.size - 10, type.size * 2, 5, 2);
-        healthBarFg.endFill();
+        healthBarFg.roundRect(-size, healthBarYOffset, size * 2, 5, 2);
+        healthBarFg.fill(STYLES.colors.healthBar.health);
         
         healthBarContainer.addChild(healthBarBg, healthBarFg);
-        container.addChild(enemy, healthBarContainer);
+        container.addChild(enemyBody, healthBarContainer);
         
         // Set enemy properties
         Object.assign(container, {
@@ -89,7 +149,7 @@ export class EntityManager {
         
         // Add pulse animation for enemy
         const pulseAnimation = (delta) => {
-            enemy.alpha = 0.8 + Math.sin(Date.now() / 300) * 0.2;
+            enemyBody.alpha = 0.8 + Math.sin(Date.now() / 300) * 0.2; // Apply to enemyBody
         };
         app.ticker.add(pulseAnimation);
         container.pulseAnimation = pulseAnimation;
@@ -99,20 +159,25 @@ export class EntityManager {
 
     static createBullet(startX, startY, targetX, targetY) {
         const container = new PIXI.Container();
+        const bulletWidth = 12; // Increased width
+        const bulletHeight = 6; // Increased height
         
-        // Create bullet with trail effect
         const bullet = new PIXI.Graphics();
-        bullet.beginFill(STYLES.colors.bullet);
-        bullet.drawCircle(0, 0, 5);
-        bullet.endFill();
+        // Elongated shape (thin rectangle with rounded ends)
+        bullet.roundRect(-bulletWidth / 2, -bulletHeight / 2, bulletWidth, bulletHeight, bulletHeight / 2);
+        bullet.fill(STYLES.colors.bullet);
         
-        // Add glow
         const glow = new PIXI.Graphics();
-        glow.beginFill(STYLES.colors.bullet, 0.3);
-        glow.drawCircle(0, 0, 8);
-        glow.endFill();
+        // Adjusted glow for the new shape
+        glow.roundRect(-bulletWidth / 2 - 2, -bulletHeight / 2 - 2, bulletWidth + 4, bulletHeight + 4, (bulletHeight + 4) / 2);
+        glow.fill({ color: STYLES.colors.bullet, alpha: 0.25 });
         
         container.addChild(glow, bullet);
+        
+        // Rotate bullet to face movement direction
+        const angleDeg = Math.atan2(targetY - startY, targetX - startX) * 180 / Math.PI;
+        container.rotation = Math.PI / 180 * angleDeg;
+
         container.x = startX;
         container.y = startY;
 
@@ -131,40 +196,42 @@ export class EntityManager {
         
         // Create gem with glow effect
         const gem = new PIXI.Graphics();
-        gem.beginFill(STYLES.colors.exp);
-        gem.drawPolygon([
+        gem.poly([
             -8, 0,   // Left point
             0, -12,  // Top point
             8, 0,    // Right point
             0, 12    // Bottom point
         ]);
-        gem.endFill();
+        gem.fill(STYLES.colors.exp);
         
         // Add inner highlight
         const highlight = new PIXI.Graphics();
-        highlight.beginFill(0xffffff, 0.5);
-        highlight.drawPolygon([
+        highlight.poly([
             -4, 0,
             0, -6,
             4, 0,
             0, 6
         ]);
-        highlight.endFill();
+        highlight.fill({ color: 0xffffff, alpha: 0.5 });
         
         // Add glow effect
         const glow = new PIXI.Graphics();
-        glow.beginFill(STYLES.colors.exp, 0.3);
-        glow.drawCircle(0, 0, 15);
-        glow.endFill();
+        glow.circle(0, 0, 15);
+        glow.fill({ color: STYLES.colors.exp, alpha: 0.3 });
         
         // Add value text
-        const valueText = new PIXI.Text(`${value}`, {
-            fontSize: 14,
-            fill: 0xffffff,
-            fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: 0x000000,
-            dropShadowDistance: 1
+        const valueText = new PIXI.Text({
+            text: `${value}`,
+            style: {
+                fontSize: 14,
+                fill: 0xffffff,
+                fontWeight: 'bold',
+                dropShadow: {
+                    color: 0x000000,
+                    distance: 1,
+                    alpha: 0.75 // Added alpha for drop shadow
+                }
+            }
         });
         valueText.anchor.set(0.5);
         valueText.y = -20;
@@ -201,5 +268,6 @@ export class EntityManager {
         if (entity.parent) {
             entity.parent.removeChild(entity);
         }
+        entity.destroy({ children: true }); // Ensure complete cleanup
     }
 } 

@@ -23,6 +23,8 @@
 - [x] Health, XP, and score displays
 - [x] Level up menu with upgrade choices
 - [x] Debug panel for development
+- [x] Player damage feedback (screen flash)
+- [x] Kill counter and stats display
 
 ### Technical
 - [x] World bounds and camera system
@@ -38,7 +40,6 @@
 - [ ] Multiple bullet types
 - [ ] Bullet collision effects/particles
 - [ ] Enemy death animations
-- [ ] Player damage feedback (screen flash)
 - [ ] Area of effect (AoE) attacks
 - [ ] Weapon upgrades system
 
@@ -49,7 +50,6 @@
 - [ ] Enhanced stats display in settings
 - [ ] Improved health/XP bar visuals
 - [ ] Tooltip system for upgrades
-- [ ] Kill counter and stats display
 
 ### Gameplay Features
 - [ ] Power-up drop system

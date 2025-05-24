@@ -4,14 +4,21 @@ import { EntityManager } from './entities.js';
 import { UIManager } from './ui.js';
 
 class Game {
-    constructor() {
+    async constructor() {
         try {
-            this.app = new PIXI.Application(GAME_CONFIG);
-            document.body.appendChild(this.app.view);
+            this.app = new PIXI.Application();
+            await this.app.init(GAME_CONFIG);
+            document.body.appendChild(this.app.canvas); // Changed from view to canvas
             
             // Create main container for the game world
             this.worldContainer = new PIXI.Container();
             this.app.stage.addChild(this.worldContainer);
+
+            // Damage Flash Overlay
+            this.damageFlashOverlay = new PIXI.Graphics();
+            this.damageFlashOverlay.visible = false; // Start invisible
+            this.app.stage.addChild(this.damageFlashOverlay); // Add it on top, UI zIndex will keep it below fixed UI
+            this.currentFlashAnimation = null; // To keep track of ongoing flash animation
             
             // Add resize handler
             window.addEventListener('resize', () => this.handleResize());
@@ -19,6 +26,7 @@ class Game {
             this.showStartScreen();
         } catch (error) {
             console.error('Game initialization error:', error);
+            // Optionally, display a user-friendly error message on the page
         }
     }
 
@@ -42,11 +50,11 @@ class Game {
 
         const grid = new PIXI.Graphics();
         grid.name = 'grid';
-        grid.lineStyle(1, 0x333333, 0.3);
         
         const width = worldSized ? WORLD_CONFIG.width : this.app.screen.width;
         const height = worldSized ? WORLD_CONFIG.height : this.app.screen.height;
         
+        grid.path(); // Start path
         // Vertical lines
         for (let i = 0; i < width; i += 50) {
             grid.moveTo(i, 0);
@@ -57,6 +65,7 @@ class Game {
             grid.moveTo(0, i);
             grid.lineTo(width, i);
         }
+        grid.stroke({ width: 1, color: 0x333333, alpha: 0.3 }); // Apply stroke
         
         this.worldContainer.addChildAt(grid, 1);
     }
@@ -69,28 +78,32 @@ class Game {
 
         // Dark background
         const background = new PIXI.Graphics();
-        background.beginFill(0x000000, 0.85);
-        background.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        background.endFill();
+        background.rect(0, 0, this.app.screen.width, this.app.screen.height);
+        background.fill({ color: 0x000000, alpha: 0.85 });
         startScreen.addChild(background);
 
         // Game title
-        const titleText = new PIXI.Text('Survival Game', {
-            fontSize: 64,
-            fill: 0xffffff,
-            align: 'center',
-            fontWeight: 'bold'
+        const titleText = new PIXI.Text({
+            text: 'Survival Game',
+            style: {
+                fontSize: 64,
+                fill: 0xffffff,
+                align: 'center',
+                fontWeight: 'bold'
+            }
         });
         titleText.anchor.set(0.5);
         titleText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
         startScreen.addChild(titleText);
 
         // Instructions text
-        const instructionsText = new PIXI.Text(
-            'Use WASD or arrow keys to move\nMouse/touch to move on mobile\nEnemies drop experience gems\nLevel up to become stronger', {
-            fontSize: 24,
-            fill: 0xcccccc,
-            align: 'center'
+        const instructionsText = new PIXI.Text({
+            text: 'Use WASD or arrow keys to move\nMouse/touch to move on mobile\nEnemies drop experience gems\nLevel up to become stronger',
+            style: {
+                fontSize: 24,
+                fill: 0xcccccc,
+                align: 'center'
+            }
         });
         instructionsText.anchor.set(0.5);
         instructionsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
@@ -104,15 +117,17 @@ class Game {
 
         // Button background
         const button = new PIXI.Graphics();
-        button.beginFill(0x00ff00);
-        button.drawRoundedRect(-100, -30, 200, 60, 15);
-        button.endFill();
+        button.roundRect(-100, -30, 200, 60, 15);
+        button.fill(0x00ff00);
 
         // Button text
-        const buttonText = new PIXI.Text('Start Game', {
-            fontSize: 32,
-            fill: 0x000000,
-            fontWeight: 'bold'
+        const buttonText = new PIXI.Text({
+            text: 'Start Game',
+            style: {
+                fontSize: 32,
+                fill: 0x000000,
+                fontWeight: 'bold'
+            }
         });
         buttonText.anchor.set(0.5);
 
@@ -126,12 +141,13 @@ class Game {
         });
         
         buttonContainer.on('pointerout', () => {
-            button.tint = 0xffffff;
+            button.tint = 0xffffff; // Reset tint
         });
 
         buttonContainer.on('pointerdown', () => {
             // Remove start screen
             this.app.stage.removeChild(startScreen);
+            startScreen.destroy({ children: true }); // Clean up start screen resources
             
             // Clean up any existing game state
             if (this.worldContainer) {
@@ -145,8 +161,12 @@ class Game {
 
         // Handle window resize
         const resizeHandler = () => {
-            background.width = this.app.screen.width;
-            background.height = this.app.screen.height;
+            // Update background
+            background.clear();
+            background.rect(0, 0, this.app.screen.width, this.app.screen.height);
+            background.fill({ color: 0x000000, alpha: 0.85 });
+
+            // Update text positions
             titleText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
             instructionsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
             buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
@@ -170,11 +190,11 @@ class Game {
 
         // Handle both mouse and touch
         this.app.stage.on('pointermove', (e) => {
-            gameState.pointerPosition = { x: e.global.x, y: e.global.y };
+            gameState.pointerPosition = { x: e.globalX, y: e.globalY }; // Changed e.global.x/y
         });
 
         this.app.stage.on('pointerdown', (e) => {
-            gameState.pointerPosition = { x: e.global.x, y: e.global.y };
+            gameState.pointerPosition = { x: e.globalX, y: e.globalY }; // Changed e.global.x/y
             gameState.pointerDown = true;
         });
 
@@ -212,24 +232,24 @@ class Game {
         
         // Create background that fills world
         const background = new PIXI.Graphics();
-        background.beginFill(STYLES.colors.background);
-        background.drawRect(0, 0, WORLD_CONFIG.width, WORLD_CONFIG.height);
-        background.endFill();
+        background.rect(0, 0, WORLD_CONFIG.width, WORLD_CONFIG.height);
+        background.fill(STYLES.colors.background);
         background.name = 'background';
         
         this.worldContainer.addChild(background);
         this.updateGrid(true);  // true for world-sized grid
         
         // Initialize player in center of world
-        gameState.player = EntityManager.createPlayer(this.app);
+        gameState.player = EntityManager.createPlayer(this.app); // Assuming createPlayer is updated
         gameState.player.x = WORLD_CONFIG.width / 2;
         gameState.player.y = WORLD_CONFIG.height / 2;
         this.worldContainer.addChild(gameState.player);
         
         // Initialize UI only once here
         if (!this.ui) {
-            this.ui = new UIManager(this.app);
+            this.ui = new UIManager(this.app); // Assuming UIManager is updated
         }
+        this.ui.updateKillCounter(gameState.kills); // Initialize kill counter display
         
         // Center camera on player initially
         this.updateCamera();
@@ -238,11 +258,11 @@ class Game {
         if (gameState.gameTicker) {
             this.app.ticker.remove(gameState.gameTicker);
         }
-        gameState.gameTicker = (delta) => this.gameLoop(delta);
+        gameState.gameTicker = (ticker) => this.gameLoop(ticker.deltaTime); // Pass ticker.deltaTime
         this.app.ticker.add(gameState.gameTicker);
     }
 
-    gameLoop(delta) {
+    gameLoop(delta) { // delta is now passed from ticker
         if (gameState.gameOver || gameState.levelUp || gameState.paused) return;
 
         this.handleMovement(delta);
@@ -257,6 +277,7 @@ class Game {
         this.ui.updateScore(gameState.score);
         this.ui.updateLevel(gameState.level);
         this.ui.updateExperience(gameState.experience, gameState.nextLevel);
+        this.ui.updateKillCounter(gameState.kills); // Update kill counter display
         this.ui.updateDebugPanel(gameState);
     }
 
@@ -284,8 +305,8 @@ class Game {
         else if (gameState.pointerDown && gameState.pointerPosition && (!this.ui.joystick || !this.ui.joystick.visible)) {
             const pointer = gameState.pointerPosition;
             // Convert pointer position to world coordinates
-            const worldX = pointer.x - this.worldContainer.x;
-            const worldY = pointer.y - this.worldContainer.y;
+            const worldX = pointer.x - this.worldContainer.x; // pointer.x is already globalX
+            const worldY = pointer.y - this.worldContainer.y; // pointer.y is already globalY
             
             // Calculate direction to pointer
             const dirX = worldX - player.x;
@@ -296,17 +317,22 @@ class Game {
             if (distance > 5) {
                 dx = dirX / distance;
                 dy = dirY / distance;
+            } else { // Stop if close enough
+                dx = 0;
+                dy = 0;
             }
         }
 
         // Apply movement if there's any input
         if (dx !== 0 || dy !== 0) {
             // For joystick, we don't need to normalize as it's already normalized
+            // For keyboard, normalize diagonal movement
             if (!this.ui.joystick || !this.ui.joystick.active) {
-                // Normalize diagonal movement only for non-joystick input
                 const length = Math.sqrt(dx * dx + dy * dy);
-                dx = dx / length;
-                dy = dy / length;
+                if (length > 0) { // Avoid division by zero
+                    dx = dx / length;
+                    dy = dy / length;
+                }
             }
 
             player.x += dx * speed;
@@ -326,7 +352,7 @@ class Game {
             const closestEnemy = this.findClosestEnemy();
         if (!closestEnemy) return;
 
-            const bullet = EntityManager.createBullet(
+            const bullet = EntityManager.createBullet( // Assuming createBullet is updated
                 gameState.player.x,
                 gameState.player.y,
                 closestEnemy.x,
@@ -379,8 +405,12 @@ class Game {
 
             // Update health bar
             const healthPercent = enemy.health / enemy.maxHealth;
-            enemy.healthBar.width = healthPercent * (ENEMY_TYPES[enemy.type].size * 2);
-            enemy.healthBar.tint = healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health;
+            // Assuming enemy.healthBar is a PIXI.Graphics object
+            enemy.healthBar.clear(); // Clear previous drawing
+            enemy.healthBar.roundRect(0, 0, ENEMY_TYPES[enemy.type].size * 2, 5, 2);
+            enemy.healthBar.fill(STYLES.colors.healthBar.background); // Background
+            enemy.healthBar.roundRect(0, 0, healthPercent * (ENEMY_TYPES[enemy.type].size * 2), 5, 2);
+            enemy.healthBar.fill(healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health); // Foreground
         });
 
         // Update bullets
@@ -418,7 +448,7 @@ class Game {
             }
             
             const spawnPos = this.createEnemy();
-            const enemy = EntityManager.createEnemy(this.app, type, spawnPos.x, spawnPos.y);
+            const enemy = EntityManager.createEnemy(this.app, type, spawnPos.x, spawnPos.y); // Assuming createEnemy is updated
             
             // Scale enemy stats with level
             const levelScale = gameState.level - 1;
@@ -454,51 +484,54 @@ class Game {
         // Bullet-enemy collisions with proper cleanup
         for (let bIndex = gameState.bullets.length - 1; bIndex >= 0; bIndex--) {
             const bullet = gameState.bullets[bIndex];
+            if (!bullet || !bullet.sprite) continue; // Bullet might have been cleaned up
             
             for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
                 const enemy = gameState.enemies[eIndex];
-            const dx = bullet.sprite.x - enemy.x;
-            const dy = bullet.sprite.y - enemy.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const collisionDist = ENEMY_TYPES[enemy.type].size + 5;
+                if (!enemy) continue; // Enemy might have been cleaned up
 
-            if (dist < collisionDist) {
-                    // Create hit effect
+                const dx = bullet.sprite.x - enemy.x;
+                const dy = bullet.sprite.y - enemy.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const collisionDist = ENEMY_TYPES[enemy.type].size + 5; // 5 is bullet radius approximation
+
+                if (dist < collisionDist) {
                     this.createHitEffect(bullet.sprite.x, bullet.sprite.y);
-                    
-                // Damage enemy
                     enemy.health -= gameState.attackDamage;
                     
-                    // Remove bullet with cleanup
                     EntityManager.cleanup(this.app, bullet.sprite);
                     gameState.bullets.splice(bIndex, 1);
 
-                // Check if enemy died
-                if (enemy.health <= 0) {
+                    if (enemy.health <= 0) {
                         this.createDeathEffect(enemy.x, enemy.y);
                         EntityManager.cleanup(this.app, enemy);
                         gameState.enemies.splice(eIndex, 1);
                         gameState.score += ENEMY_TYPES[enemy.type].experience * 2;
+                        gameState.kills++; // Increment kills
                         this.ui.updateScore(gameState.score);
+                        this.ui.updateKillCounter(gameState.kills); // Update UI
 
-                        // Create experience gem and add to worldContainer
                         const gem = EntityManager.createExperienceGem(this.app, enemy.x, enemy.y, enemy.experienceValue);
                         gameState.experienceGems.push(gem);
-                        this.worldContainer.addChild(gem.sprite);  // Add to worldContainer instead of app.stage
+                        this.worldContainer.addChild(gem.sprite);
                     }
-                    break;
+                    break; // Bullet can only hit one enemy
                 }
             }
         }
 
         // Player-enemy collisions
         gameState.enemies.forEach(enemy => {
+            if (!enemy || !gameState.player) return;
             const dx = gameState.player.x - enemy.x;
             const dy = gameState.player.y - enemy.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
+            const playerRadius = 15; // Approximate player radius
+            const enemyRadius = ENEMY_TYPES[enemy.type].size;
 
-            if (dist < 35) {
-                gameState.health -= 0.5;
+            if (dist < (playerRadius + enemyRadius) * 0.8) { // 0.8 for a bit more forgiving collision
+                gameState.health -= 0.5; // Damage per frame of collision
+                this.triggerDamageFlash(); // Trigger flash effect
                 this.ui.updateHealth(gameState.health, gameState.maxHealth);
 
                 if (gameState.health <= 0 && !gameState.gameOver) {
@@ -511,49 +544,41 @@ class Game {
     }
 
     updateExperienceGems(delta) {
-        // Add a pending experience property to gameState if it doesn't exist
         if (gameState.pendingExperience === undefined) {
             gameState.pendingExperience = 0;
         }
 
-        // Process pending experience first
         if (gameState.pendingExperience > 0) {
-            // Add experience gradually (10% of pending exp per frame, minimum 1)
             const expToAdd = Math.max(1, Math.floor(gameState.pendingExperience * 0.1));
             gameState.experience += expToAdd;
             gameState.pendingExperience -= expToAdd;
-
             this.ui.updateExperience(gameState.experience, gameState.nextLevel);
 
-            // Check for level up
             if (gameState.experience >= gameState.nextLevel && !gameState.levelUp) {
                 this.showLevelUp();
-                return; // Stop processing gems while leveling up
+                return; 
             }
         }
 
-        // Process gems
         for (let i = gameState.experienceGems.length - 1; i >= 0; i--) {
             const gem = gameState.experienceGems[i];
+            if (!gem || !gem.sprite || !gameState.player) continue;
             
-            // Calculate distance to player
             const dx = gameState.player.x - gem.sprite.x;
             const dy = gameState.player.y - gem.sprite.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const magnetSpeed = 4; // Speed of magnet effect
 
-            // Magnet effect
-            if (dist < 100) {
-                gem.sprite.x += (dx / dist) * 4 * delta;
-                gem.sprite.y += (dy / dist) * 4 * delta;
+            if (dist < 100) { // Magnet radius
+                gem.sprite.x += (dx / dist) * magnetSpeed * delta;
+                gem.sprite.y += (dy / dist) * magnetSpeed * delta;
             }
 
-            // Collect gem
-            if (dist < 20) {
-                // Add to pending experience instead of directly to experience
+            if (dist < 20) { // Collection radius
                 gameState.pendingExperience += gem.value;
-                
                 EntityManager.cleanup(this.app, gem.sprite);
-                this.app.stage.removeChild(gem.sprite);
+                // this.app.stage.removeChild(gem.sprite); // Already removed by cleanup if it was added to app.stage
+                this.worldContainer.removeChild(gem.sprite); // Ensure removal from worldContainer
                 gameState.experienceGems.splice(i, 1);
             }
         }
@@ -562,7 +587,7 @@ class Game {
     handleHealthRegen(delta) {
         if (gameState.healthRegen > 0 && gameState.health < gameState.maxHealth) {
             gameState.health = Math.min(
-                gameState.health + (gameState.healthRegen / 60) * delta,
+                gameState.health + (gameState.healthRegen / 60) * delta, // Assuming 60 FPS for regen rate
                 gameState.maxHealth
             );
             this.ui.updateHealth(gameState.health, gameState.maxHealth);
@@ -575,319 +600,236 @@ class Game {
             this.app.ticker.remove(gameState.gameTicker);
         }
         
-        // Clean up animations
         if (gameState.player) {
             EntityManager.cleanup(this.app, gameState.player);
         }
         gameState.experienceGems.forEach(gem => {
-            EntityManager.cleanup(this.app, gem.sprite);
+            if (gem && gem.sprite) EntityManager.cleanup(this.app, gem.sprite);
         });
 
-        // Dark overlay with fade in
-    const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0);
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
+        const overlay = new PIXI.Graphics();
+        overlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+        overlay.fill({ color: 0x000000, alpha: 0 }); // Start transparent
         this.app.stage.addChild(overlay);
 
-        // Animate overlay fade in
         let alpha = 0;
-        const fadeIn = () => {
-            alpha += 0.05;
+        const fadeInTicker = PIXI.Ticker.shared.add(() => {
+            alpha += 0.05 * PIXI.Ticker.shared.deltaTime; // Use ticker delta for smooth animation
             overlay.clear();
-            overlay.beginFill(0x000000, Math.min(0.8, alpha));
-            overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-    overlay.endFill();
-
-            if (alpha < 0.8) requestAnimationFrame(fadeIn);
-        };
-        fadeIn();
-
-        // Game over text with effects
-        const gameOverText = new PIXI.Text('GAME OVER', {
+            overlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+            overlay.fill({color: 0x000000, alpha: Math.min(0.8, alpha)});
+            if (alpha >= 0.8) {
+                PIXI.Ticker.shared.remove(fadeInTicker);
+            }
+        });
+        
+        const gameOverTextStyle = new PIXI.TextStyle({
             fontSize: 64,
             fill: ['#FF0000', '#880000'], // Gradient fill
             fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 6,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 10,
-            dropShadowDistance: 5
+            stroke: { color: '#000000', width: 6 },
+            dropShadow: {
+                color: '#000000',
+                blur: 10,
+                distance: 5,
+                alpha: 0.7
+            }
         });
+        const gameOverText = new PIXI.Text({ text: 'GAME OVER', style: gameOverTextStyle });
         gameOverText.anchor.set(0.5);
         gameOverText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 100);
 
-        // Stats container
         const statsContainer = new PIXI.Container();
         statsContainer.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
 
-        // Stats background
         const statsBg = new PIXI.Graphics();
-        statsBg.beginFill(0x000000, 0.5);
-        statsBg.lineStyle(2, 0x444444);
-        statsBg.drawRoundedRect(-150, -60, 300, 120, 10);
-        statsBg.endFill();
+        statsBg.roundRect(-150, -60, 300, 120, 10);
+        statsBg.fill({ color: 0x000000, alpha: 0.5 });
+        statsBg.stroke({ width: 2, color: 0x444444 });
         statsContainer.addChild(statsBg);
 
-        // Final stats text
-        const statsStyle = {
+        const statsStyle = new PIXI.TextStyle({
             fontSize: 24,
             fill: 0xFFFFFF,
-        align: 'center'
-        };
-
-        const finalScoreText = new PIXI.Text(`Score: ${gameState.score}`, statsStyle);
+            align: 'center'
+        });
+        const finalScoreText = new PIXI.Text({ text: `Score: ${gameState.score}`, style: statsStyle });
         finalScoreText.anchor.set(0.5);
         finalScoreText.position.set(0, -30);
-
-        const levelText = new PIXI.Text(`Level Reached: ${gameState.level}`, statsStyle);
+        const levelText = new PIXI.Text({ text: `Level Reached: ${gameState.level}`, style: statsStyle });
         levelText.anchor.set(0.5);
         levelText.position.set(0, 10);
-
         statsContainer.addChild(finalScoreText, levelText);
 
-        // Play again button with effects
         const button = new PIXI.Container();
         button.position.set(this.app.screen.width / 2, this.app.screen.height / 2 + 100);
-
         const buttonBg = new PIXI.Graphics();
-        buttonBg.beginFill(0x00AA00);
-        buttonBg.lineStyle(3, 0x00FF00);
-        buttonBg.drawRoundedRect(-100, -25, 200, 50, 15);
-        buttonBg.endFill();
-
-        const buttonText = new PIXI.Text('Play Again', {
+        buttonBg.roundRect(-100, -25, 200, 50, 15);
+        buttonBg.fill(0x00AA00);
+        buttonBg.stroke({ width: 3, color: 0x00FF00 });
+        
+        const buttonTextStyle = new PIXI.TextStyle({
             fontSize: 28,
             fill: 0xFFFFFF,
             fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowDistance: 2
+            dropShadow: {
+                color: '#000000',
+                distance: 2,
+                alpha: 0.5
+            }
         });
+        const buttonText = new PIXI.Text({ text: 'Play Again', style: buttonTextStyle });
         buttonText.anchor.set(0.5);
-
         button.addChild(buttonBg, buttonText);
-
-        // Make button interactive
         button.eventMode = 'static';
         button.cursor = 'pointer';
 
-        // Button hover effects
-        button.on('pointerover', () => {
-            buttonBg.tint = 0xAAFFAA;
-            button.scale.set(1.05);
-        });
-        button.on('pointerout', () => {
-            buttonBg.tint = 0xFFFFFF;
-            button.scale.set(1);
-        });
-
+        button.on('pointerover', () => { buttonBg.tint = 0xAAFFAA; button.scale.set(1.05); });
+        button.on('pointerout', () => { buttonBg.tint = 0xFFFFFF; button.scale.set(1); });
         button.on('pointerdown', () => {
             this.app.stage.removeChild(overlay, gameOverText, statsContainer, button);
+            overlay.destroy(); gameOverText.destroy(); statsContainer.destroy({children:true}); button.destroy({children:true});
             this.init();
         });
 
-        // Add pulsing animation to game over text
-        const pulseText = () => {
+        const pulseTicker = PIXI.Ticker.shared.add(() => {
             gameOverText.scale.x = 1 + Math.sin(Date.now() / 300) * 0.1;
             gameOverText.scale.y = gameOverText.scale.x;
-            requestAnimationFrame(pulseText);
-        };
-        pulseText();
+        });
+        gameOverText.on('destroyed', () => PIXI.Ticker.shared.remove(pulseTicker));
 
-        // Add everything to stage
+
         this.app.stage.addChild(overlay, gameOverText, statsContainer, button);
     }
 
     showLevelUp() {
         gameState.levelUp = true;
 
-        // Dark overlay with animation
         const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0);  // Start transparent
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
+        overlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+        overlay.fill({ color: 0x000000, alpha: 0 });
         this.app.stage.addChild(overlay);
 
-        // Animate overlay
         let alpha = 0;
-        const fadeIn = () => {
-            alpha += 0.05;
+        const fadeInTicker = PIXI.Ticker.shared.add(() => {
+            alpha += 0.05 * PIXI.Ticker.shared.deltaTime;
             overlay.clear();
-            overlay.beginFill(0x000000, Math.min(0.7, alpha));
-            overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-            overlay.endFill();
-            
-            if (alpha < 0.7) requestAnimationFrame(fadeIn);
-        };
-        fadeIn();
-
-        // Level up text with glow effect
-        const levelUpText = new PIXI.Text('LEVEL UP!', {
-            fontSize: 48,
-            fill: ['#FFD700', '#FFA500'], // Gold gradient
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 4,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 10,
-            dropShadowDistance: 5
+            overlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+            overlay.fill({color: 0x000000, alpha: Math.min(0.7, alpha)});
+            if (alpha >= 0.7) PIXI.Ticker.shared.remove(fadeInTicker);
         });
+
+        const levelUpTextStyle = new PIXI.TextStyle({
+            fontSize: 48,
+            fill: ['#FFD700', '#FFA500'],
+            fontWeight: 'bold',
+            stroke: { color: '#000000', width: 4 },
+            dropShadow: {
+                color: '#000000',
+                blur: 10,
+                distance: 5,
+                alpha: 0.7
+            }
+        });
+        const levelUpText = new PIXI.Text({ text: 'LEVEL UP!', style: levelUpTextStyle });
         levelUpText.anchor.set(0.5);
         levelUpText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 120);
-
-        // Add pulsing animation to level up text
-        const pulseText = () => {
+        
+        const pulseTicker = PIXI.Ticker.shared.add(() => {
             levelUpText.scale.x = 1 + Math.sin(Date.now() / 200) * 0.1;
             levelUpText.scale.y = levelUpText.scale.x;
-            requestAnimationFrame(pulseText);
-        };
-        pulseText();
+        });
+        levelUpText.on('destroyed', () => PIXI.Ticker.shared.remove(pulseTicker));
 
-        // Get upgrades
+
         const upgrades = this.getRandomUpgrades();
         let selectedIndex = 0;
+        const optionContainers = [];
 
-        // Create upgrade option containers
-        const optionContainers = upgrades.map((upgrade, index) => {
+        upgrades.forEach((upgrade, index) => {
             const container = new PIXI.Container();
-            
-            // Background for option
             const bg = new PIXI.Graphics();
-            bg.beginFill(0x333333, 0.8);
-            bg.lineStyle(2, 0x666666);
-            bg.drawRoundedRect(-150, -30, 300, 60, 10);
-            bg.endFill();
-            
-            const text = new PIXI.Text(upgrade.text, {
-                fontSize: 20,
-                fill: 0xFFFFFF,
-                align: 'center'
+            const text = new PIXI.Text({ 
+                text: upgrade.text, 
+                style: { fontSize: 20, fill: 0xFFFFFF, align: 'center' }
             });
             text.anchor.set(0.5);
-
             container.addChild(bg, text);
-            container.position.set(
-                this.app.screen.width / 2,
-                this.app.screen.height / 2 + index * 80
-            );
-            
-            // Make container interactive
+            container.position.set(this.app.screen.width / 2, this.app.screen.height / 2 + index * 80);
             container.eventMode = 'static';
             container.cursor = 'pointer';
-            
-            // Add hover and click handlers
-            container.on('pointerover', () => {
-                selectedIndex = index;
-                updateSelection();
-            });
-            
+            container.on('pointerover', () => { selectedIndex = index; updateSelection(); });
             container.on('pointerdown', () => {
-                // Apply selected upgrade
                 upgrades[index].action();
-                
-                // Cleanup
                 cleanup();
-                
-                // Complete level up
                 this.levelUpComplete();
             });
-
-            return container;
+            optionContainers.push(container);
+            this.app.stage.addChild(container);
         });
-
-        // Update the instruction text to include mouse/touch instructions
-        const instructionText = new PIXI.Text(
-            'Use ↑↓ or touch/click to select\nSPACE or tap/click to confirm', {
-            fontSize: 16,
-            fill: 0xCCCCCC,
-            align: 'center'
+        
+        const instructionTextStyle = new PIXI.TextStyle({
+            fontSize: 16, fill: 0xCCCCCC, align: 'center'
+        });
+        const instructionText = new PIXI.Text({
+            text: 'Use ↑↓ or touch/click to select\nSPACE or tap/click to confirm',
+            style: instructionTextStyle
         });
         instructionText.anchor.set(0.5);
-        instructionText.position.set(
-            this.app.screen.width / 2,
-            this.app.screen.height / 2 + (upgrades.length * 80) + 40
-        );
+        instructionText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 + (upgrades.length * 80) + 40);
 
-        // Function to update selection
         const updateSelection = () => {
             optionContainers.forEach((container, index) => {
-                const bg = container.getChildAt(0);
-                const text = container.getChildAt(1);
-                
+                const bg = container.getChildAt(0); // Assuming bg is the first child
+                const text = container.getChildAt(1); // Assuming text is the second child
+                bg.clear();
                 if (index === selectedIndex) {
-                    bg.clear();
-                    bg.beginFill(0x666666, 0.9);
-                    bg.lineStyle(2, 0xFFD700);
-                    bg.drawRoundedRect(-150, -30, 300, 60, 10);
-                    bg.endFill();
+                    bg.roundRect(-150, -30, 300, 60, 10);
+                    bg.fill({ color: 0x666666, alpha: 0.9 });
+                    bg.stroke({ width: 2, color: 0xFFD700 });
                     text.style.fill = 0xFFD700;
-                    container.filters = null;
+                    container.filters = null; // Remove blur
                     container.scale.set(1.1);
                 } else {
-                    bg.clear();
-                    bg.beginFill(0x333333, 0.8);
-                    bg.lineStyle(2, 0x666666);
-                    bg.drawRoundedRect(-150, -30, 300, 60, 10);
-                    bg.endFill();
+                    bg.roundRect(-150, -30, 300, 60, 10);
+                    bg.fill({ color: 0x333333, alpha: 0.8 });
+                    bg.stroke({ width: 2, color: 0x666666 });
                     text.style.fill = 0xFFFFFF;
-                    container.filters = [new PIXI.BlurFilter(1)];
+                    container.filters = [new PIXI.BlurFilter({ strength: 1 })]; // BlurFilter takes options object
                     container.scale.set(1);
                 }
             });
         };
-
-        // Cleanup function
+        
         const cleanup = () => {
             window.removeEventListener('keydown', handleKeyPress);
+            PIXI.Ticker.shared.remove(fadeInTicker); // Ensure fadein ticker is removed
+            PIXI.Ticker.shared.remove(pulseTicker); // Ensure pulse ticker is removed
             this.app.stage.removeChild(overlay, levelUpText, instructionText);
             optionContainers.forEach(container => this.app.stage.removeChild(container));
+            overlay.destroy(); levelUpText.destroy(); instructionText.destroy();
+            optionContainers.forEach(container => container.destroy({children:true}));
         };
 
-        // Handle key events
         const handleKeyPress = (e) => {
             switch(e.key) {
-                case 'ArrowUp':
-                    selectedIndex = (selectedIndex - 1 + upgrades.length) % upgrades.length;
-                    updateSelection();
-                    break;
-                case 'ArrowDown':
-                    selectedIndex = (selectedIndex + 1) % upgrades.length;
-                    updateSelection();
-                    break;
-                case ' ':  // Space key
-                    // Apply selected upgrade
-                    upgrades[selectedIndex].action();
-                    
-                    // Cleanup
-                    cleanup();
-                    
-                    // Complete level up
-                    this.levelUpComplete();
-                    break;
+                case 'ArrowUp': selectedIndex = (selectedIndex - 1 + upgrades.length) % upgrades.length; updateSelection(); break;
+                case 'ArrowDown': selectedIndex = (selectedIndex + 1) % upgrades.length; updateSelection(); break;
+                case ' ': upgrades[selectedIndex].action(); cleanup(); this.levelUpComplete(); break;
             }
         };
 
-        // Add all elements to stage
         this.app.stage.addChild(levelUpText, instructionText);
-        optionContainers.forEach(container => this.app.stage.addChild(container));
-
-        // Initial selection update
         updateSelection();
-
         window.addEventListener('keydown', handleKeyPress);
     }
 
     levelUpComplete() {
-        // Update level-related stats
         gameState.level++;
         gameState.experience = 0;
         gameState.nextLevel = Math.floor(gameState.nextLevel * LEVEL_SCALING.experienceMultiplier);
         gameState.levelUp = false;
         
-        // Update all UI elements
         this.ui.updateLevel(gameState.level);
         this.ui.updateExperience(gameState.experience, gameState.nextLevel);
         this.ui.updateHealth(gameState.health, gameState.maxHealth);
@@ -895,25 +837,25 @@ class Game {
     }
 
     updateCamera() {
-        // Calculate where the camera should be
         const targetX = -gameState.player.x + this.app.screen.width / 2;
         const targetY = -gameState.player.y + this.app.screen.height / 2;
         
-        // Clamp camera position to world bounds
-        const minX = -WORLD_CONFIG.width + this.app.screen.width;
-        const minY = -WORLD_CONFIG.height + this.app.screen.height;
+        const minX = Math.min(0, -WORLD_CONFIG.width + this.app.screen.width); // Ensure minX is 0 or negative
+        const minY = Math.min(0, -WORLD_CONFIG.height + this.app.screen.height); // Ensure minY is 0 or negative
         
         this.worldContainer.x = Math.max(Math.min(targetX, 0), minX);
         this.worldContainer.y = Math.max(Math.min(targetY, 0), minY);
     }
 
     createEnemy() {
-        // Modify enemy spawn to use world coordinates
         const angle = Math.random() * Math.PI * 2;
-        const spawnX = gameState.player.x + Math.cos(angle) * SPAWN_CONFIG.spawnDistance;
-        const spawnY = gameState.player.y + Math.sin(angle) * SPAWN_CONFIG.spawnDistance;
+        // Ensure player exists before trying to access its position
+        const playerX = gameState.player ? gameState.player.x : WORLD_CONFIG.width / 2;
+        const playerY = gameState.player ? gameState.player.y : WORLD_CONFIG.height / 2;
+
+        const spawnX = playerX + Math.cos(angle) * SPAWN_CONFIG.spawnDistance;
+        const spawnY = playerY + Math.sin(angle) * SPAWN_CONFIG.spawnDistance;
         
-        // Ensure spawn is within world bounds
         const x = Math.max(50, Math.min(WORLD_CONFIG.width - 50, spawnX));
         const y = Math.max(50, Math.min(WORLD_CONFIG.height - 50, spawnY));
         
@@ -922,84 +864,216 @@ class Game {
 
     createHitEffect(x, y) {
         const particles = [];
-        const particleCount = STYLES.particles.hit.count;
-        
+        const particleCount = STYLES.particles.hit.count * 2; // More particles for better visual
+        const baseSpeed = STYLES.particles.hit.speed;
+        const baseLifetime = STYLES.particles.hit.lifetime; // frames, will convert to seconds
+
         for (let i = 0; i < particleCount; i++) {
             const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.hit.color);
-            particle.drawCircle(0, 0, 2);
-            particle.endFill();
+            const size = Math.random() * 2 + 1; // Vary size: 1 to 3
+            const shapeType = Math.random();
+
+            if (shapeType < 0.6) { // 60% chance for circle
+                particle.circle(0, 0, size);
+            } else { // 40% chance for square
+                particle.rect(-size / 2, -size / 2, size, size);
+            }
             
-            const angle = (Math.PI * 2 * i) / particleCount;
-            const speed = STYLES.particles.hit.speed;
+            // Dynamic color: Start bright yellow, fade to orange
+            particle.initialColor = { r: 255, g: 255, b: 0 }; // Yellow
+            particle.targetColor = { r: 255, g: 165, b: 0 }; // Orange
+            particle.fill(PIXI.utils.rgb2hex([particle.initialColor.r/255, particle.initialColor.g/255, particle.initialColor.b/255]));
+            
+            const angle = Math.random() * Math.PI * 2; // Random direction for more spread
+            const speed = baseSpeed * (0.7 + Math.random() * 0.6); // Vary speed: 70% to 130% of base
             
             particle.x = x;
             particle.y = y;
             particle.vx = Math.cos(angle) * speed;
             particle.vy = Math.sin(angle) * speed;
-            particle.alpha = 1;
+            particle.alpha = 0.9 + Math.random() * 0.1; // Start with high alpha
+            particle.initialAlpha = particle.alpha;
+            
+            // Lifespan in seconds, varied
+            particle.lifetime = (baseLifetime / 60) * (0.8 + Math.random() * 0.4); // Convert frame-based lifetime to seconds and vary
+            particle.age = 0; // Age in seconds
             
             this.worldContainer.addChild(particle);
             particles.push(particle);
         }
         
-        const animate = () => {
-            particles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.alpha -= 0.05;
-                if (p.alpha <= 0) {
+        const animate = (ticker) => {
+            const deltaSeconds = ticker.deltaTime / PIXI.settings.TARGET_FPMS / 1000; // Correct delta in seconds
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.age += deltaSeconds;
+
+                if (p.age >= p.lifetime) {
                     this.worldContainer.removeChild(p);
+                    p.destroy();
+                    particles.splice(i, 1);
+                    continue;
                 }
-            });
+
+                p.x += p.vx * deltaSeconds * 60; // Keep similar speed scaling as before if speeds were per-frame
+                p.y += p.vy * deltaSeconds * 60;
+                
+                const lifeRatio = p.age / p.lifetime;
+                p.alpha = p.initialAlpha * (1 - lifeRatio);
+
+                // Interpolate color
+                const r = p.initialColor.r + (p.targetColor.r - p.initialColor.r) * lifeRatio;
+                const g = p.initialColor.g + (p.targetColor.g - p.initialColor.g) * lifeRatio;
+                const b = p.initialColor.b + (p.targetColor.b - p.initialColor.b) * lifeRatio;
+                p.clear(); // Clear previous fill
+                if (p.geometry.type === PIXI.SHAPES.CIRC) { // Check shape type to redraw correctly
+                     p.circle(0,0, p.geometry.radius);
+                } else {
+                     p.rect(-p.geometry.width/2, -p.geometry.height/2, p.geometry.width, p.geometry.height);
+                }
+                p.fill(PIXI.utils.rgb2hex([r/255, g/255, b/255]));
+            }
             
-            if (particles[0].alpha > 0) {
-                requestAnimationFrame(animate);
+            if (particles.length === 0) {
+                PIXI.Ticker.shared.remove(animate);
             }
         };
-        
-        animate();
+        PIXI.Ticker.shared.add(animate);
     }
 
     createDeathEffect(x, y) {
         const particles = [];
-        const particleCount = STYLES.particles.death.count;
-        
+        const particleCount = STYLES.particles.death.count * 3; // Increased particle count
+        const baseSpeed = STYLES.particles.death.speed;
+        const baseLifetime = STYLES.particles.death.lifetime; // frames, will convert to seconds
+
+        // Central Flash
+        const flash = new PIXI.Graphics();
+        flash.circle(0, 0, 30); // Larger flash radius
+        flash.fill({color: 0xFFFFFF, alpha: 0.9});
+        flash.x = x;
+        flash.y = y;
+        this.worldContainer.addChild(flash);
+
+        let flashAge = 0;
+        const flashLifetime = 0.1; // seconds
+        const flashTicker = (ticker) => {
+            const deltaSeconds = ticker.deltaTime / PIXI.settings.TARGET_FPMS / 1000;
+            flashAge += deltaSeconds;
+            if (flashAge >= flashLifetime) {
+                this.worldContainer.removeChild(flash);
+                flash.destroy();
+                PIXI.Ticker.shared.remove(flashTicker);
+            } else {
+                const lifeRatio = flashAge / flashLifetime;
+                flash.scale.set(1 + lifeRatio * 2); // Expands
+                flash.alpha = 0.9 * (1 - lifeRatio); // Fades
+            }
+        };
+        PIXI.Ticker.shared.add(flashTicker);
+
+
         for (let i = 0; i < particleCount; i++) {
             const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.death.color);
-            particle.drawCircle(0, 0, 3);
-            particle.endFill();
+            const size = Math.random() * 4 + 2; // Vary size: 2 to 6
+            const shapeType = Math.random();
+            const colorPalette = [0xFF0000, 0xFF4500, 0xFFA500, 0xFFFF00]; // Reds, Oranges, Yellows
+            const chosenColor = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+
+            if (shapeType < 0.5) { // 50% Circles
+                particle.circle(0, 0, size);
+            } else if (shapeType < 0.8) { // 30% Triangles
+                particle.poly([
+                    0, -size,
+                    -size * 0.866, size * 0.5,
+                    size * 0.866, size * 0.5
+                ]);
+            } else { // 20% Lines
+                particle.rect(-size/2, -1, size, 2); // Short lines
+            }
+            particle.fill(chosenColor);
             
             const angle = Math.random() * Math.PI * 2;
-            const speed = STYLES.particles.death.speed * (0.5 + Math.random() * 0.5);
+            // Greater variation in speed and direction
+            const speed = baseSpeed * (0.5 + Math.random() * 1.0); // 50% to 150% of base
             
             particle.x = x;
             particle.y = y;
             particle.vx = Math.cos(angle) * speed;
             particle.vy = Math.sin(angle) * speed;
-            particle.alpha = 1;
+            particle.alpha = 0.8 + Math.random() * 0.2;
+            particle.initialAlpha = particle.alpha;
+            // Lingering or faster particles
+            particle.lifetime = (baseLifetime / 60) * (0.6 + Math.random() * 0.8); 
+            particle.age = 0;
+            particle.rotation = Math.random() * Math.PI * 2; // Random initial rotation for shapes
             
             this.worldContainer.addChild(particle);
             particles.push(particle);
         }
         
-        const animate = () => {
-            particles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.alpha -= 0.02;
-                if (p.alpha <= 0) {
+        const animate = (ticker) => {
+            const deltaSeconds = ticker.deltaTime / PIXI.settings.TARGET_FPMS / 1000;
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.age += deltaSeconds;
+
+                if (p.age >= p.lifetime) {
                     this.worldContainer.removeChild(p);
+                    p.destroy();
+                    particles.splice(i, 1);
+                    continue;
                 }
-            });
+
+                p.x += p.vx * deltaSeconds * 60;
+                p.y += p.vy * deltaSeconds * 60;
+                p.rotation += p.vx * 0.001 * deltaSeconds * 60; // Slow rotation based on horizontal velocity
+                p.alpha = p.initialAlpha * (1 - (p.age / p.lifetime));
+            }
             
-            if (particles[0].alpha > 0) {
-                requestAnimationFrame(animate);
+            if (particles.length === 0) {
+                PIXI.Ticker.shared.remove(animate);
             }
         };
-        
-        animate();
+        PIXI.Ticker.shared.add(animate);
+    }
+
+    triggerDamageFlash() {
+        if (this.currentFlashAnimation) {
+            PIXI.Ticker.shared.remove(this.currentFlashAnimation);
+            this.currentFlashAnimation = null; // Clear existing animation
+        }
+
+        this.damageFlashOverlay.clear();
+        this.damageFlashOverlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+        // Alpha is handled by the animation loop directly on the object's alpha property
+        this.damageFlashOverlay.fill({ color: 0xFF0000 }); 
+        this.damageFlashOverlay.alpha = 0.4; // Initial alpha for the flash
+        this.damageFlashOverlay.visible = true;
+
+        let elapsed = 0;
+        const flashDuration = 200; // milliseconds (0.2 seconds)
+
+        const animateFlash = (ticker) => {
+            // Correct way to get deltaMS in PixiJS v8 ticker is ticker.deltaMS or ticker.deltaTime (if you adjust for TARGET_FPMS)
+            // Assuming ticker.deltaMS is available and provides milliseconds
+            // If not, use ticker.deltaTime and convert: elapsed += (ticker.deltaTime / PIXI.settings.TARGET_FPMS) * 1000;
+             elapsed += ticker.deltaMS || (ticker.deltaTime / PIXI.Ticker.targetFPMS) * 1000;
+
+
+            const progress = Math.min(elapsed / flashDuration, 1);
+            this.damageFlashOverlay.alpha = 0.4 * (1 - progress); // Fade out from initial alpha
+
+            if (progress >= 1) {
+                PIXI.Ticker.shared.remove(animateFlash);
+                this.damageFlashOverlay.visible = false;
+                this.currentFlashAnimation = null;
+            }
+        };
+
+        this.currentFlashAnimation = animateFlash;
+        PIXI.Ticker.shared.add(animateFlash);
     }
 
     getRandomUpgrades() {
@@ -1009,7 +1083,7 @@ class Game {
                 text: 'Increase Fire Rate', 
                 action: () => {
                     gameState.fireRate *= LEVEL_SCALING.fireRateUpgrade;
-                    this.ui.updateDebugPanel(gameState);
+                    if (this.ui) this.ui.updateDebugPanel(gameState);
                 }
             },
             { 
@@ -1017,7 +1091,7 @@ class Game {
                 text: 'Increase Speed', 
                 action: () => {
                     gameState.playerSpeed *= LEVEL_SCALING.speedUpgrade;
-                    this.ui.updateDebugPanel(gameState);
+                    if (this.ui) this.ui.updateDebugPanel(gameState);
                 }
             },
             { 
@@ -1026,8 +1100,10 @@ class Game {
                 action: () => {
                     gameState.maxHealth = Math.floor(gameState.maxHealth * LEVEL_SCALING.healthUpgrade);
                     gameState.health = gameState.maxHealth;
-                    this.ui.updateHealth(gameState.health, gameState.maxHealth);
-                    this.ui.updateDebugPanel(gameState);
+                    if (this.ui) {
+                        this.ui.updateHealth(gameState.health, gameState.maxHealth);
+                        this.ui.updateDebugPanel(gameState);
+                    }
                 }
             },
             { 
@@ -1035,7 +1111,7 @@ class Game {
                 text: 'Increase Attack Damage', 
                 action: () => {
                     gameState.attackDamage *= LEVEL_SCALING.damageUpgrade;
-                    this.ui.updateDebugPanel(gameState);
+                    if (this.ui) this.ui.updateDebugPanel(gameState);
                 }
             },
             { 
@@ -1043,7 +1119,7 @@ class Game {
                 text: 'Increase Health Regen', 
                 action: () => {
                     gameState.healthRegen += LEVEL_SCALING.healthRegenUpgrade;
-                    this.ui.updateDebugPanel(gameState);
+                    if (this.ui) this.ui.updateDebugPanel(gameState);
                 }
             }
         ];
@@ -1054,8 +1130,18 @@ class Game {
 }
 
 // Initialize game with error handling
-try {
-    const game = new Game();
-} catch (error) {
-    console.error('Failed to start game:', error);
-}
+(async () => {
+    try {
+        const game = new Game();
+        await game.constructor(); // Call the async constructor logic
+    } catch (error) {
+        console.error('Failed to start game:', error);
+        // Display a user-friendly error message on the page if possible
+        const errorDiv = document.createElement('div');
+        errorDiv.textContent = 'Failed to load the game. Please try refreshing the page or check the console for more details.';
+        errorDiv.style.color = 'white';
+        errorDiv.style.padding = '20px';
+        errorDiv.style.textAlign = 'center';
+        document.body.appendChild(errorDiv);
+    }
+})();

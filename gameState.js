@@ -13,6 +13,7 @@ class GameState {
         this.paused = false;
         this.keys = {};
         this.pendingExperience = 0;
+        this.kills = 0; // Ensure it's reset
         
         this.pointerPosition = null;
         this.pointerDown = false;

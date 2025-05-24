@@ -24,54 +24,59 @@ export class UIManager {
     }
 
     createUIElements() {
-        // Create UI panel background
+        // Create UI panel background - Increased height from 150 to 180
         const panel = new PIXI.Graphics();
-        panel.beginFill(0x000000, 0.5);
-        panel.drawRoundedRect(5, 5, 200, 150, 10);
-        panel.endFill();
+        panel.roundRect(5, 5, 200, 180, 10); 
+        panel.fill({ color: 0x000000, alpha: 0.5 });
         this.container.addChild(panel);
 
-        const textStyle = {
+        const textStyle = new PIXI.TextStyle({
             fontFamily: 'Arial',
             fontSize: 16,
             fill: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 1,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 2,
-            dropShadowDistance: 1
-        };
+            stroke: { color: '#000000', width: 1 },
+            dropShadow: {
+                color: '#000000',
+                blur: 2,
+                distance: 1,
+                alpha: 0.7
+            }
+        });
 
-        const debugStyle = {
-            ...textStyle,
+        const debugStyle = new PIXI.TextStyle({
+            fontFamily: 'Arial',
             fontSize: 14,
-            fill: '#AAAAAA'
-        };
+            fill: '#AAAAAA',
+            stroke: { color: '#000000', width: 1 },
+            dropShadow: {
+                color: '#000000',
+                blur: 2,
+                distance: 1,
+                alpha: 0.7
+            }
+        });
 
         // Create stat icons
-        this.createIcon(15, 15, 0xFF0000, '❤️'); // Health
-        this.createIcon(15, 45, 0xFFD700, '⭐'); // Score
-        this.createIcon(15, 75, 0x00FF00, '📊'); // Level
-        this.createIcon(15, 105, 0xFF00FF, '💎'); // XP
+        this.createIcon(15, 15, '❤️'); // Health
+        this.createIcon(15, 45, '⭐'); // Score
+        this.createIcon(15, 75, '📊'); // Level
+        this.createIcon(15, 105, '💎'); // XP
+        this.createIcon(15, 135, '💀'); // Kill Counter Icon
 
         // Create settings button in top right
         const settingsButton = new PIXI.Container();
-        const settingsIcon = new PIXI.Text('⚙️', { fontSize: 24 });
+        const settingsIcon = new PIXI.Text({ text: '⚙️', style: { fontSize: 24 }});
         settingsIcon.anchor.set(0.5);
         
         const settingsBg = new PIXI.Graphics();
-        settingsBg.beginFill(0x000000, 0.3);
-        settingsBg.drawCircle(0, 0, 20);
-        settingsBg.endFill();
+        settingsBg.circle(0, 0, 20);
+        settingsBg.fill({ color: 0x000000, alpha: 0.3 });
         
         settingsButton.addChild(settingsBg, settingsIcon);
-        // Position in top right with margin
         settingsButton.position.set(this.app.screen.width - 40, 40);
         settingsButton.eventMode = 'static';
         settingsButton.cursor = 'pointer';
         
-        // Add window resize handler for settings button
         window.addEventListener('resize', () => {
             settingsButton.position.set(this.app.screen.width - 40, 40);
         });
@@ -79,23 +84,24 @@ export class UIManager {
         settingsButton.on('pointerdown', () => this.toggleSettings());
         settingsButton.on('pointerover', () => {
             settingsBg.clear();
-            settingsBg.beginFill(0x333333, 0.5);
-            settingsBg.drawCircle(0, 0, 20);
+            settingsBg.circle(0, 0, 20);
+            settingsBg.fill({ color: 0x333333, alpha: 0.5 });
         });
         settingsButton.on('pointerout', () => {
             settingsBg.clear();
-            settingsBg.beginFill(0x000000, 0.3);
-            settingsBg.drawCircle(0, 0, 20);
+            settingsBg.circle(0, 0, 20);
+            settingsBg.fill({ color: 0x000000, alpha: 0.3 });
         });
         
         this.container.addChild(settingsButton);
 
         this.elements = {
-            scoreText: new PIXI.Text('Score: 0', textStyle),
-            healthText: new PIXI.Text('Health: 100/100', textStyle),
-            levelText: new PIXI.Text('Level: 1', textStyle),
-            experienceText: new PIXI.Text('XP: 0/10', textStyle),
-            debugText: new PIXI.Text('', debugStyle)
+            scoreText: new PIXI.Text({ text: 'Score: 0', style: textStyle }),
+            healthText: new PIXI.Text({ text: 'Health: 100/100', style: textStyle }),
+            levelText: new PIXI.Text({ text: 'Level: 1', style: textStyle }),
+            experienceText: new PIXI.Text({ text: 'XP: 0/10', style: textStyle }),
+            killCounterText: new PIXI.Text({ text: '💀 0', style: textStyle }), // Added kill counter text
+            debugText: new PIXI.Text({ text: '', style: debugStyle })
         };
 
         // Position UI elements with offset for icons
@@ -103,22 +109,26 @@ export class UIManager {
         this.elements.scoreText.position.set(40, 40);
         this.elements.levelText.position.set(40, 70);
         this.elements.experienceText.position.set(40, 100);
-        this.elements.debugText.position.set(10, 170);
+        this.elements.killCounterText.position.set(40, 130); // Positioned kill counter
+        // Adjusted debug text position due to new panel height and kill counter
+        this.elements.debugText.position.set(10, 200); 
 
-        // Add elements to container
         Object.values(this.elements).forEach(element => {
             this.container.addChild(element);
         });
 
-        // Add XP bar
-        this.xpBar = this.createProgressBar(10, 130, 190, 10, 0x8800FF);
+        // Adjusted XP bar position due to new kill counter
+        this.xpBar = this.createProgressBar(10, 160, 190, 10, 0x8800FF); 
         this.healthBar = this.createProgressBar(40, 30, 160, 6, 0xFF0000);
     }
 
-    createIcon(x, y, color, emoji) {
-        const text = new PIXI.Text(emoji, {
-            fontSize: 20,
-            align: 'center'
+    createIcon(x, y, emoji) {
+        const text = new PIXI.Text({ 
+            text: emoji, 
+            style: { 
+                fontSize: 20, 
+                align: 'center' 
+            }
         });
         text.position.set(x, y);
         this.container.addChild(text);
@@ -127,17 +137,13 @@ export class UIManager {
     createProgressBar(x, y, width, height, color) {
         const container = new PIXI.Container();
         
-        // Background
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.5);
-        bg.drawRoundedRect(0, 0, width, height, height/2);
-        bg.endFill();
+        bg.roundRect(0, 0, width, height, height / 2);
+        bg.fill({ color: 0x000000, alpha: 0.5 });
         
-        // Progress
         const bar = new PIXI.Graphics();
-        bar.beginFill(color);
-        bar.drawRoundedRect(0, 0, width, height, height/2);
-        bar.endFill();
+        bar.roundRect(0, 0, width, height, height / 2);
+        bar.fill(color);
         
         container.addChild(bg, bar);
         container.position.set(x, y);
@@ -167,6 +173,12 @@ export class UIManager {
     updateExperience(experience, nextLevel) {
         this.elements.experienceText.text = `XP: ${experience}/${nextLevel}`;
         this.xpBar.scale.x = experience / nextLevel;
+    }
+
+    updateKillCounter(kills) {
+        if (this.elements.killCounterText) {
+            this.elements.killCounterText.text = `💀 ${kills}`;
+        }
     }
 
     updateDebugPanel(state) {
@@ -202,18 +214,14 @@ export class UIManager {
     createJoystick() {
         const joystickContainer = new PIXI.Container();
         
-        // Base circle - bigger and more transparent
         const base = new PIXI.Graphics();
-        base.beginFill(0x000000, 0.2);
-        base.lineStyle(2, 0xFFFFFF, 0.3);
-        base.drawCircle(0, 0, 130);
-        base.endFill();
+        base.circle(0, 0, 130);
+        base.fill({ color: 0x000000, alpha: 0.2 });
+        base.stroke({ width: 2, color: 0xFFFFFF, alpha: 0.3 });
 
-        // Stick - bigger and more transparent
         const stick = new PIXI.Graphics();
-        stick.beginFill(0xFFFFFF, 0.3);
-        stick.drawCircle(0, 0, 50);
-        stick.endFill();
+        stick.circle(0, 0, 50);
+        stick.fill({ color: 0xFFFFFF, alpha: 0.3 });
 
         joystickContainer.addChild(base, stick);
         this.container.addChild(joystickContainer);
@@ -244,14 +252,13 @@ export class UIManager {
         
         // Improved touch handling
         joystickContainer.on('pointerdown', (e) => {
-            e.stopPropagation();
+            e.stopPropagation(); // Keep stopPropagation if it's intended to prevent other listeners on the stage
             this.onJoystickDown(e, joystick);
         });
 
-        // Use passive listeners for better performance
-        this.app.stage.on('pointermove', (e) => this.onJoystickMove(e, joystick), { passive: true });
-        this.app.stage.on('pointerup', () => this.onJoystickUp(joystick), { passive: true });
-        this.app.stage.on('pointerupoutside', () => this.onJoystickUp(joystick), { passive: true });
+        this.app.stage.on('pointermove', (e) => this.onJoystickMove(e, joystick)); // Passive option is not standard for PIXI events
+        this.app.stage.on('pointerup', () => this.onJoystickUp(joystick));
+        this.app.stage.on('pointerupoutside', () => this.onJoystickUp(joystick));
 
         // Position joystick based on configuration
         this.updateJoystickPosition(joystick);
@@ -335,21 +342,21 @@ export class UIManager {
     }
 
     onJoystickMove(event, joystick) {
-        if (!joystick.active) return;
+        if (!joystick.active || !joystick.data) return; // Added check for joystick.data
 
-        const newPosition = joystick.data.getLocalPosition(joystick.container);
+        const newPosition = event.getLocalPosition(joystick.container); // Use event.getLocalPosition
         const distance = Math.sqrt(newPosition.x * newPosition.x + newPosition.y * newPosition.y);
         
-        if (distance <= joystick.baseRadius) {
-            joystick.stick.position = newPosition;
+        const stickLimit = joystick.baseRadius - (joystick.stick.width / 2 / joystick.container.scale.x); // consider stick size and scale
+
+        if (distance <= stickLimit) {
+            joystick.stick.position.copyFrom(newPosition);
         } else {
-            // Normalize the position to the base radius
             const angle = Math.atan2(newPosition.y, newPosition.x);
-            joystick.stick.position.x = Math.cos(angle) * joystick.baseRadius;
-            joystick.stick.position.y = Math.sin(angle) * joystick.baseRadius;
+            joystick.stick.position.x = Math.cos(angle) * stickLimit;
+            joystick.stick.position.y = Math.sin(angle) * stickLimit;
         }
 
-        // Update normalized position (-1 to 1)
         joystick.position = {
             x: joystick.stick.position.x / joystick.baseRadius,
             y: joystick.stick.position.y / joystick.baseRadius
@@ -396,53 +403,38 @@ export class UIManager {
         menu.zIndex = 2000; // Ensure it's above other UI elements
         menu.eventMode = 'static'; // Make entire menu interactive
 
-        // Background overlay
         const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0.8);
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
-        overlay.eventMode = 'static'; // Make overlay interactive
-        overlay.on('pointerdown', (e) => e.stopPropagation()); // Prevent clicks through overlay
+        overlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+        overlay.fill({ color: 0x000000, alpha: 0.8 });
+        overlay.eventMode = 'static';
+        overlay.on('pointerdown', (e) => e.stopPropagation());
         menu.addChild(overlay);
 
-        // Settings panel - moved to top right
         const panel = new PIXI.Graphics();
-        panel.beginFill(0x333333, 0.95);
-        panel.lineStyle(2, 0xFFFFFF, 0.8);
-        panel.drawRoundedRect(0, 0, 300, 400, 10);
-        panel.endFill();
-        panel.position.set(
-            this.app.screen.width - 320,  // 20px margin from right
-            20  // 20px margin from top
-        );
-        panel.eventMode = 'static'; // Make panel interactive
+        panel.roundRect(0, 0, 300, 400, 10);
+        panel.fill({ color: 0x333333, alpha: 0.95 });
+        panel.stroke({ width: 2, color: 0xFFFFFF, alpha: 0.8 });
+        panel.position.set(this.app.screen.width - 320, 20);
+        panel.eventMode = 'static';
         menu.addChild(panel);
 
-        // Title
-        const title = new PIXI.Text('Settings', {
-            fontSize: 24,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold'
-        });
+        const titleStyle = new PIXI.TextStyle({ fontSize: 24, fill: 0xFFFFFF, fontWeight: 'bold' });
+        const title = new PIXI.Text({ text: 'Settings', style: titleStyle });
         title.position.set(panel.x + 150, panel.y + 20);
         title.anchor.x = 0.5;
         menu.addChild(title);
 
-        // Pause text
-        const pauseText = new PIXI.Text('GAME PAUSED', {
+        const pauseTextStyle = new PIXI.TextStyle({
             fontSize: 48,
             fill: 0xFFFFFF,
             fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 4,
-            dropShadowDistance: 2
+            dropShadow: { color: '#000000', blur: 4, distance: 2, alpha: 0.7 }
         });
+        const pauseText = new PIXI.Text({ text: 'GAME PAUSED', style: pauseTextStyle });
         pauseText.anchor.set(0.5);
         pauseText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
         menu.addChild(pauseText);
 
-        // Settings options
         const options = [
             {
                 label: 'Joystick Position',
@@ -484,62 +476,55 @@ export class UIManager {
         ];
 
         // Create UI elements for each option
+        // Settings options
+        const optionTextStyle = new PIXI.TextStyle({ fontSize: 16, fill: 0xFFFFFF });
         let yOffset = 70;
         options.forEach(option => {
-            const label = new PIXI.Text(option.label, {
-                fontSize: 16,
-                fill: 0xFFFFFF
-            });
+            const label = new PIXI.Text({ text: option.label, style: optionTextStyle });
             label.position.set(panel.x + 20, panel.y + yOffset);
             menu.addChild(label);
 
             if (option.type === 'slider') {
                 const slider = this.createSlider(
-                    panel.x + 150,
-                    panel.y + yOffset,
+                    panel.x + 150, // Relative to panel
+                    panel.y + yOffset, // Relative to panel
                     option.min,
                     option.max,
                     option.step,
                     option.get(),
                     (value) => option.set(value)
                 );
+                // slider is a container, add it to the menu, not panel, if positions are relative to menu/stage
                 menu.addChild(slider);
             }
 
             yOffset += 50;
         });
 
-        // Close button
         const closeButton = new PIXI.Graphics();
-        closeButton.beginFill(0xFF0000);
-        closeButton.drawRoundedRect(0, 0, 80, 30, 5);
-        closeButton.endFill();
-        closeButton.position.set(panel.x + 110, panel.y + 350);
+        closeButton.roundRect(0, 0, 80, 30, 5);
+        closeButton.fill(0xFF0000);
+        closeButton.position.set(panel.x + (panel.width - 80) / 2, panel.y + panel.height - 50); // Centered at bottom of panel
         closeButton.eventMode = 'static';
         closeButton.cursor = 'pointer';
 
-        const closeText = new PIXI.Text('Close', {
-            fontSize: 16,
-            fill: 0xFFFFFF
-        });
+        const closeTextStyle = new PIXI.TextStyle({ fontSize: 16, fill: 0xFFFFFF });
+        const closeText = new PIXI.Text({ text: 'Close', style: closeTextStyle });
         closeText.anchor.set(0.5);
-        closeText.position.set(40, 15);
+        closeText.position.set(closeButton.width / 2, closeButton.height / 2);
         closeButton.addChild(closeText);
 
-        closeButton.on('pointerdown', () => {
-            this.toggleSettings();  // Use toggleSettings instead of direct visibility change
-        });
+        closeButton.on('pointerdown', () => this.toggleSettings());
+        menu.addChild(closeButton); // Add to menu, not panel, if positions are relative to menu/stage
 
-        menu.addChild(closeButton);
         this.container.addChild(menu);
         this.settingsMenu = menu;
 
-        // Handle window resize
         window.addEventListener('resize', () => {
             if (menu.visible) {
                 overlay.clear();
-                overlay.beginFill(0x000000, 0.8);
-                overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
+                overlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+                overlay.fill({ color: 0x000000, alpha: 0.8 });
                 panel.position.set(
                     this.app.screen.width - 320,
                     20
@@ -553,35 +538,60 @@ export class UIManager {
 
     createSlider(x, y, min, max, step, initial, onChange) {
         const slider = new PIXI.Container();
-        slider.position.set(x, y);
+        slider.position.set(x, y); // x,y are now absolute positions if slider added to menu
 
         const track = new PIXI.Graphics();
-        track.beginFill(0x666666);
-        track.drawRect(0, 0, 100, 4);
-        track.endFill();
+        track.rect(0, 0, 100, 4);
+        track.fill(0x666666);
 
         const handle = new PIXI.Graphics();
-        handle.beginFill(0xFFFFFF);
-        handle.drawCircle(0, 0, 8);
-        handle.endFill();
+        handle.circle(0, 0, 8);
+        handle.fill(0xFFFFFF);
 
         const initialX = ((initial - min) / (max - min)) * 100;
-        handle.position.set(initialX, 2);
+        handle.position.set(initialX, 2); // y position relative to track center
 
         slider.addChild(track, handle);
-        slider.eventMode = 'static';
-        handle.eventMode = 'static';
+        handle.eventMode = 'static'; // Make handle interactive, not the whole slider for dragging
         handle.cursor = 'pointer';
 
         let dragging = false;
-        handle.on('pointerdown', () => dragging = true);
-        this.app.stage.on('pointerup', () => dragging = false);
-        this.app.stage.on('pointermove', (e) => {
+        
+        handle.on('pointerdown', (event) => {
+            dragging = true;
+            // Optional: record initial pointer position relative to handle if needed
+            // handle.dragData = event.data.getLocalPosition(handle.parent);
+        });
+        
+        // Listen on stage for move and up to handle dragging outside the handle
+        this.app.stage.on('pointermove', (event) => {
             if (!dragging) return;
-            const bounds = slider.getBounds();
-            let x = Math.max(0, Math.min(100, e.global.x - bounds.x));
+            
+            // Convert global pointer position to slider's local coordinates
+            const newPoint = event.getLocalPosition(slider);
+            let xPos = Math.max(0, Math.min(100, newPoint.x));
             handle.position.x = x;
+            
             const value = min + (x / 100) * (max - min);
+            onChange(Math.round(value / step) * step);
+        });
+        
+        this.app.stage.on('pointerup', () => {
+            dragging = false;
+            // delete handle.dragData;
+        });
+        this.app.stage.on('pointerupoutside', () => { // For robustness
+            dragging = false;
+            // delete handle.dragData;
+        });
+        
+        // To ensure slider updates correctly when created
+        const updateSliderVisual = (currentValue) => {
+            const percent = (currentValue - min) / (max-min);
+            handle.position.x = percent * 100;
+        };
+        updateSliderVisual(initial); // Set initial position
+
             onChange(Math.round(value / step) * step);
         });
 
