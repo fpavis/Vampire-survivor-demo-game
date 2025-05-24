@@ -321,12 +321,31 @@ class Game {
     console.log(`gameLoop active - delta: ${delta}, gameOver: ${gameState.gameOver}, levelUp: ${gameState.levelUp}, paused: ${gameState.paused}`);
         if (gameState.gameOver || gameState.levelUp || gameState.paused) return;
 
+        console.log("Calling handleMovement...");
         this.handleMovement(delta);
+        console.log("Finished handleMovement.");
+
+        console.log("Calling handleCombat...");
         this.handleCombat(delta);
+        console.log("Finished handleCombat.");
+
+        console.log("Calling updateEntities...");
         this.updateEntities(delta);
+        console.log("Finished updateEntities.");
+
+        console.log("Calling handleEnemyCollisions...");
         this.handleEnemyCollisions(delta); // Call new enemy collision handler
+        console.log("Finished handleEnemyCollisions.");
+
+        console.log("Calling updateExperienceGems...");
         this.updateExperienceGems(delta);
+        console.log("Finished updateExperienceGems.");
+
+        console.log("Calling handleHealthRegen...");
         this.handleHealthRegen(delta);
+        console.log("Finished handleHealthRegen.");
+
+        console.log("Attempting to call checkCollisions...");
         this.checkCollisions();
         
         // Update all UI elements
