@@ -4,29 +4,38 @@ import { EntityManager } from './entities.js';
 import { UIManager } from './ui.js';
 
 class Game {
-    async constructor() {
+    constructor() {
+        this.app = null;
+        this.worldContainer = null;
+        this.damageFlashOverlay = null;
+        this.currentFlashAnimation = null;
+        this.ui = null;
+        // gameState.reset(); // gameState is a global singleton, reset in its own class or in Game.init()
+    }
+
+    async initialize() {
         try {
             this.app = new PIXI.Application();
             await this.app.init(GAME_CONFIG);
-            document.body.appendChild(this.app.canvas); // Changed from view to canvas
+            document.body.appendChild(this.app.canvas);
             
-            // Create main container for the game world
             this.worldContainer = new PIXI.Container();
             this.app.stage.addChild(this.worldContainer);
 
-            // Damage Flash Overlay
             this.damageFlashOverlay = new PIXI.Graphics();
-            this.damageFlashOverlay.visible = false; // Start invisible
-            this.app.stage.addChild(this.damageFlashOverlay); // Add it on top, UI zIndex will keep it below fixed UI
-            this.currentFlashAnimation = null; // To keep track of ongoing flash animation
+            this.damageFlashOverlay.visible = false;
+            this.app.stage.addChild(this.damageFlashOverlay);
+            this.currentFlashAnimation = null;
             
-            // Add resize handler
             window.addEventListener('resize', () => this.handleResize());
             
-            this.showStartScreen();
+            // UIManager (this.ui) will be initialized in the main init() method, 
+            // called after the start screen, as it depends on a fully initialized app.
+            
+            this.showStartScreen(); // This method uses this.app, which is now initialized.
         } catch (error) {
-            console.error('Game initialization error:', error);
-            // Optionally, display a user-friendly error message on the page
+            console.error('Game initialization error during async initialize:', error);
+            throw error; 
         }
     }
 
@@ -268,6 +277,7 @@ class Game {
         this.handleMovement(delta);
         this.handleCombat(delta);
         this.updateEntities(delta);
+        this.handleEnemyCollisions(delta); // Call new enemy collision handler
         this.updateExperienceGems(delta);
         this.handleHealthRegen(delta);
         this.checkCollisions();
@@ -528,11 +538,29 @@ class Game {
             const dist = Math.sqrt(dx * dx + dy * dy);
             const playerRadius = 15; // Approximate player radius
             const enemyRadius = ENEMY_TYPES[enemy.type].size;
+            const collisionThreshold = (playerRadius + enemyRadius) * 0.8; // 80% of sum of radii
 
-            if (dist < (playerRadius + enemyRadius) * 0.8) { // 0.8 for a bit more forgiving collision
-                gameState.health -= 0.5; // Damage per frame of collision
-                this.triggerDamageFlash(); // Trigger flash effect
+            if (dist < collisionThreshold) { 
+                gameState.health -= 0.5; // Player takes damage
+                this.triggerDamageFlash(); 
                 this.ui.updateHealth(gameState.health, gameState.maxHealth);
+
+                const overlap = collisionThreshold - dist;
+                const pushForce = overlap * 0.5; // How much to push in total, apply half to each or full to one
+
+                if (dist > 0) { // Avoid division by zero
+                    const pushBackDx = (enemy.x - gameState.player.x) / dist;
+                    const pushBackDy = (enemy.y - gameState.player.y) / dist;
+                    
+                    // Push enemy away
+                    enemy.x += pushBackDx * pushForce;
+                    enemy.y += pushBackDy * pushForce;
+
+                    // Push player away (player's boundary check in handleMovement will correct if needed)
+                    gameState.player.x -= pushBackDx * pushForce;
+                    gameState.player.y -= pushBackDy * pushForce;
+                }
+
 
                 if (gameState.health <= 0 && !gameState.gameOver) {
                     gameState.health = 0;
@@ -1039,6 +1067,53 @@ class Game {
         PIXI.Ticker.shared.add(animate);
     }
 
+    handleEnemyCollisions(delta) {
+        const enemies = gameState.enemies;
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy1 = enemies[i];
+            const enemy1Data = ENEMY_TYPES[enemy1.type];
+
+            for (let j = i + 1; j < enemies.length; j++) {
+                const enemy2 = enemies[j];
+                const enemy2Data = ENEMY_TYPES[enemy2.type];
+
+                const dx = enemy1.x - enemy2.x;
+                const dy = enemy1.y - enemy2.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Use a slightly smaller collision distance for packing, or adjust based on visual size
+                const collisionDist = (enemy1Data.size + enemy2Data.size) * 0.7; // 70% of sum of radii for closer packing
+
+                if (dist < collisionDist && dist > 0) { // dist > 0 to avoid issues if perfectly overlapped
+                    const overlap = (collisionDist - dist); 
+                    const pushMagnitude = overlap / 2; // Each enemy pushed by half the overlap
+
+                    const pushX = (dx / dist) * pushMagnitude;
+                    const pushY = (dy / dist) * pushMagnitude;
+
+                    enemy1.x += pushX;
+                    enemy1.y += pushY;
+                    enemy2.x -= pushX;
+                    enemy2.y -= pushY;
+
+                    // Optional: Add slight damping to enemy movement if they are being pushed
+                    // This can prevent them from "jittering" too much when clumped.
+                    // For example, slightly reduce their speed or apply a counter-force.
+                    // enemy1.vx *= 0.95; enemy1.vy *= 0.95;
+                    // enemy2.vx *= 0.95; enemy2.vy *= 0.95;
+                    // This would require enemies to have vx/vy properties managed in updateEntities
+                } else if (dist === 0) { // Handle exact overlap case
+                    const pushX = (Math.random() - 0.5) * 0.5; // Small random push
+                    const pushY = (Math.random() - 0.5) * 0.5;
+                    enemy1.x += pushX;
+                    enemy1.y += pushY;
+                    enemy2.x -= pushX;
+                    enemy2.y -= pushY;
+                }
+            }
+        }
+    }
+
     triggerDamageFlash() {
         if (this.currentFlashAnimation) {
             PIXI.Ticker.shared.remove(this.currentFlashAnimation);
@@ -1133,15 +1208,21 @@ class Game {
 (async () => {
     try {
         const game = new Game();
-        await game.constructor(); // Call the async constructor logic
+        await game.initialize(); // Call the new async initialize method
     } catch (error) {
         console.error('Failed to start game:', error);
-        // Display a user-friendly error message on the page if possible
-        const errorDiv = document.createElement('div');
-        errorDiv.textContent = 'Failed to load the game. Please try refreshing the page or check the console for more details.';
-        errorDiv.style.color = 'white';
-        errorDiv.style.padding = '20px';
-        errorDiv.style.textAlign = 'center';
-        document.body.appendChild(errorDiv);
+        const body = document.querySelector('body');
+        if (body) {
+            // Clear body and show error
+            while (body.firstChild) {
+                body.removeChild(body.firstChild);
+            }
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML = `<div style="color: white; text-align: center; padding-top: 50px; font-family: Arial, sans-serif;">
+                <h1>Game Initialization Error</h1>
+                <p>Failed to initialize the game. Please check the console for more details or try refreshing the page.</p>
+            </div>`;
+            body.appendChild(errorDiv);
+        }
     }
 })();

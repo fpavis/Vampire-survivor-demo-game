@@ -24,6 +24,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 - **Enhanced Graphics**: Improved visuals for player, enemies, projectiles, and particle effects.
 - **Player Damage Feedback**: Visual screen flash when the player takes damage.
 - **Kill Counter**: Displays the number of defeated enemies.
+- **Dynamic Collisions**: Enemies now collide with each other and push apart. Player and enemies also push each other away on contact, adding more physical interaction to gameplay.
 
 ## 🚀 Getting Started
 
