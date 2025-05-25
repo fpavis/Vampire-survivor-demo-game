@@ -481,11 +481,11 @@ class Game {
 
             // Update health bar
             const healthPercent = enemy.health / enemy.maxHealth;
-            // Assuming enemy.healthBar is a PIXI.Graphics object
-            enemy.healthBar.clear(); // Clear previous drawing
-            enemy.healthBar.roundRect(0, 0, ENEMY_TYPES[enemy.type].size * 2, 5, 2);
+            // Assuming enemy.healthBar is a PIXI.Graphics object (it is healthBarFg)
+            enemy.healthBar.clear(); // Clear previous drawing of healthBarFg
+            // Only draw the actual health percentage portion
             enemy.healthBar.roundRect(0, 0, healthPercent * (ENEMY_TYPES[enemy.type].size * 2), 5, 2);
-            enemy.healthBar.fill(healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health); // Foreground
+            enemy.healthBar.fill(healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health); // Set fill for the drawn rectangle
         });
 
         // Update bullets
@@ -572,9 +572,8 @@ checkCollisions() {
             continue;
         }
 
-        console.log("Bullet for collision:", bullet.sprite); // Existing log
-        const bulletBounds = bullet.sprite.getBounds();
-        console.log("Bullet Bounds:", JSON.parse(JSON.stringify(bulletBounds))); // Existing log
+        // Effective radius for the bullet (circular approximation)
+        const bulletEffectiveRadius = 3; // Derived from bulletHeight / 2 in entities.js
 
         for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
             const enemy = gameState.enemies[eIndex];
@@ -590,13 +589,36 @@ checkCollisions() {
                 continue;
             }
 
-            console.log("Enemy for collision (vs bullet):", enemy); // Modified log
-            const enemyBounds = enemy.getBounds();
-            console.log("Enemy Bounds for Bullet Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
+            const enemyEffectiveRadius = ENEMY_TYPES[enemy.type].size;
+            const combinedRadius = bulletEffectiveRadius + enemyEffectiveRadius;
 
-            if (checkAABBCollision(bulletBounds, enemyBounds)) {
-                console.log("Bullet-Enemy AABB collision DETECTED! Bullet:", bullet.sprite.x, bullet.sprite.y, "Enemy:", enemy.x, enemy.y); // Modified log
-                console.log("Processing bullet-enemy collision response..."); // New log
+            const dx = bullet.sprite.x - enemy.x;
+            const dy = bullet.sprite.y - enemy.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < combinedRadius) {
+                if (GAME_CONFIG.LOG_COLLISIONS) {
+                    console.log({
+                        type: "Collision-BulletEnemy",
+                        timestamp: Date.now(),
+                        method: "DistanceBased",
+                        bullet: {
+                            x: bullet.sprite.x,
+                            y: bullet.sprite.y,
+                            radius: bulletEffectiveRadius
+                        },
+                        enemy: {
+                            type: enemy.type,
+                            x: enemy.x,
+                            y: enemy.y,
+                            radius: enemyEffectiveRadius,
+                            healthBeforeHit: enemy.health
+                        },
+                        distance: distance,
+                        combinedRadius: combinedRadius,
+                        message: "Bullet-Enemy distance-based collision DETECTED and processing."
+                    });
+                }
 
                 this.createHitEffect(bullet.sprite.x, bullet.sprite.y); // Effect at bullet position
                 enemy.health -= gameState.attackDamage;
@@ -643,36 +665,61 @@ checkCollisions() {
             return;
         }
 
-        console.log("Player for collision:", gameState.player); // Existing log
-        const playerBounds = gameState.player.getBounds();
-        console.log("Player Bounds:", JSON.parse(JSON.stringify(playerBounds))); // Existing log
-        console.log("Enemy for collision (vs player):", enemy); // Modified log
-        const enemyBounds = enemy.getBounds();
-        console.log("Enemy Bounds for Player Collision:", JSON.parse(JSON.stringify(enemyBounds))); // Existing log
+        // Player-enemy collision using distance check (centers are player.x, player.y and enemy.x, enemy.y)
+        const playerEffectiveRadius = 18; // Based on playerRadius in EntityManager
+        const enemyEffectiveRadius = ENEMY_TYPES[enemy.type].size;
+        const combinedRadius = playerEffectiveRadius + enemyEffectiveRadius;
 
-        if (checkAABBCollision(playerBounds, enemyBounds)) {
-            console.log("Player-Enemy AABB collision DETECTED! Player:", gameState.player.x, gameState.player.y, "Enemy:", enemy.x, enemy.y); // Modified log
-            console.log("Processing player-enemy collision response..."); // New log
+        const dxCollision = gameState.player.x - enemy.x;
+        const dyCollision = gameState.player.y - enemy.y;
+        const distance = Math.sqrt(dxCollision * dxCollision + dyCollision * dyCollision);
+
+        if (distance < combinedRadius) {
+            if (GAME_CONFIG.LOG_COLLISIONS) {
+                console.log({
+                    type: "Collision-PlayerEnemy",
+                    timestamp: Date.now(),
+                    method: "DistanceBased",
+                    player: {
+                        x: gameState.player.x,
+                        y: gameState.player.y,
+                        radius: playerEffectiveRadius,
+                        healthBeforeHit: gameState.health
+                    },
+                    enemy: {
+                        type: enemy.type,
+                        x: enemy.x,
+                        y: enemy.y,
+                        radius: enemyEffectiveRadius,
+                        health: enemy.health
+                    },
+                    distance: distance,
+                    combinedRadius: combinedRadius,
+                    message: "Player-Enemy distance-based collision DETECTED and processing."
+                });
+            }
 
             gameState.health -= 0.5;
             this.triggerDamageFlash();
+            if (GAME_CONFIG.LOG_COLLISIONS) {
+                console.log({
+                    type: "Debug-PlayerEnemyResponse",
+                    timestamp: Date.now(),
+                    message: "Player-Enemy collision response executed.",
+                    playerHealthAfterHit: gameState.health,
+                    details: "Health deducted, damage flash triggered."
+                });
+            }
             this.ui.updateHealth(gameState.health, gameState.maxHealth);
 
-            // Basic pushback (can be refined later if needed)
-            // Calculate center points for a more intuitive pushback direction
-            const enemyCenterX = enemyBounds.x + enemyBounds.width / 2;
-            const playerCenterX = playerBounds.x + playerBounds.width / 2;
-            const enemyCenterY = enemyBounds.y + enemyBounds.height / 2;
-            const playerCenterY = playerBounds.y + playerBounds.height / 2;
+            // Basic pushback
+            // dxCollision and dyCollision are already player.x - enemy.x, player.y - enemy.y
+            // distance is already calculated
+            const pushForce = 2; 
 
-            const dx = playerCenterX - enemyCenterX;
-            const dy = playerCenterY - enemyCenterY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const pushForce = 2; // Simplified push force
-
-            if (dist > 0) {
-                const pushBackDx = (dx / dist) * pushForce;
-                const pushBackDy = (dy / dist) * pushForce;
+            if (distance > 0) { // distance can be 0 if perfectly overlapped
+                const pushBackDx = (dxCollision / distance) * pushForce;
+                const pushBackDy = (dyCollision / distance) * pushForce;
 
                 enemy.x -= pushBackDx; // Push enemy away from player
                 enemy.y -= pushBackDy;
@@ -683,6 +730,14 @@ checkCollisions() {
                 gameState.player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, gameState.player.x));
                 gameState.player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, gameState.player.y));
                 // Optional: Keep enemy in world bounds too, if necessary
+            } else if (distance === 0) { // Handle exact overlap case by pushing randomly
+                const randomAngle = Math.random() * Math.PI * 2;
+                const pushBackDx = Math.cos(randomAngle) * pushForce;
+                const pushBackDy = Math.sin(randomAngle) * pushForce;
+                enemy.x -= pushBackDx;
+                enemy.y -= pushBackDy;
+                gameState.player.x += pushBackDx;
+                gameState.player.y += pushBackDy;
             }
 
 
@@ -1225,6 +1280,31 @@ checkCollisions() {
                     enemy2.x -= pushX;
                     enemy2.y -= pushY;
 
+                    if (GAME_CONFIG.LOG_COLLISIONS) {
+                        console.log({
+                            type: "Collision-EnemySeparation",
+                            timestamp: Date.now(),
+                            enemy1: {
+                                type: enemy1.type,
+                                x: enemy1.x - pushX, // Log position before push for clarity
+                                y: enemy1.y - pushY,
+                                newX: enemy1.x,
+                                newY: enemy1.y
+                            },
+                            enemy2: {
+                                type: enemy2.type,
+                                x: enemy2.x + pushX, // Log position before push for clarity
+                                y: enemy2.y + pushY,
+                                newX: enemy2.x,
+                                newY: enemy2.y
+                            },
+                            distance: dist,
+                            collisionDistance: collisionDist,
+                            overlap: overlap,
+                            message: "Enemy-Enemy separation: Overlap detected and resolved."
+                        });
+                    }
+
                     // Optional: Add slight damping to enemy movement if they are being pushed
                     // This can prevent them from "jittering" too much when clumped.
                     // For example, slightly reduce their speed or apply a counter-force.
@@ -1232,12 +1312,40 @@ checkCollisions() {
                     // enemy2.vx *= 0.95; enemy2.vy *= 0.95;
                     // This would require enemies to have vx/vy properties managed in updateEntities
                 } else if (dist === 0) { // Handle exact overlap case
+                    const initialEnemy1X = enemy1.x;
+                    const initialEnemy1Y = enemy1.y;
+                    const initialEnemy2X = enemy2.x;
+                    const initialEnemy2Y = enemy2.y;
+
                     const pushX = (Math.random() - 0.5) * 0.5; // Small random push
                     const pushY = (Math.random() - 0.5) * 0.5;
                     enemy1.x += pushX;
                     enemy1.y += pushY;
                     enemy2.x -= pushX;
                     enemy2.y -= pushY;
+
+                    if (GAME_CONFIG.LOG_COLLISIONS) {
+                        console.log({
+                            type: "Collision-EnemySeparation",
+                            timestamp: Date.now(),
+                            enemy1: {
+                                type: enemy1.type,
+                                x: initialEnemy1X,
+                                y: initialEnemy1Y,
+                                newX: enemy1.x,
+                                newY: enemy1.y
+                            },
+                            enemy2: {
+                                type: enemy2.type,
+                                x: initialEnemy2X,
+                                y: initialEnemy2Y,
+                                newX: enemy2.x,
+                                newY: enemy2.y
+                            },
+                            distance: dist,
+                            message: "Enemy-Enemy separation: Exact overlap detected and resolved with random push."
+                        });
+                    }
                 }
             }
         }

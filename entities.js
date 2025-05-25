@@ -127,16 +127,24 @@ export class EntityManager {
         const healthBarContainer = new PIXI.Container();
         const healthBarBg = new PIXI.Graphics();
         const healthBarFg = new PIXI.Graphics();
-        
-        const healthBarYOffset = -(size + 10);
-        healthBarBg.roundRect(-size, healthBarYOffset, size * 2, 5, 2);
+       
+        // Position the container that holds both background and foreground
+        healthBarContainer.x = -size; // Center the bar (width is size * 2)
+        healthBarContainer.y = -(size + 10); // Position above the enemy body
+
+        // Draw background bar at (0,0) relative to healthBarContainer
+        healthBarBg.roundRect(0, 0, size * 2, 5, 2);
         healthBarBg.fill(STYLES.colors.healthBar.background);
         healthBarBg.stroke({ width: 1, color: STYLES.colors.healthBar.border });
         
-        healthBarFg.roundRect(-size, healthBarYOffset, size * 2, 5, 2);
+        // Draw initial foreground bar at (0,0) relative to healthBarContainer
+        // This will be cleared and updated in game.js's updateEntities
+        healthBarFg.roundRect(0, 0, size * 2, 5, 2); // Initial full health
         healthBarFg.fill(STYLES.colors.healthBar.health);
         
-        healthBarContainer.addChild(healthBarBg, healthBarFg);
+        healthBarContainer.addChild(healthBarBg); // Add background first
+        healthBarContainer.addChild(healthBarFg); // Add foreground on top
+        
         container.addChild(enemyBody, healthBarContainer);
         
         // Set enemy properties
