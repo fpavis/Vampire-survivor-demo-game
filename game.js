@@ -481,11 +481,11 @@ class Game {
 
             // Update health bar
             const healthPercent = enemy.health / enemy.maxHealth;
-            // Assuming enemy.healthBar is a PIXI.Graphics object
-            enemy.healthBar.clear(); // Clear previous drawing
-            enemy.healthBar.roundRect(0, 0, ENEMY_TYPES[enemy.type].size * 2, 5, 2);
+            // Assuming enemy.healthBar is a PIXI.Graphics object (it is healthBarFg)
+            enemy.healthBar.clear(); // Clear previous drawing of healthBarFg
+            // Only draw the actual health percentage portion
             enemy.healthBar.roundRect(0, 0, healthPercent * (ENEMY_TYPES[enemy.type].size * 2), 5, 2);
-            enemy.healthBar.fill(healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health); // Foreground
+            enemy.healthBar.fill(healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health); // Set fill for the drawn rectangle
         });
 
         // Update bullets
@@ -572,7 +572,9 @@ checkCollisions() {
             continue;
         }
 
-        const bulletBounds = bullet.sprite.getBounds();
+
+        // Effective radius for the bullet (circular approximation)
+        const bulletEffectiveRadius = 3; // Derived from bulletHeight / 2 in entities.js
 
         for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
             const enemy = gameState.enemies[eIndex];
@@ -587,27 +589,34 @@ checkCollisions() {
                 console.warn('Unknown or invalid enemy type in bullet-enemy collision:', enemy.type, enemy);
                 continue;
             }
+            const enemyEffectiveRadius = ENEMY_TYPES[enemy.type].size;
+            const combinedRadius = bulletEffectiveRadius + enemyEffectiveRadius;
 
-            const enemyBounds = enemy.getBounds();
+            const dx = bullet.sprite.x - enemy.x;
+            const dy = bullet.sprite.y - enemy.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (checkAABBCollision(bulletBounds, enemyBounds)) {
+            if (distance < combinedRadius) {
                 if (GAME_CONFIG.LOG_COLLISIONS) {
                     console.log({
                         type: "Collision-BulletEnemy",
                         timestamp: Date.now(),
+                        method: "DistanceBased",
                         bullet: {
                             x: bullet.sprite.x,
                             y: bullet.sprite.y,
-                            bounds: JSON.parse(JSON.stringify(bulletBounds))
+                            radius: bulletEffectiveRadius
                         },
                         enemy: {
                             type: enemy.type,
                             x: enemy.x,
                             y: enemy.y,
-                            healthBeforeHit: enemy.health,
-                            bounds: JSON.parse(JSON.stringify(enemyBounds))
+                            radius: enemyEffectiveRadius,
+                            healthBeforeHit: enemy.health
                         },
-                        message: "Bullet-Enemy AABB collision DETECTED and processing."
+                        distance: distance,
+                        combinedRadius: combinedRadius,
+                        message: "Bullet-Enemy distance-based collision DETECTED and processing."
                     });
                 }
 
@@ -656,50 +665,60 @@ checkCollisions() {
             return;
         }
 
-        const playerBounds = gameState.player.getBounds();
-        const enemyBounds = enemy.getBounds();
+        // Player-enemy collision using distance check (centers are player.x, player.y and enemy.x, enemy.y)
+        const playerEffectiveRadius = 18; // Based on playerRadius in EntityManager
+        const enemyEffectiveRadius = ENEMY_TYPES[enemy.type].size;
+        const combinedRadius = playerEffectiveRadius + enemyEffectiveRadius;
 
-        if (checkAABBCollision(playerBounds, enemyBounds)) {
+        const dxCollision = gameState.player.x - enemy.x;
+        const dyCollision = gameState.player.y - enemy.y;
+        const distance = Math.sqrt(dxCollision * dxCollision + dyCollision * dyCollision);
+
+        if (distance < combinedRadius) {
             if (GAME_CONFIG.LOG_COLLISIONS) {
                 console.log({
                     type: "Collision-PlayerEnemy",
-                    timestamp: Date.now(),
+                    method: "DistanceBased",
                     player: {
                         x: gameState.player.x,
                         y: gameState.player.y,
-                        healthBeforeHit: gameState.health,
-                        bounds: JSON.parse(JSON.stringify(playerBounds))
+                        radius: playerEffectiveRadius,
+                        healthBeforeHit: gameState.health
                     },
                     enemy: {
                         type: enemy.type,
                         x: enemy.x,
                         y: enemy.y,
-                        health: enemy.health,
-                        bounds: JSON.parse(JSON.stringify(enemyBounds))
+                        radius: enemyEffectiveRadius,
+                        health: enemy.health
                     },
-                    message: "Player-Enemy AABB collision DETECTED and processing."
+                    distance: distance,
+                    combinedRadius: combinedRadius,
+                    message: "Player-Enemy distance-based collision DETECTED and processing."
                 });
             }
 
             gameState.health -= 0.5;
             this.triggerDamageFlash();
+            if (GAME_CONFIG.LOG_COLLISIONS) {
+                console.log({
+                    type: "Debug-PlayerEnemyResponse",
+                    timestamp: Date.now(),
+                    message: "Player-Enemy collision response executed.",
+                    playerHealthAfterHit: gameState.health,
+                    details: "Health deducted, damage flash triggered."
+                });
+            }
             this.ui.updateHealth(gameState.health, gameState.maxHealth);
 
-            // Basic pushback (can be refined later if needed)
-            // Calculate center points for a more intuitive pushback direction
-            const enemyCenterX = enemyBounds.x + enemyBounds.width / 2;
-            const playerCenterX = playerBounds.x + playerBounds.width / 2;
-            const enemyCenterY = enemyBounds.y + enemyBounds.height / 2;
-            const playerCenterY = playerBounds.y + playerBounds.height / 2;
+            // Basic pushback
+            // dxCollision and dyCollision are already player.x - enemy.x, player.y - enemy.y
+            // distance is already calculated
+            const pushForce = 2; 
 
-            const dx = playerCenterX - enemyCenterX;
-            const dy = playerCenterY - enemyCenterY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const pushForce = 2; // Simplified push force
-
-            if (dist > 0) {
-                const pushBackDx = (dx / dist) * pushForce;
-                const pushBackDy = (dy / dist) * pushForce;
+            if (distance > 0) { // distance can be 0 if perfectly overlapped
+                const pushBackDx = (dxCollision / distance) * pushForce;
+                const pushBackDy = (dyCollision / distance) * pushForce;
 
                 enemy.x -= pushBackDx; // Push enemy away from player
                 enemy.y -= pushBackDy;
@@ -710,6 +729,14 @@ checkCollisions() {
                 gameState.player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, gameState.player.x));
                 gameState.player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, gameState.player.y));
                 // Optional: Keep enemy in world bounds too, if necessary
+            } else if (distance === 0) { // Handle exact overlap case by pushing randomly
+                const randomAngle = Math.random() * Math.PI * 2;
+                const pushBackDx = Math.cos(randomAngle) * pushForce;
+                const pushBackDy = Math.sin(randomAngle) * pushForce;
+                enemy.x -= pushBackDx;
+                enemy.y -= pushBackDy;
+                gameState.player.x += pushBackDx;
+                gameState.player.y += pushBackDy;
             }
 
 
@@ -1432,6 +1459,6 @@ checkCollisions() {
                 <p>Failed to initialize the game. Please check the console for more details or try refreshing the page.</p>
             </div>`;
             body.appendChild(errorDiv);
-        }
+        
     }
 })();
