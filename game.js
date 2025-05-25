@@ -1053,9 +1053,3 @@ class Game {
     }
 }
 
-// Initialize game with error handling
-try {
-    const game = new Game();
-} catch (error) {
-    console.error('Failed to start game:', error);
-}
