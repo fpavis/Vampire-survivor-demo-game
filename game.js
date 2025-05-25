@@ -572,6 +572,7 @@ checkCollisions() {
             continue;
         }
 
+
         // Effective radius for the bullet (circular approximation)
         const bulletEffectiveRadius = 3; // Derived from bulletHeight / 2 in entities.js
 
@@ -588,7 +589,6 @@ checkCollisions() {
                 console.warn('Unknown or invalid enemy type in bullet-enemy collision:', enemy.type, enemy);
                 continue;
             }
-
             const enemyEffectiveRadius = ENEMY_TYPES[enemy.type].size;
             const combinedRadius = bulletEffectiveRadius + enemyEffectiveRadius;
 
@@ -678,7 +678,6 @@ checkCollisions() {
             if (GAME_CONFIG.LOG_COLLISIONS) {
                 console.log({
                     type: "Collision-PlayerEnemy",
-                    timestamp: Date.now(),
                     method: "DistanceBased",
                     player: {
                         x: gameState.player.x,
@@ -1460,6 +1459,6 @@ checkCollisions() {
                 <p>Failed to initialize the game. Please check the console for more details or try refreshing the page.</p>
             </div>`;
             body.appendChild(errorDiv);
-        }
+        
     }
 })();
