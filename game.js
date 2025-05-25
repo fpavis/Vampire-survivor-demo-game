@@ -1459,6 +1459,6 @@ checkCollisions() {
                 <p>Failed to initialize the game. Please check the console for more details or try refreshing the page.</p>
             </div>`;
             body.appendChild(errorDiv);
-        
+        }
     }
-})();
+})(); // <-- This closes the async IIFE correctly
