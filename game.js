@@ -1,1055 +1,805 @@
-import { GAME_CONFIG, ENEMY_TYPES, INITIAL_STATE, LEVEL_SCALING, STYLES, WORLD_CONFIG, SPAWN_CONFIG } from './config.js';
+import {
+    GAME_CONFIG, ENEMY_TYPES, LEVEL_SCALING, WORLD_CONFIG, SPAWN_CONFIG, xpForLevel
+} from './config.js';
 import { gameState } from './gameState.js';
 import { EntityManager } from './entities.js';
 import { UIManager } from './ui.js';
+import { World, BIOME } from './world.js';
+import { Effects } from './effects.js';
+import { WeaponSystem, computeStats, generateChoices } from './weapons.js';
+
+const TILT = WORLD_CONFIG.tilt;
+const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 class Game {
     constructor() {
-        try {
-            this.app = new PIXI.Application(GAME_CONFIG);
-            document.body.appendChild(this.app.view);
-            
-            // Create main container for the game world
-            this.worldContainer = new PIXI.Container();
-            this.app.stage.addChild(this.worldContainer);
-            
-            // Add resize handler
-            window.addEventListener('resize', () => this.handleResize());
-            
-            this.showStartScreen();
-        } catch (error) {
-            console.error('Game initialization error:', error);
-        }
+        this.app = new PIXI.Application(GAME_CONFIG);
+        document.body.appendChild(this.app.view);
+        this.app.stage.sortableChildren = true;
+
+        this.state = gameState;
+        this.frame = 0;
+        this.stats = computeStats({});
+        this.cam = { x: 0, y: 0 };
+        this.bossCount = 0;
+        this.eventsBound = false;
+
+        // Layers: the ground is a flat, tilted plane; objects are upright billboards sorted by depth.
+        this.worldContainer = new PIXI.Container();
+        this.groundLayer = new PIXI.Container();
+        this.groundLayer.scale.y = TILT;
+        this.objectLayer = new PIXI.Container();
+        this.objectLayer.sortableChildren = true;
+        this.worldContainer.addChild(this.groundLayer, this.objectLayer);
+        this.app.stage.addChild(this.worldContainer);
+
+        this.createAtmosphere();
+
+        this.world = new World(this.app, this.groundLayer, this.objectLayer);
+        this.fx = new Effects(this);
+        this.weapons = new WeaponSystem(this);
+        this.ui = new UIManager(this.app);
+
+        window.addEventListener('resize', () => this.handleResize());
+
+        this.world.reset();
+        this.applyCamera();
+        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+
+        this.menuTicker = (delta) => this.menuLoop(delta);
+        this.app.ticker.add(this.menuTicker);
+        this.showStartScreen();
+    }
+
+    // -------------------------------------------------------------- scenery
+    createAtmosphere() {
+        const mk = (w, h, paint) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            paint(canvas.getContext('2d'), w, h);
+            return PIXI.Texture.from(canvas);
+        };
+        // Darkened edges pull the eye to the centre
+        const vig = mk(256, 256, (ctx, w, h) => {
+            const g = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.72);
+            g.addColorStop(0, 'rgba(0,0,10,0)');
+            g.addColorStop(1, 'rgba(0,0,14,0.62)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+        });
+        // Atmospheric haze toward the horizon (top of the screen) sells the depth
+        const haze = mk(4, 256, (ctx, w, h) => {
+            const g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, 'rgba(150,178,215,0.34)');
+            g.addColorStop(0.5, 'rgba(150,178,215,0.08)');
+            g.addColorStop(1, 'rgba(150,178,215,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+        });
+        this.vignetteSprite = new PIXI.Sprite(vig);
+        this.hazeSprite = new PIXI.Sprite(haze);
+        [this.hazeSprite, this.vignetteSprite].forEach((s) => {
+            s.eventMode = 'none';
+            s.zIndex = 10;
+            this.app.stage.addChild(s);
+        });
+        this.layoutAtmosphere();
+    }
+
+    layoutAtmosphere() {
+        const { width, height } = this.app.screen;
+        this.vignetteSprite.width = width;
+        this.vignetteSprite.height = height;
+        this.hazeSprite.width = width;
+        this.hazeSprite.height = height * 0.7;
     }
 
     handleResize() {
-        // Update game elements positions if needed
-        if (gameState.player) {
-            // Keep player in bounds after resize
-            gameState.player.x = Math.min(Math.max(15, gameState.player.x), this.app.screen.width - 15);
-            gameState.player.y = Math.min(Math.max(15, gameState.player.y), this.app.screen.height - 15);
-        }
-
-        // Adjust grid if it exists
-        this.updateGrid();
+        this.layoutAtmosphere();
+        if (this.state.player) this.applyCamera();
     }
 
-    updateGrid(worldSized = false) {
-        const oldGrid = this.worldContainer.children.find(child => child.name === 'grid');
-        if (oldGrid) {
-            this.worldContainer.removeChild(oldGrid);
-        }
-
-        const grid = new PIXI.Graphics();
-        grid.name = 'grid';
-        grid.lineStyle(1, 0x333333, 0.3);
-        
-        const width = worldSized ? WORLD_CONFIG.width : this.app.screen.width;
-        const height = worldSized ? WORLD_CONFIG.height : this.app.screen.height;
-        
-        // Vertical lines
-        for (let i = 0; i < width; i += 50) {
-            grid.moveTo(i, 0);
-            grid.lineTo(i, height);
-        }
-        // Horizontal lines
-        for (let i = 0; i < height; i += 50) {
-            grid.moveTo(0, i);
-            grid.lineTo(width, i);
-        }
-        
-        this.worldContainer.addChildAt(grid, 1);
+    applyCamera() {
+        const { width, height } = this.app.screen;
+        const s = this.fx.shake;
+        const sx = s ? (Math.random() - 0.5) * s : 0;
+        const sy = s ? (Math.random() - 0.5) * s : 0;
+        this.worldContainer.x = Math.round(width / 2 - this.cam.x + sx);
+        this.worldContainer.y = Math.round(height / 2 - this.cam.y * TILT + sy);
     }
 
+    menuLoop(delta) {
+        this.frame += delta;
+        this.cam.x += 0.7 * delta;
+        this.cam.y += Math.sin(this.frame * 0.004) * 0.5 * delta;
+        this.applyCamera();
+        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
+        this.world.animate(delta);
+    }
+
+    // --------------------------------------------------------- start screen
     showStartScreen() {
-        // Create a container for start screen elements
-        const startScreen = new PIXI.Container();
-        startScreen.eventMode = 'static';
-        this.app.stage.addChild(startScreen);
+        const { app } = this;
+        const screen = new PIXI.Container();
+        screen.zIndex = 3000;
+        screen.eventMode = 'static';
+        app.stage.addChild(screen);
 
-        // Dark background
-        const background = new PIXI.Graphics();
-        background.beginFill(0x000000, 0.85);
-        background.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        background.endFill();
-        startScreen.addChild(background);
-
-        // Game title
-        const titleText = new PIXI.Text('Survival Game', {
-            fontSize: 64,
-            fill: 0xffffff,
-            align: 'center',
-            fontWeight: 'bold'
+        const dim = new PIXI.Graphics();
+        const title = new PIXI.Text('SURVIVAL', {
+            fontFamily: FONT, fontSize: 84, fontWeight: 'bold', fill: ['#ffffff', '#8fb6ff'],
+            stroke: 0x0a1230, strokeThickness: 9, dropShadow: true, dropShadowDistance: 6, dropShadowAlpha: 0.6, letterSpacing: 6
         });
-        titleText.anchor.set(0.5);
-        titleText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
-        startScreen.addChild(titleText);
-
-        // Instructions text
-        const instructionsText = new PIXI.Text(
-            'Use WASD or arrow keys to move\nMouse/touch to move on mobile\nEnemies drop experience gems\nLevel up to become stronger', {
-            fontSize: 24,
-            fill: 0xcccccc,
-            align: 'center'
+        title.anchor.set(0.5);
+        const subtitle = new PIXI.Text('An endless world awaits', {
+            fontFamily: FONT, fontSize: 22, fill: 0xcfd8f0, letterSpacing: 3
         });
-        instructionsText.anchor.set(0.5);
-        instructionsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
-        startScreen.addChild(instructionsText);
-
-        // Start button container
-        const buttonContainer = new PIXI.Container();
-        buttonContainer.eventMode = 'static';
-        buttonContainer.cursor = 'pointer';
-        buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
-
-        // Button background
-        const button = new PIXI.Graphics();
-        button.beginFill(0x00ff00);
-        button.drawRoundedRect(-100, -30, 200, 60, 15);
-        button.endFill();
-
-        // Button text
-        const buttonText = new PIXI.Text('Start Game', {
-            fontSize: 32,
-            fill: 0x000000,
-            fontWeight: 'bold'
+        subtitle.anchor.set(0.5);
+        const info = new PIXI.Text(
+            'WASD / arrows / mouse / touch to move\nYour weapons fire automatically\nCollect gems to level up and pick upgrades\nMountains and deep water block your way', {
+            fontFamily: FONT, fontSize: 19, fill: 0xd8deef, align: 'center', lineHeight: 30
         });
-        buttonText.anchor.set(0.5);
+        info.anchor.set(0.5);
 
-        // Add text to button
-        buttonContainer.addChild(button, buttonText);
-        startScreen.addChild(buttonContainer);
-
-        // Button interactions
-        buttonContainer.on('pointerover', () => {
-            button.tint = 0x88ff88;
+        const button = new PIXI.Container();
+        button.eventMode = 'static';
+        button.cursor = 'pointer';
+        const bg = new PIXI.Graphics();
+        const drawButton = (hover) => {
+            bg.clear();
+            bg.beginFill(hover ? 0x5fe28a : 0x3fcf6a);
+            bg.lineStyle(3, 0xd9ffe6, 0.9);
+            bg.drawRoundedRect(-120, -32, 240, 64, 18);
+            bg.endFill();
+            bg.beginFill(0xffffff, 0.22);
+            bg.drawRoundedRect(-114, -28, 228, 24, 12);
+            bg.endFill();
+        };
+        drawButton(false);
+        const label = new PIXI.Text('START', {
+            fontFamily: FONT, fontSize: 32, fontWeight: 'bold', fill: 0x0b2a14, letterSpacing: 3
         });
-        
-        buttonContainer.on('pointerout', () => {
-            button.tint = 0xffffff;
-        });
+        label.anchor.set(0.5);
+        button.addChild(bg, label);
+        button.on('pointerover', () => { drawButton(true); button.scale.set(1.06); });
+        button.on('pointerout', () => { drawButton(false); button.scale.set(1); });
 
-        buttonContainer.on('pointerdown', () => {
-            // Remove start screen
-            this.app.stage.removeChild(startScreen);
-            
-            // Clean up any existing game state
-            if (this.worldContainer) {
-                this.worldContainer.removeChildren();
-            }
-            
-            // Initialize new game
+        screen.addChild(dim, title, subtitle, info, button);
+
+        const layout = () => {
+            const w = app.screen.width, h = app.screen.height;
+            dim.clear();
+            dim.beginFill(0x04060c, 0.62);
+            dim.drawRect(0, 0, w, h);
+            dim.endFill();
+            const s = clamp(w / 900, 0.55, 1);
+            title.scale.set(s);
+            title.position.set(w / 2, h * 0.24);
+            subtitle.position.set(w / 2, h * 0.24 + 70 * s);
+            info.scale.set(clamp(w / 700, 0.7, 1));
+            info.position.set(w / 2, h * 0.5);
+            button.position.set(w / 2, h * 0.76);
+        };
+        layout();
+        window.addEventListener('resize', layout);
+
+        let started = false;
+        const start = () => {
+            if (started) return;
+            started = true;
+            window.removeEventListener('resize', layout);
+            window.removeEventListener('keydown', onKey);
+            app.stage.removeChild(screen);
+            screen.destroy({ children: true });
             this.bindEvents();
             this.init();
-        });
-
-        // Handle window resize
-        const resizeHandler = () => {
-            background.width = this.app.screen.width;
-            background.height = this.app.screen.height;
-            titleText.position.set(this.app.screen.width / 2, this.app.screen.height / 3);
-            instructionsText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
-            buttonContainer.position.set(this.app.screen.width / 2, this.app.screen.height * 0.7);
         };
+        const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') start(); };
+        window.addEventListener('keydown', onKey);
+        button.on('pointerdown', (e) => { e.stopPropagation(); start(); });
 
-        window.addEventListener('resize', resizeHandler);
-
-        // Clean up resize handler when start screen is removed
-        startScreen.on('destroyed', () => {
-            window.removeEventListener('resize', resizeHandler);
-        });
+        // gentle idle animation
+        const idle = () => {
+            if (started) { app.ticker.remove(idle); return; }
+            title.y = h(app) * 0.24 + Math.sin(this.frame * 0.03) * 4;
+        };
+        const h = (a) => a.screen.height;
+        app.ticker.add(idle);
     }
 
     bindEvents() {
-        window.addEventListener('keydown', (e) => gameState.keys[e.key] = true);
-        window.addEventListener('keyup', (e) => gameState.keys[e.key] = false);
+        if (this.eventsBound) return;
+        this.eventsBound = true;
+        window.addEventListener('keydown', (e) => {
+            if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
+            gameState.keys[e.key] = true;
+        });
+        window.addEventListener('keyup', (e) => { gameState.keys[e.key] = false; });
+        window.addEventListener('blur', () => { gameState.keys = {}; });
 
-        // Add pointer events for mouse/touch control
         this.app.stage.eventMode = 'static';
         this.app.stage.hitArea = this.app.screen;
-
-        // Handle both mouse and touch
         this.app.stage.on('pointermove', (e) => {
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
         });
-
         this.app.stage.on('pointerdown', (e) => {
+            if (gameState.levelUp || gameState.gameOver || gameState.paused) return;
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
             gameState.pointerDown = true;
         });
+        this.app.stage.on('pointerup', () => { gameState.pointerDown = false; });
+        this.app.stage.on('pointerupoutside', () => { gameState.pointerDown = false; });
+    }
 
-        this.app.stage.on('pointerup', () => {
-            gameState.pointerDown = false;
-        });
-
-        // Handle pointer leaving the game area
-        this.app.stage.on('pointerleave', () => {
-            gameState.pointerDown = false;
-        });
+    // ------------------------------------------------------------ new game
+    clearEntities() {
+        const s = this.state;
+        s.enemies.forEach((e) => EntityManager.cleanup(e));
+        s.gems.forEach((g) => EntityManager.cleanup(g));
+        if (s.player) EntityManager.cleanup(s.player);
+        this.weapons.reset();
+        this.fx.clear();
     }
 
     init() {
-        // Clean up previous game state
-        if (gameState.player) {
-            EntityManager.cleanup(this.app, gameState.player);
-        }
-        
-        // Clean up all existing entities
-        gameState.enemies.forEach(enemy => {
-            EntityManager.cleanup(this.app, enemy);
-        });
-        
-        gameState.bullets.forEach(bullet => {
-            EntityManager.cleanup(this.app, bullet.sprite);
-        });
-        
-        gameState.experienceGems.forEach(gem => {
-            EntityManager.cleanup(this.app, gem.sprite);
-        });
-        
+        this.clearEntities();
         gameState.reset();
-        this.worldContainer.removeChildren();
-        
-        // Create background that fills world
-        const background = new PIXI.Graphics();
-        background.beginFill(STYLES.colors.background);
-        background.drawRect(0, 0, WORLD_CONFIG.width, WORLD_CONFIG.height);
-        background.endFill();
-        background.name = 'background';
-        
-        this.worldContainer.addChild(background);
-        this.updateGrid(true);  // true for world-sized grid
-        
-        // Initialize player in center of world
-        gameState.player = EntityManager.createPlayer(this.app);
-        gameState.player.x = WORLD_CONFIG.width / 2;
-        gameState.player.y = WORLD_CONFIG.height / 2;
-        this.worldContainer.addChild(gameState.player);
-        
-        // Initialize UI only once here
-        if (!this.ui) {
-            this.ui = new UIManager(this.app);
-        }
-        
-        // Center camera on player initially
-        this.updateCamera();
-        
-        // Start game loop
-        if (gameState.gameTicker) {
-            this.app.ticker.remove(gameState.gameTicker);
-        }
-        gameState.gameTicker = (delta) => this.gameLoop(delta);
-        this.app.ticker.add(gameState.gameTicker);
+        this.bossCount = 0;
+        this.frame = 0;
+
+        this.app.ticker.remove(this.menuTicker);
+        if (this.gameTicker) this.app.ticker.remove(this.gameTicker);
+
+        this.world.reset();
+        const player = EntityManager.createPlayer();
+        const spot = this.world.findFree(0, 0, player.radius + 2);
+        player.wx = spot.x;
+        player.wy = spot.y;
+        player.facing = 1;
+        this.objectLayer.addChild(player);
+        EntityManager.place(player);
+        gameState.player = player;
+
+        this.weapons.acquire('bolt');
+        this.stats = computeStats({});
+        gameState.maxHealth = this.stats.maxHealth;
+        gameState.health = gameState.maxHealth;
+        gameState.nextLevel = xpForLevel(1);
+
+        this.cam.x = player.wx;
+        this.cam.y = player.wy;
+        this.applyCamera();
+        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+
+        this.ui.setHUDVisible(true);
+        this.ui.shown = { hp: -1, xp: -1, level: -1, slots: '' };
+        this.ui.displayHp = gameState.health;
+        this.ui.displayXp = 0;
+
+        this.gameTicker = (delta) => this.gameLoop(delta);
+        this.app.ticker.add(this.gameTicker);
     }
 
-    gameLoop(delta) {
-        if (gameState.gameOver || gameState.levelUp || gameState.paused) return;
+    // ------------------------------------------------------------ game loop
+    gameLoop(rawDelta) {
+        const s = this.state;
+        if (s.gameOver) {
+            this.fx.update(rawDelta);
+            this.applyCamera();
+            this.world.animate(rawDelta);
+            return;
+        }
+        if (s.levelUp || s.paused) return;
 
-        this.handleMovement(delta);
-        this.handleCombat(delta);
-        this.updateEntities(delta);
-        this.updateExperienceGems(delta);
-        this.handleHealthRegen(delta);
-        this.checkCollisions();
-        
-        // Update all UI elements
-        this.ui.updateHealth(gameState.health, gameState.maxHealth);
-        this.ui.updateScore(gameState.score);
-        this.ui.updateLevel(gameState.level);
-        this.ui.updateExperience(gameState.experience, gameState.nextLevel);
-        this.ui.updateDebugPanel(gameState);
+        const delta = Math.min(rawDelta, 2.5);
+        this.frame += delta;
+        s.time += delta / 60;
+
+        this.movePlayer(delta);
+        this.weapons.update(delta);
+        this.updateEnemies(delta);
+        this.updateGems(delta);
+        this.regen(delta);
+        this.fx.update(delta);
+        this.reap();
+        this.syncVisuals(delta);
+        this.updateCamera(delta);
+        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
+        this.world.animate(delta);
+        this.ui.update(this, delta);
+
+        if (s.health <= 0) this.showGameOver();
     }
 
-    handleMovement(delta) {
-        const speed = gameState.playerSpeed * delta;
-        const { keys, player } = gameState;
-
-        // Handle keyboard movement
-        let dx = 0;
-        let dy = 0;
-
-        // Arrow keys and WASD
+    // -------------------------------------------------------------- player
+    movePlayer(delta) {
+        const { keys, player } = this.state;
+        let dx = 0, dy = 0;
         if (keys.ArrowLeft || keys.a || keys.A) dx -= 1;
         if (keys.ArrowRight || keys.d || keys.D) dx += 1;
         if (keys.ArrowUp || keys.w || keys.W) dy -= 1;
         if (keys.ArrowDown || keys.s || keys.S) dy += 1;
 
-        // Handle joystick input if available
-        if (this.ui.joystick && this.ui.joystick.active) {
-            // Joystick takes complete priority when active
-            dx = this.ui.joystick.position.x;
-            dy = this.ui.joystick.position.y;
-        }
-        // Only handle pointer/mouse if joystick is not active and not on mobile
-        else if (gameState.pointerDown && gameState.pointerPosition && (!this.ui.joystick || !this.ui.joystick.visible)) {
-            const pointer = gameState.pointerPosition;
-            // Convert pointer position to world coordinates
-            const worldX = pointer.x - this.worldContainer.x;
-            const worldY = pointer.y - this.worldContainer.y;
-            
-            // Calculate direction to pointer
-            const dirX = worldX - player.x;
-            const dirY = worldY - player.y;
-            const distance = Math.sqrt(dirX * dirX + dirY * dirY);
-
-            // Only move if there's a significant distance to travel
-            if (distance > 5) {
-                dx = dirX / distance;
-                dy = dirY / distance;
-            }
+        const joy = this.ui.joystick;
+        let analog = false;
+        if (joy && joy.active) {
+            dx = joy.position.x;
+            dy = joy.position.y;
+            analog = true;
+        } else if (this.state.pointerDown && this.state.pointerPosition) {
+            const p = this.state.pointerPosition;
+            const tx = p.x - this.worldContainer.x;
+            const ty = (p.y - this.worldContainer.y) / TILT;
+            const ddx = tx - player.wx, ddy = ty - player.wy;
+            const dist = Math.hypot(ddx, ddy);
+            if (dist > 8) { dx = ddx / dist; dy = ddy / dist; }
         }
 
-        // Apply movement if there's any input
+        let moving = false;
         if (dx !== 0 || dy !== 0) {
-            // For joystick, we don't need to normalize as it's already normalized
-            if (!this.ui.joystick || !this.ui.joystick.active) {
-                // Normalize diagonal movement only for non-joystick input
-                const length = Math.sqrt(dx * dx + dy * dy);
-                dx = dx / length;
-                dy = dy / length;
-            }
-
-            player.x += dx * speed;
-            player.y += dy * speed;
+            const len = Math.hypot(dx, dy);
+            if (!analog || len > 1) { dx /= len; dy /= len; }
+            // Screen-space feel: vertical ground speed is boosted to offset the tilt
+            const inShallows = this.world.biomeAtPos(player.wx, player.wy) === BIOME.SHALLOW;
+            const speed = this.state.playerSpeed * this.stats.speed * delta * (inShallows ? 0.72 : 1);
+            this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius);
+            moving = true;
+            if (Math.abs(dx) > 0.15) player.facing = dx > 0 ? 1 : -1;
         }
-
-        // Keep player in world bounds
-        player.x = Math.max(15, Math.min(WORLD_CONFIG.width - 15, player.x));
-        player.y = Math.max(15, Math.min(WORLD_CONFIG.height - 15, player.y));
-
-        // Update camera position
-        this.updateCamera();
+        player.moving = moving;
     }
 
-    handleCombat(delta) {
-        if (Date.now() - gameState.lastFire > gameState.fireRate && gameState.enemies.length > 0) {
-            const closestEnemy = this.findClosestEnemy();
-        if (!closestEnemy) return;
-
-            const bullet = EntityManager.createBullet(
-                gameState.player.x,
-                gameState.player.y,
-                closestEnemy.x,
-                closestEnemy.y
-            );
-
-            // Add bullet to worldContainer instead of app.stage
-            this.worldContainer.addChild(bullet.sprite);
-            gameState.bullets.push(bullet);
-            gameState.lastFire = Date.now();
+    regen(delta) {
+        const s = this.state;
+        if (this.stats.regen > 0 && s.health < s.maxHealth) {
+            s.health = Math.min(s.maxHealth, s.health + (this.stats.regen / 60) * delta);
         }
     }
 
-    findClosestEnemy() {
-    let closest = null;
-    let minDistance = Infinity;
-
-        gameState.enemies.forEach(enemy => {
-            const dx = enemy.x - gameState.player.x;
-            const dy = enemy.y - gameState.player.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < minDistance) {
-            minDistance = distance;
-            closest = enemy;
+    hurtPlayer(amount) {
+        const s = this.state;
+        s.health -= amount * (1 - this.stats.armor);
+        if (this.frame - (this.lastHurt || -99) > 12) {
+            this.lastHurt = this.frame;
+            this.ui.flashDamage();
+            this.fx.addShake(3);
         }
-    });
+    }
 
-    return closest;
-}
+    updateCamera(delta) {
+        const p = this.state.player;
+        const t = 1 - Math.pow(0.001, delta / 60);
+        this.cam.x += (p.wx - this.cam.x) * t;
+        this.cam.y += (p.wy - this.cam.y) * t;
+        this.applyCamera();
+    }
 
-    updateEntities(delta) {
-        // Handle enemy spawning
-        this.handleEnemySpawning(delta);
+    // ------------------------------------------------------------- enemies
+    updateEnemies(delta) {
+        const s = this.state;
+        const p = s.player;
+        this.spawnEnemies(delta);
 
-        // Update existing enemies
-        gameState.enemies.forEach(enemy => {
-            // Calculate direction to player
-            const dx = gameState.player.x - enemy.x;
-            const dy = gameState.player.y - enemy.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            // Move enemy towards player
-            if (dist > 0) {
-                const normalizedDx = dx / dist;
-                const normalizedDy = dy / dist;
-                enemy.x += normalizedDx * enemy.speed * delta;
-                enemy.y += normalizedDy * enemy.speed * delta;
+        const list = s.enemies;
+        for (let i = 0; i < list.length; i++) {
+            const e = list[i];
+            if (e.dead) continue;
+            const dx = p.wx - e.wx, dy = p.wy - e.wy;
+            const dist = Math.hypot(dx, dy) || 1;
+
+            if (dist > SPAWN_CONFIG.despawnDistance) { e.dead = true; e.silent = true; continue; }
+
+            let mul = 1 + clamp((dist - 520) / 500, 0, 1.6);
+            if (this.frame < e.slowUntil) mul *= 1 - e.slowAmount;
+            if (!e.flying && this.world.biomeAtPos(e.wx, e.wy) === BIOME.SHALLOW) mul *= 0.8;
+
+            const step = e.speed * mul * delta;
+            const vx = (dx / dist) * step + e.kvx * delta;
+            const vy = (dy / dist) * step + e.kvy * delta;
+            e.kvx *= Math.pow(0.86, delta);
+            e.kvy *= Math.pow(0.86, delta);
+            if (e.flying) { e.wx += vx; e.wy += vy; } else this.world.tryMove(e, vx, vy, e.radius * 0.8);
+            if (Math.abs(dx) > 4) e.facing = dx > 0 ? 1 : -1;
+
+            // soft separation so packs don't stack into a single blob
+            for (let j = i + 1; j < list.length; j++) {
+                const o = list[j];
+                if (o.dead) continue;
+                const ox = o.wx - e.wx, oy = o.wy - e.wy;
+                const min = (e.radius + o.radius) * 0.8;
+                if (Math.abs(ox) > min || Math.abs(oy) > min) continue;
+                const d = Math.hypot(ox, oy) || 0.01;
+                if (d >= min) continue;
+                const push = (min - d) * 0.2 * delta;
+                const nx = ox / d * push, ny = oy / d * push;
+                if (e.flying) { e.wx -= nx; e.wy -= ny; } else this.world.tryMove(e, -nx, -ny, e.radius * 0.8);
+                if (o.flying) { o.wx += nx; o.wy += ny; } else this.world.tryMove(o, nx, ny, o.radius * 0.8);
             }
 
-            // Update health bar
-            const healthPercent = enemy.health / enemy.maxHealth;
-            enemy.healthBar.width = healthPercent * (ENEMY_TYPES[enemy.type].size * 2);
-            enemy.healthBar.tint = healthPercent < 0.3 ? STYLES.colors.healthBar.damage : STYLES.colors.healthBar.health;
+            // contact damage
+            const touch = e.radius + p.radius;
+            if (dist < touch) this.hurtPlayer(e.damage * (delta / 60));
+        }
+    }
+
+    pickEnemyType(level) {
+        const options = Object.entries(ENEMY_TYPES).filter(([, t]) => !t.boss && t.minLevel <= level);
+        const total = options.reduce((sum, [, t]) => sum + t.weight, 0);
+        let roll = Math.random() * total;
+        for (const [key, t] of options) {
+            roll -= t.weight;
+            if (roll <= 0) return key;
+        }
+        return options[0][0];
+    }
+
+    spawnPoint(flying) {
+        const p = this.state.player;
+        const rx = this.app.screen.width / 2 + 90;
+        const ry = this.app.screen.height / 2 / TILT + 90;
+        for (let tries = 0; tries < 8; tries++) {
+            const a = Math.random() * Math.PI * 2;
+            const c = Math.cos(a), sn = Math.sin(a);
+            const d = 1 / Math.max(Math.abs(c) / rx, Math.abs(sn) / ry) + Math.random() * 60;
+            const x = p.wx + c * d, y = p.wy + sn * d;
+            if (flying || !this.world.blocked(x, y, 24)) return { x, y };
+        }
+        return null;
+    }
+
+    scaleEnemy(e, type) {
+        const ls = this.state.level - 1;
+        e.health = e.maxHealth = type.health * Math.pow(LEVEL_SCALING.enemyHealthScale, ls);
+        e.speed = type.speed * Math.min(LEVEL_SCALING.enemySpeedCap, Math.pow(LEVEL_SCALING.enemySpeedScale, ls));
+        e.damage = type.damage * Math.pow(LEVEL_SCALING.enemyDamageScale, ls);
+        e.experienceValue = Math.max(1, Math.round(type.experience * (1 + LEVEL_SCALING.experienceScale * ls)));
+    }
+
+    spawnEnemies(delta) {
+        const s = this.state;
+        const max = Math.min(SPAWN_CONFIG.maxCap, SPAWN_CONFIG.baseMax + SPAWN_CONFIG.maxPerLevel * s.level);
+        if (s.enemies.length >= max) return;
+        const rate = SPAWN_CONFIG.baseRate * (1 + SPAWN_CONFIG.rateGrowth * (s.level - 1)) * (1 + s.time / 500);
+        if (Math.random() >= rate * delta) return;
+
+        const group = s.level >= 3 && Math.random() < 0.12 ? 2 + Math.floor(Math.random() * 3) : 1;
+        const key = this.pickEnemyType(s.level);
+        const type = ENEMY_TYPES[key];
+        const origin = this.spawnPoint(type.flying);
+        if (!origin) return;
+        for (let i = 0; i < group && s.enemies.length < max; i++) {
+            const x = origin.x + (i ? (Math.random() - 0.5) * 90 : 0);
+            const y = origin.y + (i ? (Math.random() - 0.5) * 90 : 0);
+            if (!type.flying && this.world.blocked(x, y, type.radius)) continue;
+            const e = EntityManager.createEnemy(key, x, y);
+            this.scaleEnemy(e, type);
+            const eliteChance = s.level >= 3 ? Math.min(0.2, SPAWN_CONFIG.eliteChance + 0.004 * s.level) : 0;
+            if (Math.random() < eliteChance) {
+                const m = SPAWN_CONFIG.eliteModifiers;
+                EntityManager.markElite(e);
+                e.health = e.maxHealth = e.health * m.health;
+                e.experienceValue = Math.round(e.experienceValue * m.experience);
+                e.speed *= m.speed;
+                e.damage *= m.damage;
+            }
+            this.objectLayer.addChild(e);
+            EntityManager.place(e);
+            s.enemies.push(e);
+        }
+    }
+
+    spawnBoss() {
+        const s = this.state;
+        const p = s.player;
+        const type = ENEMY_TYPES.BOSS;
+        const pt = this.spawnPoint(false) || { x: p.wx + 700, y: p.wy };
+        const e = EntityManager.createEnemy('BOSS', pt.x, pt.y);
+        this.scaleEnemy(e, type);
+        e.health = e.maxHealth = e.health * (1 + this.bossCount * 0.6);
+        e.isBoss = true;
+        this.bossCount++;
+        this.objectLayer.addChild(e);
+        EntityManager.place(e);
+        s.enemies.push(e);
+        this.ui.banner('⚠  A WARLORD APPROACHES  ⚠', 0xff5a5a);
+        this.fx.addShake(6);
+    }
+
+    damageEnemy(e, amount, opts = {}) {
+        if (e.dead) return;
+        const crit = !opts.noCrit && Math.random() < this.stats.crit;
+        const dmg = amount * (crit ? 2 : 1);
+        e.health -= dmg;
+        e.hitFlash = 6;
+        this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
+
+        const k = opts.knock;
+        if (k) {
+            const len = Math.hypot(k.x, k.y) || 1;
+            const resist = e.type === 'BOSS' ? 0.25 : e.type === 'TANK' ? 0.6 : 1;
+            e.kvx += (k.x / len) * k.force * resist;
+            e.kvy += (k.y / len) * k.force * resist;
+        }
+        if (e.health <= 0) this.killEnemy(e);
+    }
+
+    killEnemy(e) {
+        if (e.dead) return;
+        e.dead = true;
+        const s = this.state;
+        s.kills++;
+        s.score += e.experienceValue * 2;
+        const type = ENEMY_TYPES[e.type];
+        this.fx.death(e.wx, e.wy, type.color, !!e.isBoss);
+
+        if (e.isBoss) {
+            s.bossesDefeated++;
+            for (let i = 0; i < 10; i++) {
+                this.dropGem(e.wx + (Math.random() - 0.5) * 120, e.wy + (Math.random() - 0.5) * 90, Math.ceil(e.experienceValue / 6));
+            }
+            this.dropGem(e.wx, e.wy + 20, 0, 'heart');
+            this.dropGem(e.wx + 30, e.wy, 0, 'heart');
+            this.fx.addShake(12);
+            this.ui.banner('WARLORD DEFEATED!', 0xffd84a);
+        } else {
+            this.dropGem(e.wx, e.wy, e.experienceValue);
+            if (Math.random() < (e.elite ? 0.12 : 0.025)) this.dropGem(e.wx + 14, e.wy + 6, 0, 'heart');
+        }
+    }
+
+    dropGem(x, y, value, kind = 'gem') {
+        const s = this.state;
+        // keep the number of gems bounded: the oldest one is absorbed immediately
+        if (s.gems.length > 260) {
+            const old = s.gems.shift();
+            if (old.kind === 'gem') this.gainExp(old.value);
+            EntityManager.cleanup(old);
+        }
+        const gem = EntityManager.createGem(x, y, value, kind);
+        gem.vel = 0;
+        this.objectLayer.addChild(gem);
+        EntityManager.place(gem);
+        s.gems.push(gem);
+    }
+
+    reap() {
+        const s = this.state;
+        if (!s.enemies.some((e) => e.dead)) return;
+        s.enemies = s.enemies.filter((e) => {
+            if (!e.dead) return true;
+            EntityManager.cleanup(e);
+            return false;
         });
-
-        // Update bullets
-        for (let i = gameState.bullets.length - 1; i >= 0; i--) {
-            const bullet = gameState.bullets[i];
-            bullet.sprite.x += bullet.dx * delta;
-            bullet.sprite.y += bullet.dy * delta;
-
-            if (this.isOffScreen(bullet.sprite)) {
-                EntityManager.cleanup(this.app, bullet.sprite);
-                gameState.bullets.splice(i, 1);
-            }
-        }
     }
 
-    handleEnemySpawning(delta) {
-        // Check max enemies before spawning
-        if (gameState.enemies.length >= SPAWN_CONFIG.maxEnemies) return;
+    // ---------------------------------------------------------------- gems
+    updateGems(delta) {
+        const s = this.state;
+        const p = s.player;
+        const magnet = 95 * this.stats.magnet;
+        for (let i = s.gems.length - 1; i >= 0; i--) {
+            const g = s.gems[i];
+            const dx = p.wx - g.wx, dy = p.wy - g.wy;
+            const dist = Math.hypot(dx, dy) || 1;
 
-        // Calculate spawn chance based on level
-        const spawnChance = SPAWN_CONFIG.baseRate * Math.pow(LEVEL_SCALING.enemySpawnRateScale, gameState.level - 1);
-        
-        if (Math.random() < spawnChance * delta) {
-            // Determine enemy type based on ratios
-            const roll = Math.random();
-            let type = 'BASIC';
-            let cumulative = 0;
-            
-            for (const [enemyType, ratio] of Object.entries(SPAWN_CONFIG.typeRatios)) {
-                cumulative += ratio;
-                if (roll <= cumulative) {
-                    type = enemyType;
-                    break;
-                }
-            }
-            
-            const spawnPos = this.createEnemy();
-            const enemy = EntityManager.createEnemy(this.app, type, spawnPos.x, spawnPos.y);
-            
-            // Scale enemy stats with level
-            const levelScale = gameState.level - 1;
-            enemy.health *= Math.pow(LEVEL_SCALING.enemyHealthScale, levelScale);
-            enemy.maxHealth = enemy.health;
-            enemy.speed *= Math.pow(LEVEL_SCALING.enemySpeedScale, levelScale);
-            enemy.experienceValue = Math.floor(ENEMY_TYPES[type].experience * Math.pow(LEVEL_SCALING.experienceMultiplierPerLevel, levelScale));
-            
-            // Check for elite enemy
-            if (Math.random() < SPAWN_CONFIG.eliteChance) {
-                enemy.tint = 0xFFD700; // Gold tint
-                enemy.health *= SPAWN_CONFIG.eliteModifiers.health;
-                enemy.maxHealth = enemy.health;
-                enemy.experienceValue *= SPAWN_CONFIG.eliteModifiers.experience;
-                enemy.speed *= SPAWN_CONFIG.eliteModifiers.speed;
-            }
-            
-            this.worldContainer.addChild(enemy);
-            gameState.enemies.push(enemy);
-        }
-    }
-
-    isOffScreen(sprite) {
-        // Check if the sprite is too far from the player
-        const dx = sprite.x - gameState.player.x;
-        const dy = sprite.y - gameState.player.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        return dist > 1000; // Remove bullets when they're far from the player
-    }
-
-    checkCollisions() {
-        // Bullet-enemy collisions with proper cleanup
-        for (let bIndex = gameState.bullets.length - 1; bIndex >= 0; bIndex--) {
-            const bullet = gameState.bullets[bIndex];
-            
-            for (let eIndex = gameState.enemies.length - 1; eIndex >= 0; eIndex--) {
-                const enemy = gameState.enemies[eIndex];
-            const dx = bullet.sprite.x - enemy.x;
-            const dy = bullet.sprite.y - enemy.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const collisionDist = ENEMY_TYPES[enemy.type].size + 5;
-
-            if (dist < collisionDist) {
-                    // Create hit effect
-                    this.createHitEffect(bullet.sprite.x, bullet.sprite.y);
-                    
-                // Damage enemy
-                    enemy.health -= gameState.attackDamage;
-                    
-                    // Remove bullet with cleanup
-                    EntityManager.cleanup(this.app, bullet.sprite);
-                    gameState.bullets.splice(bIndex, 1);
-
-                // Check if enemy died
-                if (enemy.health <= 0) {
-                        this.createDeathEffect(enemy.x, enemy.y);
-                        EntityManager.cleanup(this.app, enemy);
-                        gameState.enemies.splice(eIndex, 1);
-                        gameState.score += ENEMY_TYPES[enemy.type].experience * 2;
-                        this.ui.updateScore(gameState.score);
-
-                        // Create experience gem and add to worldContainer
-                        const gem = EntityManager.createExperienceGem(this.app, enemy.x, enemy.y, enemy.experienceValue);
-                        gameState.experienceGems.push(gem);
-                        this.worldContainer.addChild(gem.sprite);  // Add to worldContainer instead of app.stage
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Player-enemy collisions
-        gameState.enemies.forEach(enemy => {
-            const dx = gameState.player.x - enemy.x;
-            const dy = gameState.player.y - enemy.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 35) {
-                gameState.health -= 0.5;
-                this.ui.updateHealth(gameState.health, gameState.maxHealth);
-
-                if (gameState.health <= 0 && !gameState.gameOver) {
-                    gameState.health = 0;
-                    this.ui.updateHealth(0, gameState.maxHealth);
-                    this.showGameOver();
-                }
-            }
-        });
-    }
-
-    updateExperienceGems(delta) {
-        // Add a pending experience property to gameState if it doesn't exist
-        if (gameState.pendingExperience === undefined) {
-            gameState.pendingExperience = 0;
-        }
-
-        // Process pending experience first
-        if (gameState.pendingExperience > 0) {
-            // Add experience gradually (10% of pending exp per frame, minimum 1)
-            const expToAdd = Math.max(1, Math.floor(gameState.pendingExperience * 0.1));
-            gameState.experience += expToAdd;
-            gameState.pendingExperience -= expToAdd;
-
-            this.ui.updateExperience(gameState.experience, gameState.nextLevel);
-
-            // Check for level up
-            if (gameState.experience >= gameState.nextLevel && !gameState.levelUp) {
-                this.showLevelUp();
-                return; // Stop processing gems while leveling up
-            }
-        }
-
-        // Process gems
-        for (let i = gameState.experienceGems.length - 1; i >= 0; i--) {
-            const gem = gameState.experienceGems[i];
-            
-            // Calculate distance to player
-            const dx = gameState.player.x - gem.sprite.x;
-            const dy = gameState.player.y - gem.sprite.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-            // Magnet effect
-            if (dist < 100) {
-                gem.sprite.x += (dx / dist) * 4 * delta;
-                gem.sprite.y += (dy / dist) * 4 * delta;
+            if (dist < magnet) g.magnetized = true;
+            if (g.magnetized) {
+                g.vel = Math.min(14, g.vel + 0.6 * delta);
+                const step = Math.min(dist, (g.vel + 2) * delta);
+                g.wx += (dx / dist) * step;
+                g.wy += (dy / dist) * step;
             }
 
-            // Collect gem
             if (dist < 20) {
-                // Add to pending experience instead of directly to experience
-                gameState.pendingExperience += gem.value;
-                
-                EntityManager.cleanup(this.app, gem.sprite);
-                this.app.stage.removeChild(gem.sprite);
-                gameState.experienceGems.splice(i, 1);
+                if (g.kind === 'heart') {
+                    const heal = s.maxHealth * 0.25;
+                    s.health = Math.min(s.maxHealth, s.health + heal);
+                    this.fx.popup(p.wx, p.wy, `+${Math.round(heal)}`, 0xff7a94, 20, 60);
+                    this.fx.burst(p.wx, p.wy, 20, 0xff6a8a, 12, 2.4, { size: 0.7 });
+                } else {
+                    this.gainExp(g.value);
+                    this.fx.burst(g.wx, g.wy, 12, EntityManager.gemTier(g.value).color, 4, 1.8, { size: 0.5, life: 16 });
+                }
+                EntityManager.cleanup(g);
+                s.gems.splice(i, 1);
             }
         }
     }
 
-    handleHealthRegen(delta) {
-        if (gameState.healthRegen > 0 && gameState.health < gameState.maxHealth) {
-            gameState.health = Math.min(
-                gameState.health + (gameState.healthRegen / 60) * delta,
-                gameState.maxHealth
-            );
-            this.ui.updateHealth(gameState.health, gameState.maxHealth);
+    gainExp(value) {
+        const s = this.state;
+        s.experience += value * this.stats.growth;
+        this.checkLevelUp();
+    }
+
+    // ---------------------------------------------------- levelling & upgrades
+    checkLevelUp() {
+        const s = this.state;
+        if (s.levelUp || s.gameOver || s.experience < s.nextLevel) return;
+        s.levelUp = true;
+        s.pointerDown = false;
+        s.keys = {};
+        const choices = generateChoices(this, 3);
+        this.fx.burst(s.player.wx, s.player.wy, 20, 0xffe27a, 26, 4, { size: 0.9, life: 40, up: 4 });
+        this.ui.showLevelUp(choices, s.level + 1, (choice) => this.applyChoice(choice));
+    }
+
+    applyChoice(choice) {
+        const s = this.state;
+        switch (choice.kind) {
+            case 'weapon':
+                this.weapons.acquire(choice.id);
+                break;
+            case 'passive':
+                s.passives[choice.id] = choice.toLevel;
+                this.recalcStats();
+                break;
+            case 'heal':
+                s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.5);
+                break;
+        }
+
+        s.experience = Math.max(0, s.experience - s.nextLevel);
+        s.level++;
+        s.nextLevel = xpForLevel(s.level);
+        s.levelUp = false;
+        s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.1);
+        this.ui.displayXp = s.experience;
+        this.ui.shown.slots = '';
+
+        // Level-up shockwave gives breathing room
+        const p = s.player;
+        for (const e of s.enemies) {
+            const dx = e.wx - p.wx, dy = e.wy - p.wy;
+            if (dx * dx + dy * dy < 260 * 260) e.kvx += (dx / (Math.hypot(dx, dy) || 1)) * 10, e.kvy += (dy / (Math.hypot(dx, dy) || 1)) * 10;
+        }
+        this.fx.burst(p.wx, p.wy, 10, 0xffe27a, 30, 5, { size: 0.9, life: 34, up: 3 });
+        this.fx.addShake(5);
+
+        if (s.level % SPAWN_CONFIG.bossEvery === 0) this.spawnBoss();
+        this.checkLevelUp();
+    }
+
+    recalcStats() {
+        const s = this.state;
+        const old = this.stats;
+        this.stats = computeStats(s.passives);
+        s.maxHealth = this.stats.maxHealth;
+        if (this.stats.maxHealth > old.maxHealth) s.health += this.stats.maxHealth - old.maxHealth;
+        s.health = Math.min(s.health, s.maxHealth);
+    }
+
+    // ------------------------------------------------------------- visuals
+    syncVisuals(delta) {
+        const s = this.state;
+        const p = s.player;
+        EntityManager.place(p);
+        EntityManager.animatePlayer(p, this.frame, p.moving, p.facing);
+
+        for (const e of s.enemies) {
+            if (e.dead) continue;
+            EntityManager.place(e);
+            EntityManager.animateEnemy(e, this.frame);
+            if (e.elite) e.marker.alpha = 0.6 + Math.sin(this.frame * 0.15) * 0.4;
+        }
+        for (const g of s.gems) {
+            EntityManager.place(g);
+            EntityManager.animateGem(g, this.frame);
         }
     }
 
+    // ------------------------------------------------------------ game over
     showGameOver() {
-        gameState.gameOver = true;
-        if (gameState.gameTicker) {
-            this.app.ticker.remove(gameState.gameTicker);
-        }
-        
-        // Clean up animations
-        if (gameState.player) {
-            EntityManager.cleanup(this.app, gameState.player);
-        }
-        gameState.experienceGems.forEach(gem => {
-            EntityManager.cleanup(this.app, gem.sprite);
+        const s = this.state;
+        if (s.gameOver) return;
+        s.gameOver = true;
+        s.health = 0;
+        s.pointerDown = false;
+        this.ui.update(this, 1);
+        this.fx.death(s.player.wx, s.player.wy, 0x6aa8ff, true);
+        s.player.visible = false;
+
+        const { app } = this;
+        const screen = new PIXI.Container();
+        screen.zIndex = 3000;
+        screen.eventMode = 'static';
+        screen.alpha = 0;
+        app.stage.addChild(screen);
+
+        const dim = new PIXI.Graphics();
+        const title = new PIXI.Text('YOU DIED', {
+            fontFamily: FONT, fontSize: 76, fontWeight: 'bold', fill: ['#ff6a6a', '#a10d0d'],
+            stroke: 0x1a0000, strokeThickness: 8, dropShadow: true, dropShadowDistance: 6, dropShadowAlpha: 0.6, letterSpacing: 4
+        });
+        title.anchor.set(0.5);
+
+        const panel = new PIXI.Container();
+        const pbg = new PIXI.Graphics();
+        pbg.beginFill(0x0c1120, 0.85);
+        pbg.lineStyle(2, 0xffffff, 0.2);
+        pbg.drawRoundedRect(-190, -95, 380, 190, 16);
+        pbg.endFill();
+        const rows = [
+            ['Time survived', this.formatTime(s.time)],
+            ['Level reached', `${s.level}`],
+            ['Enemies defeated', `${s.kills}`],
+            ['Score', `${Math.floor(s.score)}`]
+        ];
+        panel.addChild(pbg);
+        rows.forEach(([k, v], i) => {
+            const y = -66 + i * 43;
+            const kt = new PIXI.Text(k, { fontFamily: FONT, fontSize: 19, fill: 0xa9b3cc });
+            kt.position.set(-160, y - 12);
+            const vt = new PIXI.Text(v, { fontFamily: FONT, fontSize: 24, fontWeight: 'bold', fill: 0xffffff });
+            vt.anchor.set(1, 0);
+            vt.position.set(160, y - 15);
+            panel.addChild(kt, vt);
         });
 
-        // Dark overlay with fade in
-    const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0);
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
-        this.app.stage.addChild(overlay);
-
-        // Animate overlay fade in
-        let alpha = 0;
-        const fadeIn = () => {
-            alpha += 0.05;
-            overlay.clear();
-            overlay.beginFill(0x000000, Math.min(0.8, alpha));
-            overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-    overlay.endFill();
-
-            if (alpha < 0.8) requestAnimationFrame(fadeIn);
-        };
-        fadeIn();
-
-        // Game over text with effects
-        const gameOverText = new PIXI.Text('GAME OVER', {
-            fontSize: 64,
-            fill: ['#FF0000', '#880000'], // Gradient fill
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 6,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 10,
-            dropShadowDistance: 5
-        });
-        gameOverText.anchor.set(0.5);
-        gameOverText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 100);
-
-        // Stats container
-        const statsContainer = new PIXI.Container();
-        statsContainer.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
-
-        // Stats background
-        const statsBg = new PIXI.Graphics();
-        statsBg.beginFill(0x000000, 0.5);
-        statsBg.lineStyle(2, 0x444444);
-        statsBg.drawRoundedRect(-150, -60, 300, 120, 10);
-        statsBg.endFill();
-        statsContainer.addChild(statsBg);
-
-        // Final stats text
-        const statsStyle = {
-            fontSize: 24,
-            fill: 0xFFFFFF,
-        align: 'center'
-        };
-
-        const finalScoreText = new PIXI.Text(`Score: ${gameState.score}`, statsStyle);
-        finalScoreText.anchor.set(0.5);
-        finalScoreText.position.set(0, -30);
-
-        const levelText = new PIXI.Text(`Level Reached: ${gameState.level}`, statsStyle);
-        levelText.anchor.set(0.5);
-        levelText.position.set(0, 10);
-
-        statsContainer.addChild(finalScoreText, levelText);
-
-        // Play again button with effects
         const button = new PIXI.Container();
-        button.position.set(this.app.screen.width / 2, this.app.screen.height / 2 + 100);
-
-        const buttonBg = new PIXI.Graphics();
-        buttonBg.beginFill(0x00AA00);
-        buttonBg.lineStyle(3, 0x00FF00);
-        buttonBg.drawRoundedRect(-100, -25, 200, 50, 15);
-        buttonBg.endFill();
-
-        const buttonText = new PIXI.Text('Play Again', {
-            fontSize: 28,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowDistance: 2
-        });
-        buttonText.anchor.set(0.5);
-
-        button.addChild(buttonBg, buttonText);
-
-        // Make button interactive
         button.eventMode = 'static';
         button.cursor = 'pointer';
-
-        // Button hover effects
-        button.on('pointerover', () => {
-            buttonBg.tint = 0xAAFFAA;
-            button.scale.set(1.05);
-        });
-        button.on('pointerout', () => {
-            buttonBg.tint = 0xFFFFFF;
-            button.scale.set(1);
-        });
-
-        button.on('pointerdown', () => {
-            this.app.stage.removeChild(overlay, gameOverText, statsContainer, button);
-            this.init();
-        });
-
-        // Add pulsing animation to game over text
-        const pulseText = () => {
-            gameOverText.scale.x = 1 + Math.sin(Date.now() / 300) * 0.1;
-            gameOverText.scale.y = gameOverText.scale.x;
-            requestAnimationFrame(pulseText);
-        };
-        pulseText();
-
-        // Add everything to stage
-        this.app.stage.addChild(overlay, gameOverText, statsContainer, button);
-    }
-
-    showLevelUp() {
-        gameState.levelUp = true;
-
-        // Dark overlay with animation
-        const overlay = new PIXI.Graphics();
-        overlay.beginFill(0x000000, 0);  // Start transparent
-        overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-        overlay.endFill();
-        this.app.stage.addChild(overlay);
-
-        // Animate overlay
-        let alpha = 0;
-        const fadeIn = () => {
-            alpha += 0.05;
-            overlay.clear();
-            overlay.beginFill(0x000000, Math.min(0.7, alpha));
-            overlay.drawRect(0, 0, this.app.screen.width, this.app.screen.height);
-            overlay.endFill();
-            
-            if (alpha < 0.7) requestAnimationFrame(fadeIn);
-        };
-        fadeIn();
-
-        // Level up text with glow effect
-        const levelUpText = new PIXI.Text('LEVEL UP!', {
-            fontSize: 48,
-            fill: ['#FFD700', '#FFA500'], // Gold gradient
-            fontWeight: 'bold',
-            stroke: '#000000',
-            strokeThickness: 4,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 10,
-            dropShadowDistance: 5
-        });
-        levelUpText.anchor.set(0.5);
-        levelUpText.position.set(this.app.screen.width / 2, this.app.screen.height / 2 - 120);
-
-        // Add pulsing animation to level up text
-        const pulseText = () => {
-            levelUpText.scale.x = 1 + Math.sin(Date.now() / 200) * 0.1;
-            levelUpText.scale.y = levelUpText.scale.x;
-            requestAnimationFrame(pulseText);
-        };
-        pulseText();
-
-        // Get upgrades
-        const upgrades = this.getRandomUpgrades();
-        let selectedIndex = 0;
-
-        // Create upgrade option containers
-        const optionContainers = upgrades.map((upgrade, index) => {
-            const container = new PIXI.Container();
-            
-            // Background for option
-            const bg = new PIXI.Graphics();
-            bg.beginFill(0x333333, 0.8);
-            bg.lineStyle(2, 0x666666);
-            bg.drawRoundedRect(-150, -30, 300, 60, 10);
+        const bg = new PIXI.Graphics();
+        const drawButton = (hover) => {
+            bg.clear();
+            bg.beginFill(hover ? 0x5fe28a : 0x3fcf6a);
+            bg.lineStyle(3, 0xd9ffe6, 0.9);
+            bg.drawRoundedRect(-120, -28, 240, 56, 16);
             bg.endFill();
-            
-            const text = new PIXI.Text(upgrade.text, {
-                fontSize: 20,
-                fill: 0xFFFFFF,
-                align: 'center'
-            });
-            text.anchor.set(0.5);
-
-            container.addChild(bg, text);
-            container.position.set(
-                this.app.screen.width / 2,
-                this.app.screen.height / 2 + index * 80
-            );
-            
-            // Make container interactive
-            container.eventMode = 'static';
-            container.cursor = 'pointer';
-            
-            // Add hover and click handlers
-            container.on('pointerover', () => {
-                selectedIndex = index;
-                updateSelection();
-            });
-            
-            container.on('pointerdown', () => {
-                // Apply selected upgrade
-                upgrades[index].action();
-                
-                // Cleanup
-                cleanup();
-                
-                // Complete level up
-                this.levelUpComplete();
-            });
-
-            return container;
-        });
-
-        // Update the instruction text to include mouse/touch instructions
-        const instructionText = new PIXI.Text(
-            'Use ↑↓ or touch/click to select\nSPACE or tap/click to confirm', {
-            fontSize: 16,
-            fill: 0xCCCCCC,
-            align: 'center'
-        });
-        instructionText.anchor.set(0.5);
-        instructionText.position.set(
-            this.app.screen.width / 2,
-            this.app.screen.height / 2 + (upgrades.length * 80) + 40
-        );
-
-        // Function to update selection
-        const updateSelection = () => {
-            optionContainers.forEach((container, index) => {
-                const bg = container.getChildAt(0);
-                const text = container.getChildAt(1);
-                
-                if (index === selectedIndex) {
-                    bg.clear();
-                    bg.beginFill(0x666666, 0.9);
-                    bg.lineStyle(2, 0xFFD700);
-                    bg.drawRoundedRect(-150, -30, 300, 60, 10);
-                    bg.endFill();
-                    text.style.fill = 0xFFD700;
-                    container.filters = null;
-                    container.scale.set(1.1);
-                } else {
-                    bg.clear();
-                    bg.beginFill(0x333333, 0.8);
-                    bg.lineStyle(2, 0x666666);
-                    bg.drawRoundedRect(-150, -30, 300, 60, 10);
-                    bg.endFill();
-                    text.style.fill = 0xFFFFFF;
-                    container.filters = [new PIXI.BlurFilter(1)];
-                    container.scale.set(1);
-                }
-            });
         };
+        drawButton(false);
+        const label = new PIXI.Text('PLAY AGAIN', { fontFamily: FONT, fontSize: 26, fontWeight: 'bold', fill: 0x0b2a14, letterSpacing: 2 });
+        label.anchor.set(0.5);
+        button.addChild(bg, label);
+        button.on('pointerover', () => { drawButton(true); button.scale.set(1.06); });
+        button.on('pointerout', () => { drawButton(false); button.scale.set(1); });
 
-        // Cleanup function
-        const cleanup = () => {
-            window.removeEventListener('keydown', handleKeyPress);
-            this.app.stage.removeChild(overlay, levelUpText, instructionText);
-            optionContainers.forEach(container => this.app.stage.removeChild(container));
+        screen.addChild(dim, title, panel, button);
+
+        const layout = () => {
+            const w = app.screen.width, h = app.screen.height;
+            dim.clear();
+            dim.beginFill(0x120404, 0.72);
+            dim.drawRect(0, 0, w, h);
+            dim.endFill();
+            const sc = clamp(w / 800, 0.55, 1);
+            title.scale.set(sc);
+            title.position.set(w / 2, h * 0.2);
+            panel.position.set(w / 2, h * 0.47);
+            button.position.set(w / 2, h * 0.47 + 165);
         };
+        layout();
+        window.addEventListener('resize', layout);
 
-        // Handle key events
-        const handleKeyPress = (e) => {
-            switch(e.key) {
-                case 'ArrowUp':
-                    selectedIndex = (selectedIndex - 1 + upgrades.length) % upgrades.length;
-                    updateSelection();
-                    break;
-                case 'ArrowDown':
-                    selectedIndex = (selectedIndex + 1) % upgrades.length;
-                    updateSelection();
-                    break;
-                case ' ':  // Space key
-                    // Apply selected upgrade
-                    upgrades[selectedIndex].action();
-                    
-                    // Cleanup
-                    cleanup();
-                    
-                    // Complete level up
-                    this.levelUpComplete();
-                    break;
-            }
+        const fade = (d) => {
+            screen.alpha = Math.min(1, screen.alpha + 0.04 * d);
+            if (screen.alpha >= 1) app.ticker.remove(fade);
         };
+        app.ticker.add(fade);
 
-        // Add all elements to stage
-        this.app.stage.addChild(levelUpText, instructionText);
-        optionContainers.forEach(container => this.app.stage.addChild(container));
-
-        // Initial selection update
-        updateSelection();
-
-        window.addEventListener('keydown', handleKeyPress);
-    }
-
-    levelUpComplete() {
-        // Update level-related stats
-        gameState.level++;
-        gameState.experience = 0;
-        gameState.nextLevel = Math.floor(gameState.nextLevel * LEVEL_SCALING.experienceMultiplier);
-        gameState.levelUp = false;
-        
-        // Update all UI elements
-        this.ui.updateLevel(gameState.level);
-        this.ui.updateExperience(gameState.experience, gameState.nextLevel);
-        this.ui.updateHealth(gameState.health, gameState.maxHealth);
-        this.ui.updateDebugPanel(gameState);
-    }
-
-    updateCamera() {
-        // Calculate where the camera should be
-        const targetX = -gameState.player.x + this.app.screen.width / 2;
-        const targetY = -gameState.player.y + this.app.screen.height / 2;
-        
-        // Clamp camera position to world bounds
-        const minX = -WORLD_CONFIG.width + this.app.screen.width;
-        const minY = -WORLD_CONFIG.height + this.app.screen.height;
-        
-        this.worldContainer.x = Math.max(Math.min(targetX, 0), minX);
-        this.worldContainer.y = Math.max(Math.min(targetY, 0), minY);
-    }
-
-    createEnemy() {
-        // Modify enemy spawn to use world coordinates
-        const angle = Math.random() * Math.PI * 2;
-        const spawnX = gameState.player.x + Math.cos(angle) * SPAWN_CONFIG.spawnDistance;
-        const spawnY = gameState.player.y + Math.sin(angle) * SPAWN_CONFIG.spawnDistance;
-        
-        // Ensure spawn is within world bounds
-        const x = Math.max(50, Math.min(WORLD_CONFIG.width - 50, spawnX));
-        const y = Math.max(50, Math.min(WORLD_CONFIG.height - 50, spawnY));
-        
-        return { x, y };
-    }
-
-    createHitEffect(x, y) {
-        const particles = [];
-        const particleCount = STYLES.particles.hit.count;
-        
-        for (let i = 0; i < particleCount; i++) {
-            const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.hit.color);
-            particle.drawCircle(0, 0, 2);
-            particle.endFill();
-            
-            const angle = (Math.PI * 2 * i) / particleCount;
-            const speed = STYLES.particles.hit.speed;
-            
-            particle.x = x;
-            particle.y = y;
-            particle.vx = Math.cos(angle) * speed;
-            particle.vy = Math.sin(angle) * speed;
-            particle.alpha = 1;
-            
-            this.worldContainer.addChild(particle);
-            particles.push(particle);
-        }
-        
-        const animate = () => {
-            particles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.alpha -= 0.05;
-                if (p.alpha <= 0) {
-                    this.worldContainer.removeChild(p);
-                }
-            });
-            
-            if (particles[0].alpha > 0) {
-                requestAnimationFrame(animate);
-            }
+        let done = false;
+        const restart = () => {
+            if (done || screen.alpha < 0.6) return;
+            done = true;
+            app.ticker.remove(fade);
+            window.removeEventListener('resize', layout);
+            window.removeEventListener('keydown', onKey);
+            app.stage.removeChild(screen);
+            screen.destroy({ children: true });
+            this.init();
         };
-        
-        animate();
+        const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') restart(); };
+        window.addEventListener('keydown', onKey);
+        button.on('pointerdown', (e) => { e.stopPropagation(); restart(); });
     }
 
-    createDeathEffect(x, y) {
-        const particles = [];
-        const particleCount = STYLES.particles.death.count;
-        
-        for (let i = 0; i < particleCount; i++) {
-            const particle = new PIXI.Graphics();
-            particle.beginFill(STYLES.particles.death.color);
-            particle.drawCircle(0, 0, 3);
-            particle.endFill();
-            
-            const angle = Math.random() * Math.PI * 2;
-            const speed = STYLES.particles.death.speed * (0.5 + Math.random() * 0.5);
-            
-            particle.x = x;
-            particle.y = y;
-            particle.vx = Math.cos(angle) * speed;
-            particle.vy = Math.sin(angle) * speed;
-            particle.alpha = 1;
-            
-            this.worldContainer.addChild(particle);
-            particles.push(particle);
-        }
-        
-        const animate = () => {
-            particles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.alpha -= 0.02;
-                if (p.alpha <= 0) {
-                    this.worldContainer.removeChild(p);
-                }
-            });
-            
-            if (particles[0].alpha > 0) {
-                requestAnimationFrame(animate);
-            }
-        };
-        
-        animate();
-    }
-
-    getRandomUpgrades() {
-        const allUpgrades = [
-            { 
-                key: '1', 
-                text: 'Increase Fire Rate', 
-                action: () => {
-                    gameState.fireRate *= LEVEL_SCALING.fireRateUpgrade;
-                    this.ui.updateDebugPanel(gameState);
-                }
-            },
-            { 
-                key: '2', 
-                text: 'Increase Speed', 
-                action: () => {
-                    gameState.playerSpeed *= LEVEL_SCALING.speedUpgrade;
-                    this.ui.updateDebugPanel(gameState);
-                }
-            },
-            { 
-                key: '3', 
-                text: 'Increase Health', 
-                action: () => {
-                    gameState.maxHealth = Math.floor(gameState.maxHealth * LEVEL_SCALING.healthUpgrade);
-                    gameState.health = gameState.maxHealth;
-                    this.ui.updateHealth(gameState.health, gameState.maxHealth);
-                    this.ui.updateDebugPanel(gameState);
-                }
-            },
-            { 
-                key: '4', 
-                text: 'Increase Attack Damage', 
-                action: () => {
-                    gameState.attackDamage *= LEVEL_SCALING.damageUpgrade;
-                    this.ui.updateDebugPanel(gameState);
-                }
-            },
-            { 
-                key: '5', 
-                text: 'Increase Health Regen', 
-                action: () => {
-                    gameState.healthRegen += LEVEL_SCALING.healthRegenUpgrade;
-                    this.ui.updateDebugPanel(gameState);
-                }
-            }
-        ];
-
-        // Shuffle and return 3 random upgrades
-        return allUpgrades.sort(() => 0.5 - Math.random()).slice(0, 3);
+    formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const sec = Math.floor(seconds % 60);
+        return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     }
 }
 
+window.game = new Game();

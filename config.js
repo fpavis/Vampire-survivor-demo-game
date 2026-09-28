@@ -1,49 +1,51 @@
 export const GAME_CONFIG = {
     width: window.innerWidth,
     height: window.innerHeight,
-    backgroundColor: 0x1a1a1a,
+    backgroundColor: 0x0b1118,
     antialias: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    autoDensity: true,
     resizeTo: window
 };
 
+// Pseudo-3D projection: ground plane (x, y) is squashed vertically by `tilt`,
+// upright objects (billboards) are drawn on top of it and sorted by depth (y).
+export const WORLD_CONFIG = {
+    tile: 48,          // world units per terrain tile
+    chunkTiles: 12,    // tiles per chunk edge
+    tilt: 0.6,         // vertical squash of the ground plane
+    spawnClearing: 9,  // radius (tiles) of the guaranteed safe start area
+    maxCachedChunks: 500
+};
+
 export const SPAWN_CONFIG = {
-    baseRate: 0.02,        // Base spawn chance per frame
-    maxEnemies: 50,       // Maximum number of enemies allowed
-    typeRatios: {
-        BASIC: 0.6,       // 60% chance for basic enemies
-        TANK: 0.2,        // 20% chance for tanks
-        FAST: 0.2         // 20% chance for fast enemies
-    },
-    eliteChance: 0.1,     // 10% chance for elite enemies
-    eliteModifiers: {
-        health: 1.5,      // 50% more health
-        experience: 2.0,   // Double experience
-        speed: 1.2        // 20% more speed
-    },
-    spawnDistance: 600    // Distance from player where enemies spawn
+    baseRate: 0.02,       // spawn chance per frame at level 1
+    rateGrowth: 0.06,      // extra rate per player level
+    baseMax: 32,           // max enemies at level 1
+    maxPerLevel: 4,
+    maxCap: 120,
+    eliteChance: 0.06,
+    eliteModifiers: { health: 2.2, experience: 3, speed: 1.15, damage: 1.3 },
+    despawnDistance: 1900, // enemies further than this are recycled
+    bossEvery: 5           // a boss appears every N player levels
 };
 
 export const ENEMY_TYPES = {
     BASIC: {
-        color: 0xFF0000,
-        size: 20,
-        speed: 1.8,        // Slightly slower for better early game
-        health: 40,        // Reduced for quicker early kills
-        experience: 8      // Increased for faster early progression
-    },
-    TANK: {
-        color: 0x8B0000,
-        size: 35,
-        speed: 0.8,       // Very slow but threatening
-        health: 100,      // Significant health pool
-        experience: 25    // Rewards player for the challenge
+        name: 'Slime', color: 0x4cd964, radius: 15, speed: 1.5, health: 30,
+        damage: 6, experience: 6, minLevel: 1, weight: 6, flying: false
     },
     FAST: {
-        color: 0x0000FF,
-        size: 15,
-        speed: 3.0,       // Fast but manageable
-        health: 25,       // Very fragile
-        experience: 12    // Decent reward for the risk
+        name: 'Bat', color: 0x8a5cff, radius: 11, speed: 2.7, health: 20,
+        damage: 6, experience: 8, minLevel: 2, weight: 3, flying: true
+    },
+    TANK: {
+        name: 'Golem', color: 0xb0794a, radius: 26, speed: 0.85, health: 140,
+        damage: 18, experience: 26, minLevel: 4, weight: 2, flying: false
+    },
+    BOSS: {
+        name: 'Warlord', color: 0xd0243c, radius: 46, speed: 1.05, health: 900,
+        damage: 30, experience: 160, minLevel: 99, weight: 0, flying: false, boss: true
     }
 };
 
@@ -52,70 +54,49 @@ export const INITIAL_STATE = {
     maxHealth: 100,
     level: 1,
     experience: 0,
-    nextLevel: 25,        // Lower initial requirement for faster early game
-    fireRate: 600,        // Slightly slower initial fire rate
-    playerSpeed: 4.2,     // Adjusted for better control
-    attackDamage: 20,     // Balanced with enemy health
-    healthRegen: 0,
+    nextLevel: 20,
+    playerSpeed: 3.8,
     score: 0
 };
 
-// Level scaling factors
+// XP needed to go from `level` to `level + 1`
+export function xpForLevel(level) {
+    return Math.floor(18 + 11 * (level - 1) + 2.6 * Math.pow(level - 1, 1.55));
+}
+
 export const LEVEL_SCALING = {
-    experienceMultiplier: 1.8,    // How much more XP needed per level (was 2.0)
-    healthUpgrade: 1.3,           // Health increase per health upgrade
-    damageUpgrade: 1.25,          // Damage increase per attack upgrade
-    fireRateUpgrade: 0.85,        // Fire rate improvement (lower is faster)
-    speedUpgrade: 1.15,           // Speed increase per speed upgrade
-    healthRegenUpgrade: 1,        // Fixed health per second per upgrade
-    
-    // Enemy scaling
-    enemyHealthScale: 1.15,       // Enemy health increase per level
-    enemyDamageScale: 1.12,       // Enemy damage increase per level
-    enemySpeedScale: 1.05,        // Slight speed increase per level
-    enemySpawnRateScale: 1.08,    // Spawn rate increase per level
-    
-    // Score and rewards
-    scoreMultiplier: 1.5,         // Score multiplier per level
-    experienceMultiplierPerLevel: 1.2  // Experience gain multiplier per level
+    enemyHealthScale: 1.09,
+    enemyDamageScale: 1.05,
+    enemySpeedScale: 1.02,
+    enemySpeedCap: 1.7,
+    experienceScale: 0.12     // extra XP per player level (linear)
 };
 
-// Add color scheme and styles
+export const LIMITS = {
+    weaponSlots: 5,
+    passiveSlots: 6
+};
+
+export const RARITY = [
+    { name: 'Common', color: 0x9aa4b2 },
+    { name: 'Rare', color: 0x4aa8ff },
+    { name: 'Epic', color: 0xb765ff },
+    { name: 'Legendary', color: 0xffc233 }
+];
+
 export const STYLES = {
     colors: {
-        background: 0x1a1a1a,  // Darker background
-        player: 0x00ff88,      // Bright cyan-green
-        bullet: 0xffdd00,      // Bright yellow
-        exp: 0xff00ff,         // Bright magenta
+        player: 0x3b6fe0,
+        bullet: 0xffd84a,
         healthBar: {
-            border: 0x333333,
-            background: 0x666666,
-            health: 0x00ff00,
-            damage: 0xff0000
-        },
-        ui: {
-            text: 0xffffff,
-            debug: 0xaaaaaa
+            border: 0x1b1b1b,
+            background: 0x3a3a3a,
+            health: 0x4cd964,
+            damage: 0xff4747
         }
     },
     particles: {
-        hit: {
-            color: 0xffff00,
-            count: 8,
-            speed: 5,
-            lifetime: 20
-        },
-        death: {
-            color: 0xff0000,
-            count: 15,
-            speed: 8,
-            lifetime: 30
-        }
+        hit: { color: 0xffee88, count: 6, speed: 2.4 },
+        death: { color: 0xff5a5a, count: 14, speed: 3.4 }
     }
 };
-
-export const WORLD_CONFIG = {
-    width: 2000,  // World is larger than viewport
-    height: 2000,
-    viewportPadding: 200  // Distance from player to edge before camera moves
-}; 

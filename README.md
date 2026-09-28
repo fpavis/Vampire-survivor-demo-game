@@ -6,21 +6,17 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 
 ## 🌟 Features
 
-- **Dynamic Combat System**: Auto-targeting bullets with smooth animations
-- **Experience & Leveling**: Collect gems from defeated enemies to level up
-- **Upgrade System**: Choose from different power-ups as you level up
-  - Increased Fire Rate
-  - Enhanced Movement Speed
-  - Improved Health
-  - Stronger Attack Damage
-  - Health Regeneration
-- **Responsive Controls**: 
-  - Keyboard (Arrow Keys)
-  - Mouse (Click and Hold)
-  - Touch Screen Support
-- **Particle Effects**: Visual feedback for hits and enemy deaths
-- **Infinite World**: Large scrolling game world with dynamic camera
-- **Modern UI**: Clean, responsive interface with health bars and status effects
+- **Pseudo-3D View**: Tilted ground plane, upright billboard sprites sorted by depth, raised mountain blocks, cliffs, shadows, atmospheric haze and vignette
+- **Infinite Procedural World**: Chunk-streamed terrain generated from layered noise, so you can walk forever
+  - Biomes: deep/shallow water, sand, dry lands, grassland, forest, hills, mountains and snowy peaks
+  - Trees, pines, rocks, bushes, cacti and dead trees that block movement; deep water and mountains are impassable, shallows slow you down
+- **Everything Levels Up**:
+  - 5 weapons with 8 levels each: Arcane Bolt, Spirit Blades, Chain Lightning, Frost Nova, Meteor
+  - 9 passives with 5 levels each: Might, Haste, Swiftness, Vitality, Recovery, Magnet, Armor, Wisdom, Precision
+  - Rarity-tiered upgrade cards that show exactly what changes (e.g. `Damage: 22 → 28`)
+  - Enemies scale with your level; new enemy types unlock (Slime, Bat, Golem), elites appear and a boss shows up every 5 levels
+- **Modern UI**: XP bar, animated health bar, timer/kill/score counters, weapon and passive inventory, floating damage numbers with crits, damage vignette
+- **Responsive Controls**: keyboard (WASD / arrows), mouse (click and hold), touch and virtual joystick
 
 ## 🚀 Getting Started
 
