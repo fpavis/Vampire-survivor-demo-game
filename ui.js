@@ -1,5 +1,15 @@
-import { STYLES } from './config.js';
+import { RARITY, LIMITS } from './config.js';
 import { gameState } from './gameState.js';
+import { WEAPONS, PASSIVES } from './weapons.js';
+
+const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export class UIManager {
     constructor(app) {
@@ -8,195 +18,469 @@ export class UIManager {
         this.container.zIndex = 1000;  // Keep UI on top
         app.stage.addChild(this.container);
         this.elements = {};
+        this.shown = { hp: -1, xp: -1, level: -1, slots: '' };
+        this.displayHp = 100;
+        this.displayXp = 0;
+        this.damageFlash = 0;
         this.previousLevel = 1;
-        this.createUIElements();
-        this.createJoystick();  // Initialize joystick
 
-        // Add keyboard shortcut for settings
+        this.createHUD();
+        this.createJoystick();
+
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.toggleSettings();
-            }
+            if (e.key === 'Escape') this.toggleSettings();
         });
+        window.addEventListener('resize', () => this.layoutHUD());
 
-        // Sort children by zIndex
-        this.app.stage.sortChildren();
+        app.stage.sortableChildren = true;
+        this.layoutHUD();
     }
 
-    createUIElements() {
-        // Create UI panel background
-        const panel = new PIXI.Graphics();
-        panel.beginFill(0x000000, 0.5);
-        panel.drawRoundedRect(5, 5, 200, 150, 10);
-        panel.endFill();
-        this.container.addChild(panel);
+    // ------------------------------------------------------------------ HUD
+    createHUD() {
+        const hud = new PIXI.Container();
+        this.hud = hud;
+        this.container.addChild(hud);
 
-        const textStyle = {
-            fontFamily: 'Arial',
-            fontSize: 16,
-            fill: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 1,
-            dropShadow: true,
-            dropShadowColor: '#000000',
-            dropShadowBlur: 2,
-            dropShadowDistance: 1
-        };
+        // Damage / low-health vignette
+        this.vignette = new PIXI.Graphics();
+        this.vignette.eventMode = 'none';
+        this.container.addChildAt(this.vignette, 0);
 
-        const debugStyle = {
-            ...textStyle,
-            fontSize: 14,
-            fill: '#AAAAAA'
-        };
+        // Experience bar across the top
+        this.xpBar = new PIXI.Graphics();
+        this.elements.levelText = new PIXI.Text('LV 1', {
+            fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3
+        });
+        this.elements.levelText.position.set(10, 1);
+        this.elements.xpText = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: 0xdad6ff, stroke: 0x000000, strokeThickness: 3
+        });
+        this.elements.xpText.anchor.set(0.5, 0);
+        this.elements.xpText.y = 2;
 
-        // Create stat icons
-        this.createIcon(15, 15, 0xFF0000, '❤️'); // Health
-        this.createIcon(15, 45, 0xFFD700, '⭐'); // Score
-        this.createIcon(15, 75, 0x00FF00, '📊'); // Level
-        this.createIcon(15, 105, 0xFF00FF, '💎'); // XP
+        // Health panel
+        this.panel = new PIXI.Graphics();
+        this.panel.beginFill(0x0a0e18, 0.6);
+        this.panel.lineStyle(1, 0xffffff, 0.15);
+        this.panel.drawRoundedRect(0, 0, 268, 64, 12);
+        this.panel.endFill();
+        this.panel.position.set(12, 26);
 
-        // Create settings button in top right
+        this.hpBar = new PIXI.Graphics();
+        this.hpBar.position.set(40, 10);
+        this.elements.heart = new PIXI.Text('❤️', { fontSize: 22 });
+        this.elements.heart.position.set(8, 6);
+        this.elements.healthText = new PIXI.Text('100/100', {
+            fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3
+        });
+        this.elements.healthText.anchor.set(0.5);
+        this.elements.healthText.position.set(40 + 110, 10 + 10);
+        this.elements.statLine = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xe6e9f2, stroke: 0x000000, strokeThickness: 3
+        });
+        this.elements.statLine.position.set(12, 38);
+        this.panel.addChild(this.hpBar, this.elements.heart, this.elements.healthText, this.elements.statLine);
+
+        // Weapon / passive inventory
+        this.slotsContainer = new PIXI.Container();
+        this.slotsContainer.position.set(12, 98);
+        this.elements.statsText = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 12, fill: 0xb8c0d4, stroke: 0x000000, strokeThickness: 3, lineHeight: 16
+        });
+
+        // Banner
+        this.elements.banner = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 40, fontWeight: 'bold', fill: 0xffffff,
+            stroke: 0x000000, strokeThickness: 6, dropShadow: true, dropShadowDistance: 4, dropShadowAlpha: 0.6
+        });
+        this.elements.banner.anchor.set(0.5);
+        this.elements.banner.visible = false;
+        this.bannerTimer = 0;
+
+        hud.addChild(this.xpBar, this.elements.levelText, this.elements.xpText, this.panel,
+            this.slotsContainer, this.elements.statsText, this.elements.banner);
+
+        // Settings button in the top right
         const settingsButton = new PIXI.Container();
-        const settingsIcon = new PIXI.Text('⚙️', { fontSize: 24 });
+        const settingsIcon = new PIXI.Text('⚙️', { fontSize: 22 });
         settingsIcon.anchor.set(0.5);
-        
         const settingsBg = new PIXI.Graphics();
-        settingsBg.beginFill(0x000000, 0.3);
-        settingsBg.drawCircle(0, 0, 20);
-        settingsBg.endFill();
-        
+        const drawBg = (alpha) => {
+            settingsBg.clear();
+            settingsBg.beginFill(0x0a0e18, alpha);
+            settingsBg.lineStyle(1, 0xffffff, 0.2);
+            settingsBg.drawCircle(0, 0, 20);
+            settingsBg.endFill();
+        };
+        drawBg(0.6);
         settingsButton.addChild(settingsBg, settingsIcon);
-        // Position in top right with margin
-        settingsButton.position.set(this.app.screen.width - 40, 40);
         settingsButton.eventMode = 'static';
         settingsButton.cursor = 'pointer';
-        
-        // Add window resize handler for settings button
-        window.addEventListener('resize', () => {
-            settingsButton.position.set(this.app.screen.width - 40, 40);
-        });
-        
-        settingsButton.on('pointerdown', () => this.toggleSettings());
-        settingsButton.on('pointerover', () => {
-            settingsBg.clear();
-            settingsBg.beginFill(0x333333, 0.5);
-            settingsBg.drawCircle(0, 0, 20);
-        });
-        settingsButton.on('pointerout', () => {
-            settingsBg.clear();
-            settingsBg.beginFill(0x000000, 0.3);
-            settingsBg.drawCircle(0, 0, 20);
-        });
-        
-        this.container.addChild(settingsButton);
+        settingsButton.on('pointerdown', (e) => { e.stopPropagation(); this.toggleSettings(); });
+        settingsButton.on('pointerover', () => drawBg(0.9));
+        settingsButton.on('pointerout', () => drawBg(0.6));
+        this.settingsButton = settingsButton;
+        hud.addChild(settingsButton);
 
-        this.elements = {
-            scoreText: new PIXI.Text('Score: 0', textStyle),
-            healthText: new PIXI.Text('Health: 100/100', textStyle),
-            levelText: new PIXI.Text('Level: 1', textStyle),
-            experienceText: new PIXI.Text('XP: 0/10', textStyle),
-            debugText: new PIXI.Text('', debugStyle)
-        };
-
-        // Position UI elements with offset for icons
-        this.elements.healthText.position.set(40, 10);
-        this.elements.scoreText.position.set(40, 40);
-        this.elements.levelText.position.set(40, 70);
-        this.elements.experienceText.position.set(40, 100);
-        this.elements.debugText.position.set(10, 170);
-
-        // Add elements to container
-        Object.values(this.elements).forEach(element => {
-            this.container.addChild(element);
-        });
-
-        // Add XP bar
-        this.xpBar = this.createProgressBar(10, 130, 190, 10, 0x8800FF);
-        this.healthBar = this.createProgressBar(40, 30, 160, 6, 0xFF0000);
+        this.setHUDVisible(false);
     }
 
-    createIcon(x, y, color, emoji) {
-        const text = new PIXI.Text(emoji, {
-            fontSize: 20,
-            align: 'center'
-        });
-        text.position.set(x, y);
-        this.container.addChild(text);
+    setHUDVisible(visible) {
+        this.container.visible = visible;
     }
 
-    createProgressBar(x, y, width, height, color) {
-        const container = new PIXI.Container();
-        
-        // Background
-        const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.5);
-        bg.drawRoundedRect(0, 0, width, height, height/2);
-        bg.endFill();
-        
-        // Progress
-        const bar = new PIXI.Graphics();
-        bar.beginFill(color);
-        bar.drawRoundedRect(0, 0, width, height, height/2);
-        bar.endFill();
-        
-        container.addChild(bg, bar);
-        container.position.set(x, y);
-        this.container.addChild(container);
-        
-        return bar;
+    layoutHUD() {
+        const w = this.app.screen.width, h = this.app.screen.height;
+        this.settingsButton.position.set(w - 34, 50);
+        this.elements.xpText.x = w / 2;
+        this.elements.banner.position.set(w / 2, h * 0.24);
+        this.shown.xp = -1; // force redraw of the wide bar
+        this.drawVignette(this.vigAlpha || 0);
     }
 
-    updateScore(score) {
-        this.elements.scoreText.text = `Score: ${score}`;
+    drawBar(g, w, h, frac, c1, c2) {
+        g.clear();
+        g.beginFill(0x000000, 0.55);
+        g.drawRoundedRect(0, 0, w, h, h / 2);
+        g.endFill();
+        frac = clamp(frac, 0, 1);
+        if (frac > 0) {
+            const fw = Math.max(h, w * frac);
+            g.beginFill(c1);
+            g.drawRoundedRect(0, 0, fw, h, h / 2);
+            g.endFill();
+            g.beginFill(c2, 0.85);
+            g.drawRoundedRect(2, 2, Math.max(0, fw - 4), h * 0.42, h * 0.2);
+            g.endFill();
+        }
+        g.lineStyle(1, 0xffffff, 0.25);
+        g.drawRoundedRect(0, 0, w, h, h / 2);
     }
 
-    updateHealth(health, maxHealth) {
-        this.elements.healthText.text = `${Math.floor(health)}/${maxHealth}`;
-        this.healthBar.scale.x = health / maxHealth;
-    }
-
-    updateLevel(level) {
-        this.elements.levelText.text = `Level: ${level}`;
-        // Only flash if level has increased
-        if (level > this.previousLevel) {
-            this.createFlashEffect(this.elements.levelText);
-            this.previousLevel = level;
+    drawVignette(alpha) {
+        const w = this.app.screen.width, h = this.app.screen.height;
+        this.vignette.clear();
+        if (alpha <= 0.01) return;
+        const steps = 6;
+        for (let i = 0; i < steps; i++) {
+            const inset = i * Math.min(w, h) * 0.05;
+            this.vignette.lineStyle(Math.min(w, h) * 0.05 + 1, 0xff1a1a, alpha * (1 - i / steps) * 0.55);
+            this.vignette.drawRect(inset + 0, inset, w - inset * 2, h - inset * 2);
         }
     }
 
-    updateExperience(experience, nextLevel) {
-        this.elements.experienceText.text = `XP: ${experience}/${nextLevel}`;
-        this.xpBar.scale.x = experience / nextLevel;
+    flashDamage() {
+        this.damageFlash = 1;
     }
 
-    updateDebugPanel(state) {
-        this.elements.debugText.text = 
-            `⚔️ Attack: ${state.attackDamage} | 🏃 Speed: ${state.playerSpeed.toFixed(1)}\n` +
-            `⚡ Attack Speed: ${(1000 / state.fireRate).toFixed(1)}/s\n` +
-            `❤️ Regen: ${state.healthRegen.toFixed(1)}/s`;
+    banner(text, color = 0xffffff) {
+        const b = this.elements.banner;
+        b.text = text;
+        b.style.fill = color;
+        b.visible = true;
+        b.alpha = 1;
+        b.scale.set(0.4);
+        this.bannerTimer = 150;
+    }
+
+    // Called every frame from the game loop
+    update(game, delta) {
+        const s = game.state;
+        this.displayHp += (s.health - this.displayHp) * Math.min(1, 0.25 * delta);
+        this.displayXp += (s.experience - this.displayXp) * Math.min(1, 0.25 * delta);
+
+        const hp = Math.round(this.displayHp * 2) / 2;
+        const key = `${hp}|${s.maxHealth}`;
+        if (key !== this.shown.hpKey) {
+            this.shown.hpKey = key;
+            const frac = this.displayHp / s.maxHealth;
+            this.drawBar(this.hpBar, 220, 20, frac,
+                frac < 0.3 ? 0xd83a3a : 0x3fcf62, frac < 0.3 ? 0xff8a8a : 0x9dffb4);
+            this.elements.healthText.text = `${Math.ceil(s.health)} / ${s.maxHealth}`;
+        }
+
+        const w = this.app.screen.width;
+        const xpKey = `${Math.round(this.displayXp * 4)}|${s.nextLevel}|${w}`;
+        if (xpKey !== this.shown.xpKey) {
+            this.shown.xpKey = xpKey;
+            this.drawBar(this.xpBar, w, 18, this.displayXp / s.nextLevel, 0x7a4dff, 0xc3adff);
+            this.elements.xpText.text = `${Math.floor(s.experience)} / ${s.nextLevel} XP`;
+        }
+        if (s.level !== this.shown.level) {
+            this.elements.levelText.text = `LV ${s.level}`;
+            if (this.shown.level > 0) this.createFlashEffect(this.elements.levelText);
+            this.shown.level = s.level;
+        }
+
+        const stat = `⏱ ${formatTime(s.time)}   ☠ ${s.kills}   ★ ${Math.floor(s.score)}`;
+        if (stat !== this.shown.stat) {
+            this.shown.stat = stat;
+            this.elements.statLine.text = stat;
+        }
+
+        this.updateSlots(game);
+
+        // damage vignette + low health pulse
+        this.damageFlash = Math.max(0, this.damageFlash - 0.05 * delta);
+        const low = s.health / s.maxHealth < 0.3 ? 0.35 + 0.25 * Math.sin(game.frame * 0.12) : 0;
+        const vig = Math.max(this.damageFlash, low);
+        if (Math.abs(vig - (this.vigAlpha || 0)) > 0.02) {
+            this.vigAlpha = vig;
+            this.drawVignette(vig);
+        }
+
+        // banner animation
+        if (this.bannerTimer > 0) {
+            this.bannerTimer -= delta;
+            const b = this.elements.banner;
+            b.scale.set(Math.min(1, b.scale.x + 0.1 * delta));
+            if (this.bannerTimer < 30) b.alpha = Math.max(0, this.bannerTimer / 30);
+            if (this.bannerTimer <= 0) b.visible = false;
+        }
+    }
+
+    updateSlots(game) {
+        const s = game.state;
+        const sig = game.weapons.list.map((w) => w.id + w.level).join(',') + '|' +
+            Object.entries(s.passives).map(([k, v]) => k + v).join(',');
+        if (sig === this.shown.slots) return;
+        this.shown.slots = sig;
+
+        this.slotsContainer.removeChildren().forEach((c) => c.destroy({ children: true }));
+        const drawSlot = (x, y, icon, level, max, color) => {
+            const c = new PIXI.Container();
+            c.position.set(x, y);
+            const bg = new PIXI.Graphics();
+            bg.beginFill(0x0a0e18, 0.7);
+            bg.lineStyle(2, color, level >= max ? 1 : 0.55);
+            bg.drawRoundedRect(0, 0, 40, 40, 9);
+            bg.endFill();
+            const t = new PIXI.Text(icon, { fontSize: 22 });
+            t.anchor.set(0.5);
+            t.position.set(20, 19);
+            const lv = new PIXI.Text(level >= max ? 'MAX' : `${level}`, {
+                fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: level >= max ? 0xffd84a : 0xffffff,
+                stroke: 0x000000, strokeThickness: 3
+            });
+            lv.anchor.set(1, 1);
+            lv.position.set(38, 39);
+            c.addChild(bg, t, lv);
+            this.slotsContainer.addChild(c);
+        };
+        game.weapons.list.forEach((w, i) => {
+            drawSlot(i * 44, 0, WEAPONS[w.id].icon, w.level, WEAPONS[w.id].max, WEAPONS[w.id].color);
+        });
+        Object.entries(s.passives).forEach(([id, lvl], i) => {
+            drawSlot(i * 44, 44, PASSIVES[id].icon, lvl, PASSIVES[id].max, 0x7be07b);
+        });
+
+        const st = game.stats;
+        this.elements.statsText.position.set(12, 98 + (Object.keys(s.passives).length ? 92 : 48));
+        this.elements.statsText.text =
+            `Damage ×${st.might.toFixed(2)}   Speed ×${st.speed.toFixed(2)}\n` +
+            `Crit ${Math.round(st.crit * 100)}%   Armor ${Math.round(st.armor * 100)}%   Regen ${st.regen.toFixed(1)}/s`;
     }
 
     createFlashEffect(target) {
-        // Store original scale if not already stored
-        if (!target.originalScale) {
-            target.originalScale = { x: target.scale.x, y: target.scale.y };
-        }
-
-        // Cancel any existing flash timeout
-        if (target.flashTimeout) {
-            clearTimeout(target.flashTimeout);
-        }
-
-        // Apply flash effect
+        if (!target.originalScale) target.originalScale = { x: target.scale.x, y: target.scale.y };
+        if (target.flashTimeout) clearTimeout(target.flashTimeout);
         target.scale.set(target.originalScale.x * 1.5, target.originalScale.y * 1.5);
         target.tint = 0xFFFF00;
-        
-        // Reset after flash
         target.flashTimeout = setTimeout(() => {
             target.scale.set(target.originalScale.x, target.originalScale.y);
             target.tint = 0xFFFFFF;
             target.flashTimeout = null;
-        }, 200);
+        }, 250);
+    }
+
+    // ------------------------------------------------------------ level up
+    showLevelUp(choices, level, onPick) {
+        const app = this.app;
+        const overlay = new PIXI.Container();
+        overlay.zIndex = 3000;
+        overlay.eventMode = 'static';
+        app.stage.addChild(overlay);
+
+        let selected = 0;
+        let age = 0;
+        let cards = [];
+        let closed = false;
+        const parts = { dim: null, title: null, sub: null, hint: null };
+
+        const pick = (i) => {
+            if (closed || age < 14) return;   // ignore accidental instant clicks
+            closed = true;
+            teardown();
+            onPick(choices[i]);
+        };
+
+        const drawCard = (choice, w, h, compact, isSel) => {
+            const c = new PIXI.Container();
+            const rar = RARITY[choice.rarity];
+            const bg = new PIXI.Graphics();
+            bg.beginFill(0x131826, 0.96);
+            bg.lineStyle(isSel ? 4 : 3, isSel ? 0xffffff : rar.color, 1);
+            bg.drawRoundedRect(-w / 2, -h / 2, w, h, 16);
+            bg.endFill();
+            bg.beginFill(rar.color, isSel ? 0.28 : 0.14);
+            bg.drawRoundedRect(-w / 2 + 3, -h / 2 + 3, w - 6, compact ? h - 6 : 34, 13);
+            bg.endFill();
+            c.addChild(bg);
+
+            const tag = choice.kind === 'heal' ? 'CONSUMABLE'
+                : choice.isNew ? 'NEW' : `LV ${choice.toLevel - 1} → ${choice.toLevel}`;
+            const tagText = new PIXI.Text(`${rar.name.toUpperCase()}  ·  ${tag}${choice.max ? '  ·  MAX' : ''}`, {
+                fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: rar.color, letterSpacing: 1
+            });
+            const iconCircle = new PIXI.Graphics();
+            const ir = compact ? 34 : 46;
+            iconCircle.beginFill(choice.color, 0.22);
+            iconCircle.drawCircle(0, 0, ir);
+            iconCircle.endFill();
+            iconCircle.lineStyle(2, choice.color, 0.9);
+            iconCircle.drawCircle(0, 0, ir);
+            const icon = new PIXI.Text(choice.icon, { fontSize: compact ? 34 : 50 });
+            icon.anchor.set(0.5);
+            iconCircle.addChild(icon);
+
+            const name = new PIXI.Text(choice.name, {
+                fontFamily: FONT, fontSize: compact ? 20 : 24, fontWeight: 'bold', fill: 0xffffff
+            });
+            const textW = compact ? w - ir * 2 - 44 : w - 36;
+            const body = new PIXI.Text(choice.lines.join('\n'), {
+                fontFamily: FONT, fontSize: compact ? 13 : 15, fill: 0xc9d1e6,
+                wordWrap: true, wordWrapWidth: textW, align: compact ? 'left' : 'center', lineHeight: compact ? 17 : 21
+            });
+
+            if (compact) {
+                tagText.position.set(-w / 2 + 16, -h / 2 + 10);
+                iconCircle.position.set(-w / 2 + 16 + ir, 8);
+                name.position.set(-w / 2 + 32 + ir * 2, -h / 2 + 30);
+                body.position.set(-w / 2 + 32 + ir * 2, -h / 2 + 58);
+            } else {
+                tagText.anchor.set(0.5, 0);
+                tagText.position.set(0, -h / 2 + 10);
+                iconCircle.position.set(0, -h / 2 + 100);
+                name.anchor.set(0.5, 0);
+                name.position.set(0, -h / 2 + 164);
+                body.anchor.set(0.5, 0);
+                body.position.set(0, -h / 2 + 204);
+            }
+            c.addChild(tagText, iconCircle, name, body);
+
+            if (!compact) {
+                const key = new PIXI.Text(`[ ${cards.length + 1} ]`, {
+                    fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0x77809a
+                });
+                key.anchor.set(0.5, 1);
+                key.position.set(0, h / 2 - 10);
+                c.addChild(key);
+            }
+            return c;
+        };
+
+        const build = () => {
+            const w = app.screen.width, h = app.screen.height;
+            overlay.removeChildren().forEach((c) => c.destroy({ children: true }));
+            cards = [];
+
+            const dim = new PIXI.Graphics();
+            dim.beginFill(0x05070d, 0.78);
+            dim.drawRect(0, 0, w, h);
+            dim.endFill();
+            dim.eventMode = 'static';
+            overlay.addChild(dim);
+
+            const compact = w < 3 * 250 + 100 || h < 460;
+            const title = new PIXI.Text('LEVEL UP!', {
+                fontFamily: FONT, fontSize: compact ? 34 : 52, fontWeight: 'bold',
+                fill: ['#fff2a8', '#ffb31a'], stroke: 0x2a1600, strokeThickness: 6,
+                dropShadow: true, dropShadowDistance: 4, dropShadowAlpha: 0.6
+            });
+            title.anchor.set(0.5);
+            const sub = new PIXI.Text(`You reached level ${level}  —  choose an upgrade`, {
+                fontFamily: FONT, fontSize: compact ? 14 : 18, fill: 0xd3d9ea
+            });
+            sub.anchor.set(0.5);
+
+            let cw, ch, positions;
+            if (compact) {
+                cw = Math.min(w - 32, 440);
+                ch = clamp((h - 150) / choices.length - 12, 96, 128);
+                const totalH = choices.length * ch + (choices.length - 1) * 12;
+                const top = Math.max(110, (h - totalH) / 2 + 40);
+                positions = choices.map((_, i) => ({ x: w / 2, y: top + ch / 2 + i * (ch + 12) }));
+                title.position.set(w / 2, Math.max(34, top - 62));
+                sub.position.set(w / 2, Math.max(64, top - 30));
+            } else {
+                cw = 250; ch = 330;
+                const gap = 28;
+                const totalW = choices.length * cw + (choices.length - 1) * gap;
+                positions = choices.map((_, i) => ({ x: w / 2 - totalW / 2 + cw / 2 + i * (cw + gap), y: h / 2 + 30 }));
+                title.position.set(w / 2, h / 2 - ch / 2 - 60);
+                sub.position.set(w / 2, h / 2 - ch / 2 - 18);
+            }
+            overlay.addChild(title, sub);
+
+            const hint = new PIXI.Text('Click a card, or use ←/→ and Enter, or press 1-3', {
+                fontFamily: FONT, fontSize: 13, fill: 0x8e97b0
+            });
+            hint.anchor.set(0.5);
+            hint.position.set(w / 2, h - 24);
+            overlay.addChild(hint);
+
+            choices.forEach((choice, i) => {
+                const card = drawCard(choice, cw, ch, compact, i === selected);
+                card.position.set(positions[i].x, positions[i].y);
+                card.baseY = positions[i].y;
+                card.eventMode = 'static';
+                card.cursor = 'pointer';
+                card.on('pointerover', () => { if (selected !== i) { selected = i; setTimeout(build, 0); } });
+                card.on('pointerdown', (e) => { e.stopPropagation(); pick(i); });
+                card.scale.set(i === selected ? 1.06 : 1);
+                overlay.addChild(card);
+                cards.push(card);
+            });
+            parts.compact = compact;
+        };
+
+        const tick = (d) => {
+            age += d;
+            cards.forEach((card, i) => {
+                const a = clamp((age - i * 4) / 12, 0, 1);
+                card.alpha = a;
+                card.y = card.baseY + (1 - a) * 40;
+            });
+        };
+
+        const onKey = (e) => {
+            if (closed) return;
+            const n = choices.length;
+            switch (e.key) {
+                case 'ArrowLeft': case 'ArrowUp': case 'a': case 'w':
+                    selected = (selected - 1 + n) % n; build(); break;
+                case 'ArrowRight': case 'ArrowDown': case 'd': case 's':
+                    selected = (selected + 1) % n; build(); break;
+                case 'Enter': case ' ': pick(selected); e.preventDefault(); break;
+                case '1': case '2': case '3':
+                    if (Number(e.key) <= n) { selected = Number(e.key) - 1; pick(selected); }
+                    break;
+            }
+        };
+
+        const teardown = () => {
+            app.ticker.remove(tick);
+            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('resize', build);
+            app.stage.removeChild(overlay);
+            overlay.destroy({ children: true });
+        };
+
+        build();
+        app.ticker.add(tick);
+        window.addEventListener('keydown', onKey);
+        window.addEventListener('resize', build);
     }
 
     createJoystick() {
@@ -365,6 +649,7 @@ export class UIManager {
     }
 
     toggleSettings() {
+        if (gameState.levelUp || gameState.gameOver || !gameState.player) return;
         if (!this.settingsMenu) {
             this.createSettingsMenu();
         }
@@ -589,4 +874,4 @@ export class UIManager {
     }
 
     // Add other UI update methods...
-} 
+}
