@@ -2,6 +2,7 @@ import { WORLD_CONFIG } from '../config';
 import { hash, fbm, smooth, lerp, clamp01 } from './noise';
 import { BIOME, isSolidBiome, isWaterBiome, groupOf, GROUP } from './biomes';
 import { DECOR_DEFS } from '../../render/decorArt';
+import { GROUP_LEVEL_OFFSET, tierOf, zoneLevel } from './difficulty';
 import type { ChunkLike, DecorItem, Poi, PoiType, TerrainSource } from '../types';
 
 const T = WORLD_CONFIG.tile;
@@ -50,6 +51,8 @@ export function addDecorItem(chunk: ChunkLike, type: string, x: number, y: numbe
     return item;
 }
 
+const TREE_TYPES = new Set(['appletree', 'birch', 'oak', 'pine', 'snowpine', 'palm']);
+
 const ENTRANCE_OFFSET: Record<PoiType, number> = { cave: 64, ruins: 48, city: 58 };
 
 export class OverworldSource implements TerrainSource {
@@ -85,6 +88,13 @@ export class OverworldSource implements TerrainSource {
         if (m > 0.6) return BIOME.FOREST;
         return BIOME.GRASS;
     }
+
+    /** Integer enemy level of the zone at a tile (distance based, see difficulty.ts). */
+    levelAt(tx: number, ty: number): number {
+      return zoneLevel(this.seed, tx, ty, GROUP_LEVEL_OFFSET[groupOf(this.biomeAt(tx, ty))] ?? 0);
+    }
+
+    tierAt(tx: number, ty: number): number { return tierOf(this.levelAt(tx, ty)); }
 
     // ------------------------------------------------------------ places
     poiForCell(cx: number, cy: number): Poi | null {
@@ -201,6 +211,7 @@ export class OverworldSource implements TerrainSource {
         const { cx, cy } = chunk;
         const CT = WORLD_CONFIG.chunkTiles;
         const pois = this.poisNear(cx * CT + CT / 2, cy * CT + CT / 2, CT + 12);
+        const chunkTier = this.tierAt(cx * CT + CT / 2, cy * CT + CT / 2);
         const seed = this.seed;
 
         for (let j = 0; j < CT; j++) {
@@ -217,9 +228,10 @@ export class OverworldSource implements TerrainSource {
                 }
                 if (blocked) continue;
                 const r = hash(tx, ty, seed + 31);
-                let type = null;
+                let type: string | null = null;
                 for (const [max, t] of table) if (r < max) { type = t; break; }
                 if (!type) continue;
+                if (chunkTier > 0 && TREE_TYPES.has(type) && hash(tx, ty, seed + 63) < Math.min(0.8, chunkTier * 0.25)) type = 'dead';
                 const variant = Math.floor(hash(tx, ty, seed + 57) * 8);
                 const x = (tx + 0.15 + 0.7 * hash(tx, ty, seed + 71)) * T;
                 const y = (ty + 0.15 + 0.7 * hash(tx, ty, seed + 83)) * T;

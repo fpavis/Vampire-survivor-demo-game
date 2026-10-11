@@ -160,3 +160,26 @@ export const STYLES = {
         death: { color: 0xff5a5a, count: 14, speed: 3.4 }
     }
 };
+
+// ---------------------------------------------------------------------------
+// Enemy perception: how far a monster notices the player, how long it remembers, how far it follows.
+// Distances are world units (48 per tile). Bats and vultures see far; golems and slimes barely look up.
+export interface Perception { sight: number; loseMul: number; memory: number; alert: number; leash: number }
+
+export const PERCEPTION_DEFAULT: Perception = { sight: 380, loseMul: 1.45, memory: 240, alert: 220, leash: 520 };
+
+const PERCEPTION_OVERRIDES: Record<string, Partial<Perception>> = {
+  SLIME: { sight: 300 }, BEE: { sight: 420, leash: 600 }, BOAR: { sight: 340 },
+  WOLF: { sight: 460, alert: 320 }, SPIDER: { sight: 360 }, TREANT: { sight: 280, leash: 420 },
+  SCORPION: { sight: 330 }, VULTURE: { sight: 560, leash: 700 }, MUMMY: { sight: 300 }, SCARAB: { sight: 280 },
+  CRAB: { sight: 300 }, GULL: { sight: 480, leash: 650 }, JELLY: { sight: 360 },
+  BAT: { sight: 520, leash: 650 }, GOLEM: { sight: 260, leash: 420 }, TROLL: { sight: 380 },
+  SKELETON: { sight: 360 }, GHOST: { sight: 400 },
+  BOAR_KING: { sight: 650, leash: 900, memory: 480 }, ANCIENT_TREANT: { sight: 650, leash: 900, memory: 480 },
+  SAND_PHARAOH: { sight: 650, leash: 900, memory: 480 }, CRAB_KING: { sight: 650, leash: 900, memory: 480 },
+  STONE_TITAN: { sight: 650, leash: 900, memory: 480 }
+};
+
+export function perceptionOf(type: string): Perception {
+  return { ...PERCEPTION_DEFAULT, ...(PERCEPTION_OVERRIDES[type] ?? {}) };
+}

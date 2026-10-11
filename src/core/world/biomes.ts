@@ -76,7 +76,10 @@ export const POI_INFO = {
 };
 
 // Which enemies roam each region. `level` is the player level at which they start appearing.
-export const ROSTERS = {
+export interface RosterEntry { type: string; level: number; weight: number; group?: [number, number] }
+
+// `level` is the minimum zone level at which a species appears.
+export const ROSTERS: Record<string, RosterEntry[]> = {
     field: [
         { type: 'SLIME', level: 1, weight: 6 },
         { type: 'BEE', level: 2, weight: 3, group: [4, 7] },
@@ -104,7 +107,7 @@ export const ROSTERS = {
     ]
 };
 
-export const WARLORDS = {
+export const WARLORDS: Record<string, string> = {
     field: 'BOAR_KING',
     forest: 'ANCIENT_TREANT',
     desert: 'SAND_PHARAOH',
@@ -113,7 +116,7 @@ export const WARLORDS = {
 };
 
 // Interior population by place type
-export const INTERIOR_ROSTERS = {
+export const INTERIOR_ROSTERS: Record<string, string[]> = {
     cave: ['BAT', 'SPIDER', 'GOLEM', 'SCORPION'],
     ruins: ['SKELETON', 'GHOST', 'MUMMY', 'SKELETON'],
     city: []
