@@ -193,13 +193,28 @@ interface Wallet { gold: number; wood: number; stone: number; iron: number; }   
 type Item = SpellItem | RuneItem | Consumable;                                    // only these occupy slots
 ```
 
-Loot roll per kill:
+Loot rolls per kill (independent, decided base rates for a normal enemy):
 
-1. `p = baseDrop * levelFactor * strengthFactor` (base 0.1, clamped to a ceiling).
-2. If it hits, roll the **table**: mostly **stackables** (gold, resources, consumables, auto-collected into the
-   wallet or stack), a small share **runes**, a much smaller share **spell items**.
-3. Dungeon chests and bosses use guaranteed tables (at least one spell item or rune pick per boss).
-4. **Salvage and filter:** unwanted rarity thresholds auto-salvage into resources. Inventory spam is a bug.
+```ts
+const BASE_DROPS = { xpGem: 1.0, gold: 0.10, resource: 0.01, skill: 0.001 };
+
+function rollKill(enemy: Enemy, rng: Rng): Drop[] {
+  const m = lootMultiplier(enemy);          // normal 1, elite ~4, mini-boss ~10, scales gently with level
+  const drops: Drop[] = [{ kind: 'xpGem', value: xpFor(enemy) }];           // always
+  if (rng() < BASE_DROPS.gold * m)     drops.push({ kind: 'gold', amount: goldFor(enemy) });
+  if (rng() < BASE_DROPS.resource * m) drops.push({ kind: 'resource', type: resourceFor(enemy), amount: 1 });
+  if (rng() < BASE_DROPS.skill * m)    drops.push({ kind: 'skill', item: generateSkill(enemy.zoneLevel, rng) });
+  return drops;
+}
+```
+
+1. **XP gems always drop.** Gold and resources are **auto-collected** into the wallet (never inventory slots),
+   so their rates cannot flood anything.
+2. **Skills (spell items and runes) are the only inventory items from kills**, 0.1 percent for a normal
+   enemy. At 140 kills a minute that is about one skill per 7 minutes, which stays a trickle.
+3. Dungeon chests and bosses use guaranteed tables (at least one skill pick per boss).
+4. **Salvage and filter:** unwanted rarity thresholds auto-salvage into resources.
+5. Multipliers are modest and data-driven; boss kills bypass the roll with a guaranteed table.
 
 Merchants sell runes and spell items at high gold prices with a limited, rotating stock seeded from the
 town and the in-game day.
@@ -373,7 +388,7 @@ Acceptance
 
 Tasks
 - Item model, procedural rune generator with rarity budgets, `canSocket` and command layer.
-- Loot tables with drop rate rules (4.4), auto-collect stackables, salvage and loot filter.
+- Loot rolls with the decided rates (4.4: XP gem 100%, gold 10%, resource 1%, skill 0.1%), auto-collect of gold and resources, salvage and loot filter.
 - Wallet (gold, wood, stone, iron) and HUD display.
 - Preact UI toolkit: panels, scroll lists, tooltips, **pointer-events DnD manager with ghost, valid and
   invalid highlights, rollback**; inventory; spell board with sockets and live compatibility; spell preview
@@ -383,8 +398,8 @@ Tasks
 
 Acceptance
 - Drag from inventory to socket, between sockets, back to inventory, by mouse, touch and keyboard.
-  Incompatible runes cannot be dropped and explain why. A 1 hour sim never fills the inventory with junk
-  (salvage works). Save and reload keeps every item.
+  Incompatible runes cannot be dropped and explain why. Over 100,000 simulated kills the roll rates match
+  the table (statistical test) and the inventory holds only skills, never gold or resources. Save and reload keeps every item.
 
 ### Phase 4: Party, loadouts, death (M)
 
@@ -485,9 +500,9 @@ options, controller support, performance pass, onboarding.
 
 ## 10. Assumptions to confirm before Phase 1
 
-1. **Loot:** "0.1" means a 10 percent chance that a kill drops something, mostly auto-collected stackables;
-   runes and spell items are a much smaller sub-roll (see VISION 5.9d). At 60 to 250 kills a minute, a flat
-   10 percent chance of an *item* would flood the inventory.
+1. **Loot (decided):** XP gem always, gold 10 percent, resource 1 percent, skill 0.1 percent, as independent
+   rolls (VISION 5.9d). Still to decide: the split between spell items and runes within the skill roll
+   (suggestion: about 1 in 5 a spell item, spell items weighted toward dungeons and bosses).
 2. **Towers are indestructible**, enemies can only temporarily disable them or are drawn to them.
 3. **Safe moment** for editing means 6 seconds without an aggroed hostile in sight, plus always safe in
    towns, towers and claimed areas.

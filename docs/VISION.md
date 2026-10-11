@@ -61,7 +61,7 @@ These are the answers from the first review round. They can still be revised.
 | Resources | **Gold** (merchants), **wood, stone, iron** (building). |
 | Gems | **Runes only.** No separate gems. |
 | Spell shops | **Yes**, spells and runes can be bought. Gold and shops must exist. |
-| Drop rate | Base **0.1** for normal enemies, higher for higher-level and stronger monsters, but **not so high that the inventory floods** with items to inspect. **Skills are rare, valuable and sought after**, and getting a new one must feel rewarding. |
+| Drop rates | **Independent rolls per kill** (normal enemy): **XP gem 100%**, **gold 10%**, **resource 1%**, **skill 0.1%**. Stronger and higher-level monsters roll better. Skills stay rare, valuable and rewarding. |
 | Loadouts | **The hero party acts as the loadouts**: switching heroes is fast (low cooldown). **Changing skills and runes is only possible in safe moments.** |
 | Terrain | **Surface effects**: lava, poison swamp and similar that damage over time, speed up or slow down players and/or enemies, slowly heal, boost mana regen or fire rate, trigger events when stepped on (monster wave, unlock an area), and **claimable areas** you hold for a while. |
 | Hero death | Only the **active hero can be damaged**. A dead hero **cannot be used until rested in a city**. If the whole party is down: **death screen, respawn at the nearest visited city or the start area**. |
@@ -352,21 +352,39 @@ healing spring, mana well, haste road...) that affects entities standing on it.
   inventory slots. This is the key to avoiding inventory spam.
 - *Cost:* *Medium* (nodes, gathering interaction, wallet UI, deltas).
 
-### 5.9d Loot rules (new)
+### 5.9d Loot rules (decided)
 
-At survivors-like kill rates (about 60 to 250 kills per minute) a flat 10 percent chance of an *item* per
-kill would produce **6 to 25 items per minute**, which is exactly the inventory flood to avoid. So the rule
-proposed is:
+Every kill makes **independent rolls**. Base rates for a normal enemy:
 
-- The **0.1 base roll** is the chance that a kill drops **something**, scaled up by monster level and
-  strength. Most of what drops is **stackable and auto-collected** (gold, wood, stone, iron, consumables).
-- **Runes and spell items are a separate, much rarer roll** (a small fraction of drops). Dungeons, chests
-  and bosses carry the guaranteed and better ones; merchants sell some at high gold prices.
-- **Skills are the rare, valuable chase.** A new spell item gets a **rewarding acquisition moment**: a
-  light-beam drop, a distinct sound, a short non-blocking reveal card, a codex entry, and a first-cast
-  showcase on equip. Duplicates and unwanted items **auto-salvage** into resources by a loot filter.
-- Loot filter and salvage rules are a QoL feature, not an afterthought.
-- *Needs confirmation:* is the 0.1 meant as "10 percent a kill drops anything" (as modelled above)?
+| Drop | Chance | Notes |
+|---|---:|---|
+| **XP gem** | **100%** | Always. Value scales with the enemy |
+| **Gold** | **10%** | Auto-collected into the wallet. Amount scales with enemy level |
+| **Resource** (wood, stone or iron) | **1%** | Auto-collected into the wallet. Type depends on region and enemy kind |
+| **Skill** (spell item or rune) | **0.1%** | The rare, valuable chase |
+
+Higher-level and stronger monsters **roll better** through a multiplier on the chance and the amount, kept
+modest so the numbers stay rare (proposal, tunable): normal x1, elite about x4, mini-boss about x10, boss and
+dungeon-boss chests **guaranteed skill picks**.
+
+What this means at survivors-like kill rates (about 60 to 250 kills a minute):
+
+| Kills / min | Gold drops / min | Resource drops / min | Skills / min | One skill roughly every |
+|---:|---:|---:|---:|---:|
+| 60 | 6 | 0.6 | 0.06 | 17 min |
+| 140 | 14 | 1.4 | 0.14 | 7 min |
+| 250 | 25 | 2.5 | 0.25 | 4 min |
+
+- Gold and resources never occupy inventory slots, so the high gold rate cannot flood anything.
+- **The only things that can fill the inventory are skills**, and at these rates that is a trickle. The
+  inventory is checkable item by item, and unwanted skills can still auto-salvage into resources by a loot
+  filter.
+- Dungeons add guaranteed finds on top (chests, bosses), and merchants sell skills for gold, so progress is
+  not purely luck.
+- **Getting a skill feels like an event**: a light-beam drop, a distinct sound, a short non-blocking reveal
+  card, a codex entry, and a first-cast showcase on equip.
+- Whether "skill" means spell items, runes, or both (and in what ratio) is the remaining detail; suggested
+  split about 1 spell item for every 4 runes, with spell items weighted toward dungeons and bosses.
 
 ### 5.9e Enemy perception and zone ownership (new)
 
@@ -510,8 +528,8 @@ and the save system.
 
 Most earlier questions are answered (see the decisions table). Remaining:
 
-1. **Loot interpretation:** confirm 0.1 as "10 percent a kill drops something, mostly auto-collected
-   stackables", with runes and spells a much smaller sub-roll (5.9d).
+1. **Skill split:** of the 0.1% skill drops, how many are spell items versus runes (suggestion: about 1 in 5
+   a spell item, and spell items mostly from dungeons and bosses rather than the open world)?
 2. **Tower threats:** towers are permanent, so should they be fully indestructible (recommended), or can
    events temporarily disable them?
 3. **Resource tools:** is gathering free-hand (hold to harvest) or do axes and pickaxes exist as upgradable
