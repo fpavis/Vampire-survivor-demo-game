@@ -7,9 +7,12 @@ import { isSolidBiome, isWaterBiome, GROUP } from '../core/world/biomes';
 import { shade } from './decorArt';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
-const ell = (g, x, y, rx, ry, c, a = 1) => { g.beginFill(c, a); g.drawEllipse(x, y, rx, ry); g.endFill(); };
-const circ = (g, x, y, r, c, a = 1) => { g.beginFill(c, a); g.drawCircle(x, y, r); g.endFill(); };
-const poly = (g, pts, c, a = 1) => { g.beginFill(c, a); g.drawPolygon(pts); g.endFill(); };
+// outlined in a darker tone of their own colour, like the monsters
+const outline = (g, c, size, a) => { if (a >= 1 && size >= 3) g.lineStyle(1.2, shade(c, 0.4), 0.85); else g.lineStyle(0); };
+const half = (pts) => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (let i = 0; i < pts.length; i += 2) { x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]); y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]); } return Math.min(x1 - x0, y1 - y0) / 2; };
+const ell = (g, x, y, rx, ry, c, a = 1) => { outline(g, c, Math.min(rx, ry), a); g.beginFill(c, a); g.drawEllipse(x, y, rx, ry); g.endFill(); g.lineStyle(0); };
+const circ = (g, x, y, r, c, a = 1) => { outline(g, c, r, a); g.beginFill(c, a); g.drawCircle(x, y, r); g.endFill(); g.lineStyle(0); };
+const poly = (g, pts, c, a = 1) => { outline(g, c, half(pts), a); g.beginFill(c, a); g.drawPolygon(pts); g.endFill(); g.lineStyle(0); };
 
 function shadowOf(rx, ry) {
     const s = new PIXI.Graphics();
@@ -100,16 +103,46 @@ const ART = {
         return { walk: true };
     },
     villager(body, hue) {
-        const robes = [0xc84a4a, 0x4a7ac8, 0x4aa86a, 0xc89a3a, 0x9a4ac8, 0x4ab8c8];
+        // varied townsfolk: tunic or dress, apron, headwear, sometimes carrying something
+        const INK = 0x1e1822;
+        const O = (g) => g.lineStyle(1.3, INK, 0.85);
+        const cloth = [0xc84a4a, 0x4a7ac8, 0x4aa86a, 0xc89a3a, 0x9a4ac8, 0x4ab8c8, 0xb86a3a, 0x6a7a8a][hue % 8];
+        const skin = [0xf0c8a0, 0xd8a078, 0xa8704a, 0xf6d8b8][hue % 4];
+        const hairC = [0x4a3220, 0xd8b050, 0x2a2a2a, 0xa8481a, 0xd8d8d8][hue % 5];
+        const dress = hue % 3 === 1;
+        const legL = new PIXI.Graphics(), legR = new PIXI.Graphics();
+        [legL, legR].forEach((l, i) => { O(l); l.beginFill(i ? 0x4a3a2a : 0x5a4636); l.drawRoundedRect(-2, 0, 4, 9, 1.5); l.endFill(); l.beginFill(0x2a1e16); l.drawRoundedRect(-2.4, 7, 6, 3, 1.2); l.endFill(); l.lineStyle(0); });
+        legL.position.set(-3, -10); legR.position.set(3, -10);
         const g = new PIXI.Graphics();
-        const robe = robes[hue % robes.length];
-        g.beginFill(shade(robe, 0.75)); g.drawPolygon([-8, -1, 8, -1, 6, -22, -6, -22]); g.endFill();
-        g.beginFill(robe); g.drawPolygon([-8, -1, 0, -1, 0, -22, -6, -22]); g.endFill();
-        circ(g, 0, -28, 6.5, 0xf0c8a0);
-        ell(g, 0, -32, 7, 4, [0x4a3220, 0xd8b050, 0x2a2a2a, 0xa8481a][hue % 4]);
-        circ(g, 2, -29, 1, 0x1a1a1a); circ(g, 5, -29, 1, 0x1a1a1a);
-        body.addChild(g);
-        return { walk: true };
+        O(g);
+        if (dress) { g.beginFill(cloth); g.drawPolygon([-9, -2, 9, -2, 6, -24, -6, -24]); g.endFill(); }
+        else { g.beginFill(cloth); g.drawRoundedRect(-7, -25, 14, 17, 4); g.endFill(); }
+        g.lineStyle(0);
+        g.beginFill(shade(cloth, 1.2)); g.drawPolygon(dress ? [1, -2, 9, -2, 6, -24, 1, -24] : [1, -24, 6, -24, 7, -9, 1, -9]); g.endFill();
+        if (hue % 2 === 0) { O(g); g.beginFill(0xeee6d6); g.drawRoundedRect(-5, -19, 10, dress ? 16 : 11, 2); g.endFill(); g.lineStyle(0); }   // apron
+        g.beginFill(0x5a3a22); g.drawRect(-7, -14, 14, 2); g.endFill();
+        // head
+        O(g); g.beginFill(skin); g.drawCircle(0, -30, 6.5); g.endFill(); g.lineStyle(0);
+        g.beginFill(INK); g.drawCircle(2.4, -30.5, 0.9); g.drawCircle(5, -30.5, 0.9); g.endFill();
+        g.beginFill(0xd8826a, 0.5); g.drawEllipse(4.4, -27.6, 1.4, 0.8); g.endFill();
+        O(g); g.beginFill(hairC); g.drawPolygon([-7, -31, -5.5, -36, 1, -37.5, 6.5, -34, 6, -32, 0, -33.5, -4, -31, -5, -26]); g.endFill(); g.lineStyle(0);
+        const hat = hue % 4;
+        if (hat === 0) { O(g); g.beginFill(0xe0c070); g.drawEllipse(0, -35.5, 10, 2.8); g.endFill(); g.beginFill(0xd8b050); g.drawRoundedRect(-5, -41, 10, 6, 3); g.endFill(); g.lineStyle(0); g.beginFill(0xa8481a); g.drawRect(-5, -37.5, 10, 1.6); g.endFill(); }
+        else if (hat === 2) { O(g); g.beginFill(shade(cloth, 0.7)); g.drawPolygon([-7, -32, -6, -38, 0, -40, 6, -38, 7, -33, 3, -36, -3, -36]); g.endFill(); g.lineStyle(0); }
+        // something in hand
+        const item = hue % 5;
+        if (item === 1) { O(g); g.beginFill(0x9a6a3a); g.drawRoundedRect(6, -17, 8, 6, 2); g.endFill(); g.lineStyle(1.2, 0x5a3a20); g.arc(10, -17, 3.4, Math.PI, 0); g.lineStyle(0); g.beginFill(0xd23a3a); g.drawCircle(8.5, -17.5, 1.4); g.drawCircle(11, -18, 1.4); g.endFill(); }
+        else if (item === 3) { O(g); g.beginFill(0x8a8a96); g.drawRect(6, -16, 6, 7); g.endFill(); g.lineStyle(0); g.beginFill(0x6ab8e8); g.drawRect(6.8, -15.4, 4.4, 2); g.endFill(); }
+        else { O(g); g.beginFill(skin); g.drawCircle(7, -14, 2.2); g.endFill(); g.lineStyle(0); }
+        body.addChild(legL, legR, g);
+        return {
+            walk: true,
+            update: (c) => {
+                const sw = c.moving ? Math.sin(c.phase * 2) * 0.5 : 0;
+                legL.rotation = sw; legR.rotation = -sw;
+                g.y = c.moving ? -Math.abs(Math.cos(c.phase * 2)) * 0.8 : Math.sin(c.phase * 0.3) * 0.3;
+            }
+        };
     }
 };
 

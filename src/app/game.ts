@@ -1334,7 +1334,9 @@ class Game {
             const d = Math.hypot(dx, dy) || 1;
             if (d < 260) { e.kvx += (dx / d) * 10; e.kvy += (dy / d) * 10; }
         }
-        this.fx.burst(p.wx, p.wy, 10, 0xffe27a, 30, 5, { size: 0.9, life: 34, up: 3 });
+        this.fx.burst(p.wx, p.wy, 10, 0xffe27a, 30, 5, { size: 0.9, life: 34, up: 3, glow: true });
+        this.fx.pillar(p.wx, p.wy, 0xffe27a, 60, 70, 260);
+        this.fx.shockwave(p.wx, p.wy, 220, 0xffe27a, 26, 6);
         this.fx.addShake(3);
         this.audio.play('levelup');
         this.ui.toast(`Level ${s.level}!  ${s.pending} upgrade${s.pending > 1 ? 's' : ''} ready (U)`);

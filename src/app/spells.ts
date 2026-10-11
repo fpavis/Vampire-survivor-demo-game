@@ -4,6 +4,7 @@ import { WORLD_CONFIG } from '../core/config';
 import { EntityManager } from '../render/entities';
 import { addSpellXp, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES } from '../core/spells/spells';
 import { spendMana, regenMana } from '../core/hero/stats';
+import { buildHero } from '../render/heroArt';
 
 const TILT = WORLD_CONFIG.tilt;
 const msToFrames = (ms) => ms * 0.06;
@@ -34,12 +35,13 @@ export class SpellSystem {
         this.barrierG = null;
         this.burning = new Set();
         this.version = 0;      // bumps whenever the loadout changes (UI refresh)
+        this.ghosts = [];      // dash afterimages
     }
 
     // ------------------------------------------------------------ lifecycle
     reset() {
         this.clearProjectiles();
-        for (const o of Object.values(this.orbits)) o.blades.forEach((b) => EntityManager.cleanup(b));
+        for (const o of Object.values(this.orbits)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); }
         if (this.barrierG) { this.barrierG.destroy(); this.barrierG = null; }
         this.fresh();
     }
@@ -50,10 +52,12 @@ export class SpellSystem {
         this.meteors.forEach((m) => { m.tele.destroy(); EntityManager.cleanup(m.rock); });
         this.bolts.forEach((b) => b.g.destroy());
         this.decals.forEach((d) => d.g.destroy());
-        for (const o of Object.values(this.orbits)) o.blades.forEach((b) => EntityManager.cleanup(b));
+        for (const o of Object.values(this.orbits)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); }
         this.orbits = {};
         this.bullets = []; this.rings = []; this.meteors = []; this.bolts = []; this.decals = [];
         this.dashing = null;
+        (this.ghosts || []).forEach((gh) => gh.c.destroy({ children: true }));
+        this.ghosts = [];
     }
 
     setInventory(spells, runes) {
@@ -174,7 +178,7 @@ export class SpellSystem {
             this.timers[uid] = fired ? msToFrames(r.p.cooldown) * g.stats.cooldown : 0;
         }
         for (const [uid, o] of Object.entries(this.orbits)) {
-            if (!wanted.has(uid)) { o.blades.forEach((b) => EntityManager.cleanup(b)); delete this.orbits[uid]; }
+            if (!wanted.has(uid)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); delete this.orbits[uid]; }
         }
         this.updateDash(delta);
         this.updateBarrier();
@@ -313,6 +317,7 @@ export class SpellSystem {
             sp.wx += b.vx * delta;
             sp.wy += b.vy * delta;
             b.life -= delta;
+            if (Math.random() < 0.35) this.game.fx.burst(sp.wx, sp.wy, 22, b.r.color, 1, 0.25, { size: 0.55, life: 14, gravity: 0, up: 0.1, glow: true });
             EntityManager.place(sp);
             let remove = b.life <= 0;
             if (!remove) {
@@ -342,7 +347,13 @@ export class SpellSystem {
         const s = r.p;
         const game = this.game;
         const p = game.state.player;
-        const o = this.orbits[r.item.uid] || (this.orbits[r.item.uid] = { blades: [], angle: 0 });
+        let o = this.orbits[r.item.uid];
+        if (!o) {
+            const trail = new PIXI.Graphics();
+            trail.blendMode = PIXI.BLEND_MODES.ADD;
+            game.objectLayer.addChild(trail);
+            o = this.orbits[r.item.uid] = { blades: [], angle: 0, trail };
+        }
         while (o.blades.length < s.count) {
             const b = EntityManager.createBlade(r.color);
             game.objectLayer.addChild(b);
@@ -351,6 +362,20 @@ export class SpellSystem {
         while (o.blades.length > s.count) EntityManager.cleanup(o.blades.pop());
         o.angle += s.speed * delta;
         const dmg = this.dmg(r);
+        // ghostly arc trailing behind each blade
+        const tr = o.trail;
+        tr.clear();
+        tr.zIndex = p.wy + 1;
+        o.blades.forEach((b, i) => {
+            const a0 = o.angle + (i / o.blades.length) * Math.PI * 2;
+            for (let k = 0; k < 7; k++) {
+                const a1 = a0 - k * 0.075, a2 = a0 - (k + 1) * 0.075;
+                tr.lineStyle(7 - k * 0.8, r.color, 0.42 * (1 - k / 7));
+                tr.moveTo(p.wx + Math.cos(a1) * s.radius, (p.wy + Math.sin(a1) * s.radius) * TILT - 18);
+                tr.lineTo(p.wx + Math.cos(a2) * s.radius, (p.wy + Math.sin(a2) * s.radius) * TILT - 18);
+            }
+        });
+        tr.lineStyle(0);
         o.blades.forEach((b, i) => {
             const a = o.angle + (i / o.blades.length) * Math.PI * 2;
             b.wx = p.wx + Math.cos(a) * s.radius;
@@ -420,11 +445,21 @@ export class SpellSystem {
         }
         const last = path[path.length - 1];
         jag.push({ x: last.sx, y: last.sy });
-        this.polyline(g, jag, 8, r.color, 0.35);
-        this.polyline(g, jag, 3, 0xffffff, 0.95);
+        this.polyline(g, jag, 14, r.color, 0.18);
+        this.polyline(g, jag, 7, r.color, 0.45);
+        this.polyline(g, jag, 2.6, 0xffffff, 1);
+        // little forks that crackle off the main bolt
+        for (let k = 2; k < jag.length - 1; k += 3) {
+            if (Math.random() < 0.5) continue;
+            const a = jag[k], ang = Math.random() * Math.PI * 2, len = 14 + Math.random() * 20;
+            const mid = { x: a.x + Math.cos(ang) * len * 0.5 + (Math.random() - 0.5) * 8, y: a.y + Math.sin(ang) * len * 0.5 };
+            const end = { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
+            this.polyline(g, [a, mid, end], 3, r.color, 0.5);
+            this.polyline(g, [a, mid, end], 1.2, 0xffffff, 0.85);
+        }
         game.objectLayer.addChild(g);
-        this.bolts.push({ g, life: 12, max: 12, pts: points });
-        points.forEach((pt) => game.fx.burst(pt.x, pt.y, 18, 0xd6c8ff, 5, 2.6, { size: 0.6, life: 18 }));
+        this.bolts.push({ g, life: 16, max: 16, pts: points });
+        points.forEach((pt) => { game.fx.burst(pt.x, pt.y, 18, 0xe6dcff, 6, 2.8, { size: 0.8, life: 18, glow: true }); game.fx.shockwave(pt.x, pt.y, 34, r.color, 12, 3); });
         game.fx.addShake(2);
     }
 
@@ -451,8 +486,10 @@ export class SpellSystem {
         if (!this.nearestEnemies(p.wx, p.wy, s.radius * 1.35, 1).length || this.rings.length >= CAP.rings) return false;
         const g = new PIXI.Graphics();
         game.groundLayer.addChild(g);
-        this.rings.push({ g, x: p.wx, y: p.wy, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r), rs: r, fade: 0 });
+        this.rings.push({ g, x: p.wx, y: p.wy, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r), rs: r, fade: 0, spin: Math.random() * 6 });
         game.fx.addShake(3);
+        game.fx.shockwave(p.wx, p.wy, s.radius * 1.15, 0xe8fbff, 26, 6);
+        game.fx.burst(p.wx, p.wy, 10, 0xe8fbff, 18, 4, { size: 0.8, life: 28, gravity: 0.05, up: 1.5, glow: true });
         return true;
     }
 
@@ -473,17 +510,40 @@ export class SpellSystem {
                     }
                 }
             } else ring.fade += delta;
-            const alpha = Math.max(0, 1 - ring.fade / 14);
+            const alpha = Math.max(0, 1 - ring.fade / 22);
             const c = ring.rs.color;
+            const R = ring.r;
             ring.g.clear();
-            ring.g.beginFill(c, 0.14 * alpha);
-            ring.g.drawCircle(ring.x, ring.y, ring.r);
+            ring.g.beginFill(c, 0.16 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, R);
             ring.g.endFill();
-            ring.g.lineStyle(5, 0xd8f6ff, 0.85 * alpha);
-            ring.g.drawCircle(ring.x, ring.y, ring.r);
+            ring.g.beginFill(0xffffff, 0.08 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, R * 0.6);
+            ring.g.endFill();
+            // jagged ice crystals standing along the front of the wave
+            const n = 22;
+            ring.g.lineStyle(1.2, 0x6ad0ff, 0.8 * alpha);
+            ring.g.beginFill(0xe8fbff, 0.85 * alpha);
+            for (let k = 0; k < n; k++) {
+                const a = ring.spin + (k / n) * Math.PI * 2, len = 12 + ((k * 7) % 5) * 4, w = 0.09;
+                const bx = ring.x + Math.cos(a) * R, by = ring.y + Math.sin(a) * R;
+                ring.g.drawPolygon([
+                    ring.x + Math.cos(a - w) * (R - 6), ring.y + Math.sin(a - w) * (R - 6),
+                    bx + Math.cos(a) * len, by + Math.sin(a) * len,
+                    ring.x + Math.cos(a + w) * (R - 6), ring.y + Math.sin(a + w) * (R - 6)
+                ]);
+            }
+            ring.g.endFill();
+            ring.g.lineStyle(4, 0xd8f6ff, 0.9 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, R);
             ring.g.lineStyle(2, 0x6ad0ff, 0.6 * alpha);
-            ring.g.drawCircle(ring.x, ring.y, Math.max(2, ring.r - 10));
-            if (ring.fade >= 14) { ring.g.destroy(); this.rings.splice(i, 1); }
+            ring.g.drawCircle(ring.x, ring.y, Math.max(2, R - 12));
+            ring.g.lineStyle(0);
+            if (ring.r < ring.maxR && Math.random() < 0.5) {
+                const a = Math.random() * Math.PI * 2;
+                game.fx.burst(ring.x + Math.cos(a) * R, ring.y + Math.sin(a) * R, 8, 0xe8fbff, 1, 0.6, { size: 0.6, life: 22, gravity: 0.02, up: 1.2, glow: true });
+            }
+            if (ring.fade >= 22) { ring.g.destroy(); this.rings.splice(i, 1); }
         }
     }
 
@@ -538,6 +598,7 @@ export class SpellSystem {
             m.tele.drawCircle(m.x, m.y, m.radius);
             m.rock.visible = true;
             const ease = p * p;
+            if (Math.random() < 0.6) game.fx.burst(m.x + (1 - ease) * 150, m.y, 520 * (1 - ease) + 4, Math.random() < 0.5 ? 0xff8a3a : 0xffd070, 1, 0.6, { size: 0.9, life: 18, gravity: -0.02, up: 0.4, glow: true });
             m.rock.position.set(m.x + (1 - ease) * 150, m.y * TILT - 520 * (1 - ease));
             m.rock.zIndex = m.y + 30;
             if (m.t >= m.delay) {
@@ -552,6 +613,8 @@ export class SpellSystem {
                 game.fx.burst(m.x, m.y, 6, 0x333333, 12, 2.5, { size: 1.4, life: 44, up: 2, gravity: 0.05 });
                 game.fx.addShake(8);
                 game.fx.flash(m.x, m.y, m.radius * 4, 0xffa040, 26);
+                game.fx.shockwave(m.x, m.y, m.radius * 1.6, 0xffa040, 24, 7);
+                game.fx.burst(m.x, m.y, 8, 0xffd070, 16, 4.5, { size: 1, life: 26, up: 3, glow: true });
                 if (this.decals.length < CAP.decals) {
                     const scorch = new PIXI.Graphics();
                     scorch.beginFill(0x1a0f08, 0.55);
@@ -640,21 +703,51 @@ export class SpellSystem {
 
     startDash(r) {
         const d = this.aimDir();
+        const g = this.game, p = g.state.player;
         const frames = Math.max(6, r.p.duration * 60 * 0.6);
-        this.dashing = { dx: d.x, dy: d.y, left: frames, speed: r.p.range / frames };
-        this.game.invulnUntil = Math.max(this.game.invulnUntil || 0, this.game.frame + r.p.duration * 60 + 6);
-        this.game.fx.burst(this.game.state.player.wx, this.game.state.player.wy, 10, r.color, 14, 3, { size: 0.7, life: 16 });
+        this.dashing = { dx: d.x, dy: d.y, left: frames, speed: r.p.range / frames, color: r.color, n: 0 };
+        g.invulnUntil = Math.max(g.invulnUntil || 0, g.frame + r.p.duration * 60 + 6);
+        g.fx.burst(p.wx, p.wy, 10, 0xe8f4ff, 14, 3, { size: 0.8, life: 16, glow: true });
+        g.fx.shockwave(p.wx, p.wy, 46, 0xe8f4ff, 14, 4);
+    }
+
+    // translucent copy of the hero left behind while dashing
+    afterimage(color) {
+        const g = this.game, p = g.state.player;
+        if (this.ghosts.length > 10) return;
+        const c = new PIXI.Container();
+        const body = new PIXI.Container();
+        buildHero(body, p.heroId || 'aria');
+        body.scale.x = p.facing || 1;
+        c.addChild(body);
+        c.position.set(p.wx, p.wy * TILT);
+        c.zIndex = p.wy - 1;
+        c.alpha = 0.7;
+        const tint = new PIXI.Graphics();
+        tint.beginFill(color, 0.55); tint.drawEllipse(0, -30, 15, 33); tint.endFill();
+        tint.blendMode = PIXI.BLEND_MODES.ADD;
+        c.addChild(tint);
+        g.objectLayer.addChild(c);
+        this.ghosts.push({ c, life: 16, max: 16 });
     }
 
     updateDash(delta) {
+        for (let i = this.ghosts.length - 1; i >= 0; i--) {
+            const gh = this.ghosts[i];
+            gh.life -= delta;
+            gh.c.alpha = 0.7 * Math.max(0, gh.life / gh.max);
+            if (gh.life <= 0) { gh.c.destroy({ children: true }); this.ghosts.splice(i, 1); }
+        }
         const d = this.dashing;
         if (!d) return;
         const g = this.game;
         const p = g.state.player;
         const step = Math.min(delta, d.left);
+        if ((d.n++ % 3) === 0) this.afterimage(d.color);
         g.world.tryMove(p, d.dx * d.speed * step, d.dy * d.speed * step * 1.2, p.radius);
         d.left -= delta;
-        if (((g.frame | 0) & 1) === 0) g.fx.burst(p.wx, p.wy, 2, 0xcfe8ff, 6, 1.2, { size: 0.5, life: 14 });
+        // wind streaks
+        g.fx.burst(p.wx - d.dx * 10, p.wy - d.dy * 10, 14 + Math.random() * 30, 0xe8f4ff, 1, 0.5, { size: 0.6, life: 12, gravity: 0, up: 0, glow: true });
         if (d.left <= 0) this.dashing = null;
     }
 
@@ -662,7 +755,9 @@ export class SpellSystem {
         const g = this.game;
         const p = g.state.player;
         const d = this.aimDir();
-        g.fx.burst(p.wx, p.wy, 14, r.color, 22, 3, { size: 0.8, life: 18 });
+        const x0 = p.wx, y0 = p.wy;
+        g.fx.burst(p.wx, p.wy, 20, r.color, 22, 3, { size: 0.9, life: 20, glow: true });
+        g.fx.shockwave(p.wx, p.wy, 60, r.color, 16, 5);
         let dist = 0;
         for (let t = 16; t <= r.p.range; t += 16) {
             if (g.world.blocked(p.wx + d.x * t, p.wy + d.y * t, p.radius)) break;
@@ -671,7 +766,10 @@ export class SpellSystem {
         p.wx += d.x * dist;
         p.wy += d.y * dist;
         g.invulnUntil = Math.max(g.invulnUntil || 0, g.frame + 14);
-        g.fx.burst(p.wx, p.wy, 14, r.color, 22, 3, { size: 0.8, life: 18 });
+        g.fx.streak(x0, y0, p.wx, p.wy, r.color, 26, 18, 12);
+        g.fx.burst(p.wx, p.wy, 20, r.color, 26, 3.4, { size: 0.9, life: 22, glow: true });
+        g.fx.shockwave(p.wx, p.wy, 80, r.color, 20, 5);
+        g.fx.pillar(p.wx, p.wy, r.color, 26, 46, 150);
         g.cam.x += d.x * dist * 0.5; g.cam.y += d.y * dist * 0.5;
     }
 
@@ -681,6 +779,9 @@ export class SpellSystem {
         this.barrierRadius = r.p.radius;
         this.barrierColor = r.color;
         g.fx.addShake(2);
+        const p = g.state.player;
+        g.fx.shockwave(p.wx, p.wy, r.p.radius * 1.6, r.color, 18, 5);
+        g.fx.burst(p.wx, p.wy, 24, r.color, 16, 2.4, { size: 0.8, life: 24, glow: true });
     }
 
     get barrierActive() { return this.game.frame < this.barrierUntil; }
@@ -698,14 +799,32 @@ export class SpellSystem {
         }
         const p = g.state.player;
         const left = (this.barrierUntil - g.frame) / 60;
-        const a = left < 0.6 ? 0.4 + 0.4 * Math.sin(g.frame * 0.6) : 0.85;
+        const a = left < 0.6 ? 0.45 + 0.4 * Math.sin(g.frame * 0.6) : 0.9;
         const b = this.barrierG;
+        const R = this.barrierRadius, RY = R * TILT * 1.35, col = this.barrierColor, t = g.frame;
         b.clear();
-        b.lineStyle(3, this.barrierColor, a);
-        b.beginFill(this.barrierColor, 0.12 * a);
-        b.drawEllipse(0, 0, this.barrierRadius, this.barrierRadius * TILT * 1.3);
+        // bubble: soft fill, bright rim, a lit crescent and a turning hex lattice
+        b.beginFill(col, 0.1 * a); b.drawEllipse(0, 0, R, RY); b.endFill();
+        b.beginFill(0xffffff, 0.08 * a); b.drawEllipse(-R * 0.25, -RY * 0.35, R * 0.45, RY * 0.3); b.endFill();
+        b.lineStyle(2.5, col, 0.9 * a); b.drawEllipse(0, 0, R, RY);
+        b.lineStyle(6, col, 0.2 * a); b.drawEllipse(0, 0, R - 3, RY - 3);
+        b.lineStyle(1.2, 0xffffff, 0.35 * a);
+        for (let k = 0; k < 6; k++) {
+            const a0 = t * 0.01 + (k / 6) * Math.PI * 2, a1 = a0 + Math.PI / 3;
+            b.moveTo(Math.cos(a0) * R * 0.62, Math.sin(a0) * RY * 0.62);
+            b.lineTo(Math.cos(a1) * R * 0.62, Math.sin(a1) * RY * 0.62);
+            b.moveTo(Math.cos(a0) * R * 0.62, Math.sin(a0) * RY * 0.62);
+            b.lineTo(Math.cos(a0) * R * 0.98, Math.sin(a0) * RY * 0.98);
+        }
+        b.lineStyle(0);
+        // orbiting runes
+        b.beginFill(0xffffff, 0.9 * a);
+        for (let k = 0; k < 4; k++) {
+            const ang = -t * 0.04 + (k / 4) * Math.PI * 2, rx = Math.cos(ang) * R, ry = Math.sin(ang) * RY;
+            b.drawPolygon([rx, ry - 4, rx + 3, ry, rx, ry + 4, rx - 3, ry]);
+        }
         b.endFill();
-        b.position.set(p.wx, p.wy * TILT - 18);
+        b.position.set(p.wx, p.wy * TILT - 22);
         b.zIndex = p.wy + 40;
     }
 }

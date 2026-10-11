@@ -528,27 +528,100 @@ export class World {
             }
             case BIOME.CITY_WALL: {
                 const roofs = theme.roofs || [0xb5473b];
-                // one roof colour per building: seeded from the building's origin so rows match
-                const roof = roofs[Math.floor(hash(Math.floor(tx / 6), Math.floor(ty / 5), seed + 320) * roofs.length)];
-                g.beginFill(shade(roof, 0.9 + hh * 0.12)); g.drawRect(px, topY, W, TH); g.endFill();
-                g.beginFill(0x000000, 0.18); g.drawRect(px, topY + TH * 0.5, W, 1.5); g.drawRect(px, topY, W, 1); g.endFill();
-                g.beginFill(shade(roof, 1.25), 0.6); g.drawRect(px, topY + 2, W, 3); g.endFill();
+                // where this tile sits between the building's back and front decides the roof slope
+                let up = 0, down = 0, left = 0;
+                while (up < 12 && this.biomeAt(tx, ty - up - 1) === BIOME.CITY_WALL) up++;
+                while (down < 12 && this.biomeAt(tx, ty + down + 1) === BIOME.CITY_WALL) down++;
+                while (left < 16 && this.biomeAt(tx - left - 1, ty - up) === BIOME.CITY_WALL) left++;
+                // one roof colour per building, keyed to its back-left corner so every tile agrees
+                const bx0 = tx - left, by0 = ty - up;
+                const roof = roofs[Math.floor(hash(bx0, by0, seed + 320) * roofs.length)];
+                const rows = up + down + 1, ridge = rows / 2;      // ridge position in tiles from the back edge
+                const sunlit = shade(roof, 1.08), shadowed = shade(roof, 0.78);
+                for (let k = 0; k < 4; k++) {
+                    const pos = up + (k + 0.5) / 4;                // tiles from back edge
+                    // each slope darkens slightly toward its eave
+                    const c = pos < ridge ? shade(sunlit, 1.06 - 0.12 * (1 - pos / ridge)) : shade(shadowed, 1.04 - 0.14 * ((pos - ridge) / (rows - ridge)));
+                    g.beginFill(c); g.drawRect(px, topY + k * TH / 4, W, TH / 4 + 0.5); g.endFill();
+                }
+                // shingle courses with staggered joints
+                g.beginFill(0x000000, 0.18);
+                for (let k = 0; k < 6; k++) {
+                    const ry = topY + (k + 1) * TH / 6;
+                    g.drawRect(px, ry - 1, W, 1.2);
+                    const off = ((ty * 6 + k) % 2) * 6;
+                    for (let x = off; x < T; x += 12) g.drawRect(px + x, ry - TH / 6, 1, TH / 6);
+                }
+                g.endFill();
+                // ridge cap
+                if (ridge > up && ridge < up + 1) {
+                    const ry = topY + (ridge - up) * TH;
+                    g.beginFill(shade(roof, 0.55)); g.drawRect(px, ry - 2.5, W, 5); g.endFill();
+                    g.beginFill(shade(roof, 1.35)); g.drawRect(px, ry - 2.5, W, 1.6); g.endFill();
+                }
+                if (!up) { g.beginFill(shade(roof, 1.4), 0.8); g.drawRect(px, topY, W, 2); g.endFill(); }
+                if (!isWallBiome(this.biomeAt(tx - 1, ty))) { g.beginFill(0x000000, 0.25); g.drawRect(px, topY, 3, TH); g.endFill(); }
+                if (!isWallBiome(this.biomeAt(tx + 1, ty))) { g.beginFill(0x000000, 0.3); g.drawRect(px + W - 3, topY, 3, TH); g.endFill(); }
+                // brick chimney now and then on the sunlit slope
+                if (up === 1 && tx - bx0 === 1 + Math.floor(hash(bx0, by0, seed + 336) * 3)) {
+                    const cx0 = px + 14 + hh * 14, cy0 = topY + TH * 0.5;
+                    g.lineStyle(1.2, 0x2a1810, 0.9);
+                    g.beginFill(0x9a4a32); g.drawRect(cx0, cy0 - 18, 10, 18); g.endFill();
+                    g.beginFill(0x5a5a62); g.drawRect(cx0 - 1.5, cy0 - 21, 13, 4); g.endFill();
+                    g.lineStyle(0);
+                    g.beginFill(0x000000, 0.2); g.drawRect(cx0 + 6, cy0 - 18, 4, 18); g.endFill();
+                }
                 if (showFront) {
                     const wall = theme.front;
                     g.beginFill(wall); g.drawRect(px, fy, W, h + 1); g.endFill();
-                    g.beginFill(shade(roof, 0.75)); g.drawRect(px, fy, W, 7); g.endFill();
-                    g.beginFill(0x000000, 0.13); g.drawRect(px + T - 2, fy + 7, 3, h - 7); g.endFill();
+                    g.beginFill(shade(wall, 1.08)); g.drawRect(px + 2, fy + 10, W - 4, h - 22); g.endFill();
+                    // eaves: overhang shadow and rafter ends
+                    g.beginFill(shade(roof, 0.6)); g.drawRect(px, fy, W, 6); g.endFill();
+                    g.beginFill(0x000000, 0.22); g.drawRect(px, fy + 6, W, 5); g.endFill();
+                    g.beginFill(0x4a2e18);
+                    for (let x = 4; x < T; x += 11) g.drawRect(px + x, fy + 5, 3, 3);
+                    g.endFill();
+                    // timber frame
+                    const beam = 0x5a3a20;
+                    g.beginFill(beam);
+                    g.drawRect(px, fy + 6, 3, h - 14);
+                    g.drawRect(px, fy + 22, W, 3);
+                    g.endFill();
+                    // stone footing
+                    g.beginFill(0x8a8478); g.drawRect(px, fy + h - 9, W, 9); g.endFill();
+                    g.beginFill(0x000000, 0.2);
+                    for (let x = (tx % 2) * 8; x < T; x += 16) g.drawRect(px + x, fy + h - 9, 1, 9);
+                    g.drawRect(px, fy + h - 5, W, 1);
+                    g.endFill();
                     const door = hash(tx, ty, seed + 330) < 0.16;
                     if (door) {
-                        g.beginFill(0x5a3a1e); g.drawRoundedRect(px + 11, fy + h - 34, 24, 34, 5); g.endFill();
-                        g.beginFill(0xffd070); g.drawCircle(px + 30, fy + h - 17, 1.8); g.endFill();
-                    } else if (hh < 0.75) {
-                        g.beginFill(0x4a3826); g.drawRect(px + 11, fy + 17, 24, 22); g.endFill();
-                        g.beginFill(0x9ad4ff); g.drawRect(px + 13, fy + 19, 20, 18); g.endFill();
-                        g.beginFill(0xffffff, 0.35); g.drawRect(px + 13, fy + 19, 7, 18); g.endFill();
-                        g.beginFill(0x4a3826); g.drawRect(px + 22, fy + 19, 2, 18); g.endFill();
+                        // arched plank door, step and a lantern
+                        g.lineStyle(1.4, 0x2a1810, 0.9);
+                        g.beginFill(0x6a4222); g.drawRoundedRect(px + 12, fy + h - 36, 24, 33, 10); g.endFill();
+                        g.lineStyle(0);
+                        g.beginFill(0x000000, 0.2); g.drawRect(px + 19, fy + h - 34, 1, 31); g.drawRect(px + 27, fy + h - 34, 1, 31); g.endFill();
+                        g.beginFill(0x2a1810); g.drawRect(px + 13, fy + h - 26, 22, 2); g.drawRect(px + 13, fy + h - 13, 22, 2); g.endFill();
+                        g.beginFill(0xd8b040); g.drawCircle(px + 31, fy + h - 18, 1.8); g.endFill();
+                        g.beginFill(0x9a9488); g.drawRect(px + 9, fy + h - 3, 30, 4); g.endFill();
+                        g.lineStyle(1, 0x2a1810); g.beginFill(0xffd070); g.drawRoundedRect(px + 39, fy + h - 34, 5, 7, 1.5); g.endFill(); g.lineStyle(0);
+                        if (this._lights) this._lights.push({ x: px + 41, y: (ty + 1) * T + 2, z: 30, r: 120, color: 0xffc070, i: 0.8, flicker: true, phase: hh * 6 });
+                    } else if (hh < 0.78) {
+                        // window with frame, mullions, shutters and maybe a flower box
+                        const shut = shade(roof, 0.85);
+                        g.beginFill(shut); g.drawRect(px + 6, fy + 27, 6, 17); g.drawRect(px + 36, fy + 27, 6, 17); g.endFill();
+                        g.lineStyle(1.4, 0x2a1810, 0.9);
+                        g.beginFill(0x4a3826); g.drawRect(px + 12, fy + 26, 24, 19); g.endFill();
+                        g.lineStyle(0);
+                        g.beginFill(0x8ac4e8); g.drawRect(px + 14, fy + 28, 20, 15); g.endFill();
+                        g.beginFill(0xffffff, 0.45); g.drawPolygon([px + 14, fy + 28, px + 22, fy + 28, px + 14, fy + 38]); g.endFill();
+                        g.beginFill(0x4a3826); g.drawRect(px + 23, fy + 28, 2, 15); g.drawRect(px + 14, fy + 34.5, 20, 2); g.endFill();
+                        if (hh < 0.4) {
+                            g.beginFill(0x6a4222); g.drawRect(px + 11, fy + 45, 26, 4); g.endFill();
+                            const fl = [0xff5a6a, 0xffd84a, 0xd88aff, 0xffffff][Math.floor(hh * 10) % 4];
+                            g.beginFill(0x3a8a3a); g.drawEllipse(px + 24, fy + 44, 12, 3); g.endFill();
+                            g.beginFill(fl); for (let k = 0; k < 5; k++) g.drawCircle(px + 15 + k * 4.5, fy + 43 - (k % 2), 1.6); g.endFill();
+                        }
                     }
-                    g.beginFill(0x000000, 0.22); g.drawRect(px, fy + h - 6, W, 7); g.endFill();
                     g.beginFill(0x000000, 0.25); g.drawRect(px, fy + h, W, 9); g.endFill();
                 }
                 break;

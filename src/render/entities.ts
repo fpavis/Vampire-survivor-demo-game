@@ -3,6 +3,8 @@ import * as PIXI from 'pixi.js';
 import { ENEMY_TYPES, WORLD_CONFIG } from '../core/config';
 import { ENEMY_ART } from './enemyArt';
 import { threatBand } from '../core/world/difficulty';
+import { buildHero, animateHero } from './heroArt';
+import { softGlow } from './glow';
 
 const THREAT_COLORS = { low: 0x9aa4b2, even: 0x8ae08a, high: 0xffc233, deadly: 0xff4a4a };
 
@@ -28,14 +30,7 @@ function makeShadow(rx, ry, alpha = 0.35) {
     return s;
 }
 
-function glowCircle(radius, color, alpha) {
-    const g = new PIXI.Graphics();
-    g.beginFill(color, alpha);
-    g.drawCircle(0, 0, radius);
-    g.endFill();
-    g.blendMode = PIXI.BLEND_MODES.ADD;
-    return g;
-}
+const glowCircle = (radius, color, alpha) => softGlow(radius, color, alpha);
 
 function drawHealthBar(container, width, y) {
     const bar = new PIXI.Container();
@@ -65,102 +60,42 @@ export class EntityManager {
     }
 
     // ------------------------------------------------------------- player
-    static createPlayer() {
+    static createPlayer(heroId = 'aria') {
         const container = new PIXI.Container();
         container.wx = 0;
         container.wy = 0;
         container.radius = 11;
 
         const aura = new PIXI.Graphics();
-        aura.lineStyle(2, 0x6aa8ff, 0.5);
+        aura.lineStyle(2, 0xffffff, 0.55);
         aura.drawEllipse(0, 0, 26, 26 * TILT);
-        aura.beginFill(0x6aa8ff, 0.12);
+        aura.beginFill(0xffffff, 0.12);
         aura.drawEllipse(0, 0, 26, 26 * TILT);
         aura.endFill();
+        aura.tint = 0x6aa8ff;
 
         const body = new PIXI.Container();
-
-        // robe
-        const robe = new PIXI.Graphics();
-        robe.beginFill(0x2d55b8);
-        robe.drawPolygon([-13, -1, 13, -1, 8, -26, -8, -26]);
-        robe.endFill();
-        robe.beginFill(0x5a8cff, 0.85);
-        robe.drawPolygon([-13, -1, 0, -1, 0, -26, -8, -26]);
-        robe.endFill();
-        robe.beginFill(0xf1c24a);
-        robe.drawRect(-9, -15, 18, 3);
-        robe.endFill();
-        robe.beginFill(0x1a2f6b);
-        robe.drawEllipse(0, -1, 13, 3);
-        robe.endFill();
-
-        // head
-        const head = new PIXI.Graphics();
-        head.beginFill(0xffd7b0);
-        head.drawCircle(0, -32, 8);
-        head.endFill();
-        head.beginFill(0xe9b98c);
-        head.drawEllipse(3, -30, 4, 6);
-        head.endFill();
-        head.beginFill(0x222222);
-        head.drawCircle(2, -33, 1.4);
-        head.drawCircle(6, -33, 1.4);
-        head.endFill();
-        // beard
-        head.beginFill(0xeeeeee);
-        head.drawPolygon([-6, -30, 8, -30, 2, -19]);
-        head.endFill();
-
-        // hat
-        const hat = new PIXI.Graphics();
-        hat.beginFill(0x1f3d8f);
-        hat.drawPolygon([-9, -37, 9, -37, 3, -60, -2, -58]);
-        hat.endFill();
-        hat.beginFill(0x3e6ad0, 0.9);
-        hat.drawPolygon([-9, -37, 0, -37, 0, -59, -2, -58]);
-        hat.endFill();
-        hat.beginFill(0x1f3d8f);
-        hat.drawEllipse(0, -37, 14, 4);
-        hat.endFill();
-        hat.beginFill(0xf1c24a);
-        hat.drawRect(-9, -41, 18, 3);
-        hat.endFill();
-
-        // staff
-        const staff = new PIXI.Container();
-        const rod = new PIXI.Graphics();
-        rod.lineStyle(3, 0x6b4526);
-        rod.moveTo(0, 0);
-        rod.lineTo(0, -44);
-        const orb = new PIXI.Graphics();
-        orb.beginFill(0x7fe9ff);
-        orb.drawCircle(0, -48, 5);
-        orb.endFill();
-        orb.beginFill(0xffffff, 0.8);
-        orb.drawCircle(-1.5, -49.5, 1.8);
-        orb.endFill();
-        const orbGlow = glowCircle(12, 0x66ddff, 0.5);
-        orbGlow.y = -48;
-        staff.addChild(rod, orb, orbGlow);
-        staff.x = 17;
-
-        body.addChild(staff, robe, head, hat);
         container.addChild(makeShadow(15, 5.5, 0.4), aura, body);
-
-        Object.assign(container, { body, aura, robe, hat, orbGlow, phase: 0, moving: false });
+        Object.assign(container, { body, aura, phase: 0, moving: false });
+        EntityManager.setHeroLook(container, heroId);
         return container;
     }
 
+    /** Swap the hero drawn by a player container (party switching). */
+    static setHeroLook(p, heroId, color = null) {
+        p.rig = buildHero(p.body, heroId);
+        p.heroId = heroId;
+        p.orbGlow = p.rig.orbGlow;
+        if (color !== null) p.aura.tint = color;
+    }
+
     static animatePlayer(p, t, moving, facing) {
-        p.phase += moving ? 0.28 : 0.06;
-        const bob = moving ? Math.abs(Math.sin(p.phase)) * -3.5 : Math.sin(p.phase) * -0.8;
-        p.body.y = bob;
-        p.body.rotation = moving ? Math.sin(p.phase) * 0.06 : 0;
+        p.phase += moving ? 0.22 : 0.06;
+        animateHero(p.rig, p.phase, moving, t);
+        p.body.y = moving ? -Math.abs(Math.sin(p.phase)) * 1.5 : 0;
         p.body.scale.x = facing;
-        p.body.scale.y = 1 + (moving ? Math.sin(p.phase * 2) * 0.02 : Math.sin(p.phase) * 0.012);
         p.aura.scale.set(1 + Math.sin(t * 0.06) * 0.06);
-        p.orbGlow.alpha = 0.7 + Math.sin(t * 0.15) * 0.3;
+        if (p.orbGlow) p.orbGlow.alpha = 0.7 + Math.sin(t * 0.15) * 0.3;
     }
 
     // ------------------------------------------------------------ enemies
@@ -281,21 +216,24 @@ export class EntityManager {
         const container = new PIXI.Container();
         const body = new PIXI.Container();
         const trail = new PIXI.Graphics();
-        trail.beginFill(color, 0.5);
-        trail.drawEllipse(-11, 0, 13, 3.2);
+        trail.beginFill(color, 0.35);
+        trail.drawPolygon([2, -5, -30, -1.2, -34, 0, -30, 1.2, 2, 5]);
         trail.endFill();
-        trail.beginFill(0xffffff, 0.5);
-        trail.drawEllipse(-7, 0, 8, 1.6);
+        trail.beginFill(color, 0.6);
+        trail.drawPolygon([2, -3.4, -20, -0.8, -22, 0, -20, 0.8, 2, 3.4]);
+        trail.endFill();
+        trail.beginFill(0xffffff, 0.7);
+        trail.drawPolygon([2, -1.6, -12, 0, 2, 1.6]);
         trail.endFill();
         trail.rotation = angle;
         trail.blendMode = PIXI.BLEND_MODES.ADD;
-        const glow = glowCircle(13, color, 0.45);
+        const glow = glowCircle(16, color, 0.55);
         const core = new PIXI.Graphics();
-        core.beginFill(0xffffff);
-        core.drawCircle(0, 0, 4.2);
+        core.beginFill(color);
+        core.drawCircle(0, 0, 5.6);
         core.endFill();
-        core.beginFill(color, 0.9);
-        core.drawCircle(0, 0, 2.6);
+        core.beginFill(0xffffff);
+        core.drawCircle(0, 0, 3.4);
         core.endFill();
         body.addChild(trail, glow, core);
         body.y = -22;
@@ -308,23 +246,35 @@ export class EntityManager {
     static createBlade(color = 0x9ff2ff) {
         const container = new PIXI.Container();
         const body = new PIXI.Container();
+        // a spectral longsword: glowing edge, steel core, gilded guard
+        const glow = softGlow(18, color, 0.4);
+        glow.y = -8;
         const blade = new PIXI.Graphics();
-        blade.beginFill(color, 0.35);
-        blade.drawCircle(0, 0, 16);
+        blade.lineStyle(1.4, shade(color, 0.45), 0.9);
+        blade.beginFill(0xeafcff);
+        blade.drawPolygon([-3.6, 6, -3.6, -20, 0, -30, 3.6, -20, 3.6, 6]);
         blade.endFill();
-        blade.beginFill(0xe8fbff);
-        blade.drawPolygon([-4, 4, 0, -20, 4, 4, 0, 8]);
+        blade.lineStyle(0);
+        blade.beginFill(color, 0.9);
+        blade.drawPolygon([0, -30, 3.6, -20, 3.6, 6, 0, 6]);
         blade.endFill();
-        blade.beginFill(color);
-        blade.drawPolygon([0, -20, 4, 4, 0, 8]);
+        blade.beginFill(0xffffff, 0.9);
+        blade.drawRect(-0.6, -24, 1.2, 28);
         blade.endFill();
-        blade.beginFill(0x7a5230);
-        blade.drawRect(-1.5, 8, 3, 6);
+        blade.lineStyle(1.2, 0x5a3a10, 0.9);
+        blade.beginFill(0xe8b040);
+        blade.drawRoundedRect(-8, 5, 16, 3.6, 1.5);
         blade.endFill();
-        blade.blendMode = PIXI.BLEND_MODES.NORMAL;
-        body.addChild(blade);
-        body.y = -20;
-        container.addChild(makeShadow(6, 2.4, 0.25), body);
+        blade.beginFill(0x5a3a20);
+        blade.drawRect(-1.6, 8.6, 3.2, 7);
+        blade.endFill();
+        blade.beginFill(0xe8b040);
+        blade.drawCircle(0, 17, 2.4);
+        blade.endFill();
+        blade.lineStyle(0);
+        body.addChild(glow, blade);
+        body.y = -22;
+        container.addChild(makeShadow(7, 2.6, 0.25), body);
         container.blade = blade;
         container.wx = 0;
         container.wy = 0;
@@ -355,14 +305,39 @@ export class EntityManager {
             g.endFill();
             body.addChild(glowCircle(14, 0xff4a6a, 0.25));
         } else if (kind === 'coin') {
-            g.beginFill(0xb8860b); g.drawEllipse(0, 0, 8.5, 8.5); g.endFill();
-            g.beginFill(0xffd23f); g.drawEllipse(0, -1, 7.5, 7.5); g.endFill();
-            g.beginFill(0xfff0a0, 0.85); g.drawEllipse(-1.5, -3, 3.5, 2.5); g.endFill();
-            body.addChild(glowCircle(13, 0xffd23f, 0.3));
+            // a stack-edged gold coin with an embossed crown
+            g.lineStyle(1.3, 0x6a4a0a, 0.95);
+            g.beginFill(0xc8901a); g.drawEllipse(0, 1.5, 9, 8.5); g.endFill();
+            g.beginFill(0xffd23f); g.drawEllipse(0, 0, 9, 8.5); g.endFill();
+            g.lineStyle(1, 0xb8801a, 0.9);
+            g.drawEllipse(0, 0, 6, 5.6);
+            g.lineStyle(0);
+            g.beginFill(0xb8801a); g.drawPolygon([-3.4, 2, -3.4, -1.6, -1.6, 0.2, 0, -2.6, 1.6, 0.2, 3.4, -1.6, 3.4, 2]); g.endFill();
+            g.beginFill(0xfff6c0, 0.9); g.drawEllipse(-3.5, -4, 2.8, 1.6); g.endFill();
+            body.addChild(glowCircle(14, 0xffd23f, 0.3));
+            scale = 1.05;
         } else if (kind === 'wood' || kind === 'stone' || kind === 'iron') {
-            const col = { wood: 0x9b6a3a, stone: 0x9aa3b4, iron: 0x6e8aa8 }[kind];
-            if (kind === 'wood') { g.beginFill(col); g.drawRoundedRect(-9, -5, 18, 10, 3); g.endFill(); g.beginFill(0xd8b078); g.drawEllipse(-9, 0, 3, 5); g.endFill(); }
-            else { g.beginFill(col); g.drawPolygon([-9, 5, -6, -6, 3, -9, 10, -1, 8, 6]); g.endFill(); g.beginFill(0xffffff, 0.35); g.drawPolygon([-6, -6, 3, -9, 0, -2]); g.endFill(); }
+            const col = { wood: 0x9b6a3a, stone: 0x9aa3b4, iron: 0x7a8ea8 }[kind];
+            g.lineStyle(1.3, shade(col, 0.35), 0.95);
+            if (kind === 'wood') {
+                // two bundled logs with rings
+                g.beginFill(col); g.drawRoundedRect(-11, -3, 20, 7, 3); g.drawRoundedRect(-9, -9, 20, 7, 3); g.endFill();
+                g.beginFill(0xe0b880); g.drawEllipse(9, 0.5, 3, 3.5); g.drawEllipse(11, -5.5, 3, 3.5); g.endFill();
+                g.lineStyle(0.8, 0x8a5a2a); g.drawEllipse(9, 0.5, 1.4, 1.8); g.drawEllipse(11, -5.5, 1.4, 1.8);
+                g.lineStyle(0); g.beginFill(0xc83a2a); g.drawRect(-3, -9, 2.5, 13); g.endFill();
+            } else if (kind === 'stone') {
+                g.beginFill(col); g.drawPolygon([-10, 4, -8, -5, 0, -9, 9, -5, 10, 4, 2, 7]); g.endFill();
+                g.lineStyle(0);
+                g.beginFill(0xffffff, 0.4); g.drawPolygon([-8, -5, 0, -9, 2, -3, -5, -1]); g.endFill();
+                g.beginFill(0x000000, 0.18); g.drawPolygon([2, 7, 10, 4, 9, -5, 4, 0]); g.endFill();
+            } else {
+                // iron ingot
+                g.beginFill(shade(col, 0.8)); g.drawPolygon([-11, 3, 11, 3, 8, -3, -8, -3]); g.endFill();
+                g.beginFill(col); g.drawPolygon([-8, -3, 8, -3, 6, -8, -6, -8]); g.endFill();
+                g.lineStyle(0);
+                g.beginFill(0xffffff, 0.55); g.drawRect(-5, -7, 8, 1.6); g.endFill();
+            }
+            g.lineStyle(0);
             body.addChild(glowCircle(12, col, 0.22));
         } else {
             const tier = EntityManager.gemTier(value);

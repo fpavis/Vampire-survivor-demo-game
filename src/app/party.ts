@@ -67,10 +67,7 @@ export class PartyRuntime {
         g.spells.mana.value = Math.min(h.mana, g.stats.maxMana);
         const def = defOf(h.id);
         const p = s.player;
-        if (p && p.robe) {
-            p.robe.tint = def.tint; p.hat.tint = def.tint;
-            p.aura.tint = def.color;
-        }
+        if (p && p.heroId !== h.id) EntityManager.setHeroLook(p, h.id, def.color);
         EntityManager.heroLevel = s.level;
         if (!initial) {
             uiBridge.cards.value = [];
@@ -120,7 +117,9 @@ export class PartyRuntime {
             const dx = e.wx - p.wx, dy = e.wy - p.wy, d = Math.hypot(dx, dy) || 1;
             if (d < 150) { e.kvx += (dx / d) * 6; e.kvy += (dy / d) * 6; }
         }
-        g.fx.burst(p.wx, p.wy, 22, col, 28, 4, { size: 0.9, life: 30, up: 3 });
+        g.fx.burst(p.wx, p.wy, 22, col, 28, 4, { size: 0.9, life: 30, up: 3, glow: true });
+        g.fx.pillar(p.wx, p.wy, col, 34, 54, 190);
+        g.fx.shockwave(p.wx, p.wy, 150, col, 20, 5);
         g.fx.popup(p.wx, p.wy, this.def().name, col, 20, 90);
         g.audio.play('switch');
         return true;

@@ -2,6 +2,9 @@ import { encodeSave, toBase64, fromBase64, decodeSave } from '../core/save/codec
 import { buildSave } from './saveManager';
 import { tierName } from '../core/world/difficulty';
 import { RUNES, TEMPLATES } from '../core/spells/spells';
+import * as PIXI from 'pixi.js';
+import { EntityManager } from '../render/entities';
+import { ENEMY_TYPES } from '../core/config';
 
 declare const __BUILD_INFO__: string;
 declare const __DEVTOOLS_BUTTON__: boolean;
@@ -18,6 +21,8 @@ const css = `
 `;
 
 export function installDevTools(game: any): void {
+  // handles for scripted visual checks (scripts/artsheet.mjs)
+  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game };
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);

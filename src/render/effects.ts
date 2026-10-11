@@ -33,6 +33,54 @@ export class Effects {
         ctx.fillRect(0, 0, 32, 32);
         this.spark = PIXI.Texture.from(c);
         this.flashes = [];
+        this.waves = [];      // expanding ground rings
+        this.pillars = [];    // vertical beams of light
+        this.streaks = [];    // fading lines (blink trails)
+        // vertical beam texture
+        const bc = document.createElement('canvas');
+        bc.width = 32; bc.height = 128;
+        const bctx = bc.getContext('2d');
+        const vg = bctx.createLinearGradient(0, 0, 0, 128);
+        vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(0.6, 'rgba(255,255,255,0.55)'); vg.addColorStop(1, 'rgba(255,255,255,0.95)');
+        bctx.fillStyle = vg; bctx.fillRect(0, 0, 32, 128);
+        const hg = bctx.createLinearGradient(0, 0, 32, 0);
+        hg.addColorStop(0, 'rgba(0,0,0,1)'); hg.addColorStop(0.5, 'rgba(0,0,0,0)'); hg.addColorStop(1, 'rgba(0,0,0,1)');
+        bctx.globalCompositeOperation = 'destination-out'; bctx.fillStyle = hg; bctx.fillRect(0, 0, 32, 128);
+        this.beam = PIXI.Texture.from(bc);
+    }
+
+    /** an expanding ring on the ground (impacts, novas, blinks) */
+    shockwave(x, y, radius, color = 0xffffff, life = 22, width = 5) {
+        if (this.waves.length > 30) return;
+        const g = new PIXI.Graphics();
+        g.blendMode = PIXI.BLEND_MODES.ADD;
+        this.game.groundLayer.addChild(g);
+        this.waves.push({ g, x, y, radius, color, life, max: life, width });
+    }
+
+    /** a column of light rising from the ground (level up, revive, arrival) */
+    pillar(x, y, color = 0xffe27a, life = 50, width = 60, height = 220) {
+        if (this.pillars.length > 10) return;
+        const s = new PIXI.Sprite(this.beam);
+        s.anchor.set(0.5, 1);
+        s.tint = color;
+        s.blendMode = PIXI.BLEND_MODES.ADD;
+        s.width = width; s.height = height;
+        s.position.set(x, y * TILT);
+        s.zIndex = y + 2;
+        this.game.objectLayer.addChild(s);
+        this.pillars.push({ s, life, max: life, width });
+        this.flash(x, y, width * 3, color, life * 0.6, 40);
+    }
+
+    /** a fading line between two ground points (z = height above ground) */
+    streak(x1, y1, x2, y2, color, z = 24, life = 16, width = 10) {
+        if (this.streaks.length > 20) return;
+        const g = new PIXI.Graphics();
+        g.blendMode = PIXI.BLEND_MODES.ADD;
+        g.zIndex = Math.max(y1, y2) + 1;
+        this.game.objectLayer.addChild(g);
+        this.streaks.push({ g, x1, y1, x2, y2, z, color, life, max: life, width });
     }
 
     /** a short burst of light (only visible where the light map is active) */
@@ -144,6 +192,36 @@ export class Effects {
             }
         }
 
+        for (let i = this.waves.length - 1; i >= 0; i--) {
+            const w = this.waves[i];
+            w.life -= delta;
+            const k = 1 - w.life / w.max, a = Math.max(0, w.life / w.max);
+            const r = w.radius * (0.15 + 0.85 * (1 - Math.pow(1 - k, 3)));
+            w.g.clear();
+            w.g.lineStyle(w.width * a + 1, w.color, 0.85 * a);
+            w.g.drawCircle(w.x, w.y, r);
+            w.g.lineStyle(w.width * 2.4 * a, w.color, 0.18 * a);
+            w.g.drawCircle(w.x, w.y, r * 0.94);
+            if (w.life <= 0) { w.g.destroy(); this.waves.splice(i, 1); }
+        }
+        for (let i = this.pillars.length - 1; i >= 0; i--) {
+            const pl = this.pillars[i];
+            pl.life -= delta;
+            const a = Math.max(0, pl.life / pl.max);
+            pl.s.alpha = Math.min(1, a * 1.6);
+            pl.s.width = pl.width * (0.5 + 0.5 * a);
+            if (pl.life <= 0) { pl.s.destroy(); this.pillars.splice(i, 1); }
+        }
+        for (let i = this.streaks.length - 1; i >= 0; i--) {
+            const st = this.streaks[i];
+            st.life -= delta;
+            const a = Math.max(0, st.life / st.max);
+            const ax = st.x1, ay = st.y1 * TILT - st.z, bx = st.x2, by = st.y2 * TILT - st.z;
+            st.g.clear();
+            st.g.lineStyle(st.width * a + 1, st.color, 0.35 * a); st.g.moveTo(ax, ay); st.g.lineTo(bx, by);
+            st.g.lineStyle(st.width * 0.35 * a + 0.5, 0xffffff, 0.8 * a); st.g.moveTo(ax, ay); st.g.lineTo(bx, by);
+            if (st.life <= 0) { st.g.destroy(); this.streaks.splice(i, 1); }
+        }
         for (let i = this.flashes.length - 1; i >= 0; i--) {
             const f = this.flashes[i];
             f.life -= delta;
@@ -164,6 +242,9 @@ export class Effects {
         });
         this.popups.length = 0;
         this.flashes.length = 0;
+        this.waves.forEach((w) => w.g.destroy()); this.waves.length = 0;
+        this.pillars.forEach((p) => p.s.destroy()); this.pillars.length = 0;
+        this.streaks.forEach((st) => st.g.destroy()); this.streaks.length = 0;
         this.shake = 0;
     }
 }

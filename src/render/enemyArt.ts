@@ -3,20 +3,24 @@ import * as PIXI from 'pixi.js';
 // Procedural sprites for every enemy. Each builder draws into `body` (feet at the origin, facing right)
 // and returns { height, anim(e, t) } where `height` is used to place health bars and damage numbers.
 import { shade } from './decorArt';
+import { softGlow } from './glow';
 
-const glowCircle = (radius, color, alpha) => {
-    const g = new PIXI.Graphics();
-    g.beginFill(color, alpha);
-    g.drawCircle(0, 0, radius);
-    g.endFill();
-    g.blendMode = PIXI.BLEND_MODES.ADD;
-    return g;
+const glowCircle = (radius, color, alpha) => softGlow(radius, color, alpha);
+
+// Solid shapes of a readable size get a dark outline in their own hue: a consistent, punchy cartoon style.
+const outline = (g, c, size, a) => {
+    if (a >= 1 && size >= 3.5) g.lineStyle(Math.min(2, 0.9 + size * 0.04), shade(c, 0.36), 0.9);
+    else g.lineStyle(0);
 };
-
-const ell = (g, x, y, rx, ry, c, a = 1) => { g.beginFill(c, a); g.drawEllipse(x, y, rx, ry); g.endFill(); };
-const circ = (g, x, y, r, c, a = 1) => { g.beginFill(c, a); g.drawCircle(x, y, r); g.endFill(); };
-const poly = (g, pts, c, a = 1) => { g.beginFill(c, a); g.drawPolygon(pts); g.endFill(); };
-const rect = (g, x, y, w, h, c, a = 1) => { g.beginFill(c, a); g.drawRect(x, y, w, h); g.endFill(); };
+const polySize = (pts) => {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < pts.length; i += 2) { x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]); y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]); }
+    return Math.min(x1 - x0, y1 - y0) / 2;
+};
+const ell = (g, x, y, rx, ry, c, a = 1) => { outline(g, c, Math.min(rx, ry), a); g.beginFill(c, a); g.drawEllipse(x, y, rx, ry); g.endFill(); g.lineStyle(0); };
+const circ = (g, x, y, r, c, a = 1) => { outline(g, c, r, a); g.beginFill(c, a); g.drawCircle(x, y, r); g.endFill(); g.lineStyle(0); };
+const poly = (g, pts, c, a = 1) => { outline(g, c, polySize(pts), a); g.beginFill(c, a); g.drawPolygon(pts); g.endFill(); g.lineStyle(0); };
+const rect = (g, x, y, w, h, c, a = 1) => { outline(g, c, Math.min(w, h) / 2, a); g.beginFill(c, a); g.drawRect(x, y, w, h); g.endFill(); g.lineStyle(0); };
 
 const windupShake = (e, body) => {
     if (e.ai && (e.ai.state === 'windup' || e.ai.state === 'surface')) body.x = (Math.random() - 0.5) * 3;
@@ -105,58 +109,86 @@ function boar(body, t, r, opts = {}) {
 
 // ------------------------------------------------------------------- forest
 function wolf(body, t, r) {
-    const c = t.color, g = new PIXI.Graphics();
-    const legs = [[-12, 0], [-5, 1], [8, 0], [14, 1]];
-    legs.forEach(([x, y]) => rect(g, x - 2, -10 + y, 4, 11, shade(c, 0.55)));
-    // tail
-    g.lineStyle(5, shade(c, 0.8)); g.moveTo(-18, -17); g.quadraticCurveTo(-30, -20, -28, -8); g.lineStyle(0);
-    ell(g, 0, -16, 20, 10, shade(c, 0.75));
-    ell(g, -1, -18, 19, 9, c);
-    ell(g, 3, -12, 12, 4, shade(c, 1.35), 0.7);
+    const c = t.color, dark = shade(c, 0.55), light = shade(c, 1.3);
+    // separate legs so it can gallop
+    const legG = (x, col) => { const g = new PIXI.Graphics(); rect(g, -2.2, 0, 4.4, 10, col); ell(g, 0.8, 10, 3.4, 1.8, shade(col, 0.7)); g.position.set(x, -11); return g; };
+    const legs = [legG(-12, dark), legG(7, dark), legG(-6, shade(c, 0.75)), legG(13, shade(c, 0.75))];
+    const tail = new PIXI.Graphics();
+    poly(tail, [0, 0, -10, -6, -20, -4, -26, 4, -18, 2, -10, 4], shade(c, 0.85));
+    poly(tail, [-18, -2, -26, 4, -21, 3], light);
+    tail.position.set(-16, -18);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -17, 19, 9.5, shade(c, 0.8));
+    ell(g, -1, -19, 18, 8, c);
+    poly(g, [-14, -24, -4, -27, 8, -26, 2, -22, -10, -21], dark);              // darker saddle along the back
+    ell(g, 2, -12.5, 11, 3.5, light, 0.8);                                        // pale belly
+    // shaggy mane
+    poly(g, [8, -27, 13, -31, 15, -26, 18, -29, 19, -23, 14, -12, 6, -14], shade(c, 0.9));
     // head
-    ell(g, 19, -20, 9, 8, shade(c, 1.05));
-    poly(g, [24, -22, 37, -17, 25, -13], shade(c, 1.2));
-    circ(g, 36, -17, 2, 0x1a1a1a);
-    circ(g, 21, -23, 1.8, 0xffd84a);
-    poly(g, [14, -25, 16, -34, 21, -26], shade(c, 0.6)); poly(g, [20, -26, 24, -34, 27, -25], shade(c, 0.7));
-    poly(g, [25, -13, 28, -8, 29, -14], 0xffffff);
-    body.addChild(g);
+    ell(g, 20, -22, 8.5, 7.5, shade(c, 1.05));
+    poly(g, [24, -25, 37, -20, 37, -17, 26, -15], shade(c, 1.15));              // muzzle
+    poly(g, [26, -17, 36, -17, 33, -14, 27, -14], light);
+    circ(g, 37, -19, 2, 0x1a1a1a);
+    poly(g, [14, -27, 15, -36, 20, -28], dark); poly(g, [19, -28, 23, -36, 25, -27], shade(c, 0.7));
+    poly(g, [16, -29, 17, -33, 19, -29], 0xd88a8a);
+    circ(g, 23, -24, 2.3, 0xffd84a); circ(g, 23.6, -24, 1.1, 0x1a1a1a); circ(g, 22.8, -24.8, 0.6, 0xffffff);
+    const jaw = new PIXI.Graphics();
+    poly(jaw, [0, 0, 9, 1, 7, 4, 0, 3], shade(c, 0.9));
+    poly(jaw, [2, 0, 3, -2.5, 4, 0], 0xffffff); poly(jaw, [6, 0.5, 7, -2, 8, 1], 0xffffff);
+    jaw.position.set(26, -15);
+    legs.slice(0, 2).forEach((l) => body.addChild(l));
+    body.addChild(tail, g, jaw);
+    legs.slice(2).forEach((l) => body.addChild(l));
     return {
-        height: 36,
+        height: 38,
         anim: (e) => {
             const s = e.ai && e.ai.state;
             body.scale.x = e.facing;
+            const run = Math.sin(e.phase * 2.2);
+            legs[0].rotation = run * 0.6; legs[1].rotation = -run * 0.6; legs[2].rotation = -run * 0.5; legs[3].rotation = run * 0.5;
+            tail.rotation = Math.sin(e.phase * 1.6) * 0.25;
+            jaw.rotation = s === 'lunge' || s === 'windup' ? 0.45 : 0.05;
             if (s === 'lunge') { body.rotation = 0.12; body.scale.y = 0.92; }
-            else if (s === 'windup') { body.rotation = -0.05; body.scale.y = 0.85; windupShake(e, body); }
-            else { body.rotation = 0; body.scale.y = 1; body.y = Math.abs(Math.sin(e.phase * 2.2)) * -2.5; }
+            else if (s === 'windup') { body.rotation = -0.05; body.scale.y = 0.86; windupShake(e, body); }
+            else { body.rotation = 0; body.scale.y = 1; body.y = Math.abs(run) * -2; }
         }
     };
 }
 
 function spider(body, t, r) {
     const c = t.color, hover = new PIXI.Container();
-    hover.y = -12;
-    const legs = new PIXI.Graphics();
-    legs.lineStyle(2.4, shade(c, 0.7));
-    for (let i = 0; i < 4; i++) {
-        const y = -6 + i * 4, spread = 14 + i * 2;
-        legs.moveTo(0, y); legs.lineTo(-spread, y - 10 - i); legs.lineTo(-spread - 5, y + 10);
-        legs.moveTo(0, y); legs.lineTo(spread, y - 10 - i); legs.lineTo(spread + 5, y + 10);
+    hover.y = -11;
+    // eight jointed legs, each its own graphic so they can skitter
+    const legs = [];
+    for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
+        const g = new PIXI.Graphics();
+        const spread = 15 + i * 2.5, knee = -11 - i;
+        g.lineStyle(3, shade(c, 0.35)); g.moveTo(0, 0); g.lineTo(side * spread * 0.7, knee); g.lineTo(side * spread, 11);
+        g.lineStyle(1.8, shade(c, 0.85)); g.moveTo(0, 0); g.lineTo(side * spread * 0.7, knee); g.lineTo(side * spread, 11);
+        g.lineStyle(0);
+        g.position.set(2 + (i - 1.5) * 2.5, -2 + i * 1.5);
+        legs.push({ g, i, side });
     }
     const g = new PIXI.Graphics();
-    ell(g, -5, 2, 10, 8, shade(c, 0.8)); ell(g, -6, 0, 9, 7, c);
-    poly(g, [-10, -3, -5, -6, -2, -1, -6, 3], 0xe0405a);
-    ell(g, 8, -2, 6, 5, shade(c, 1.1));
-    [[11, -4], [13, -2], [10, -1], [12, 1]].forEach(([x, y]) => circ(g, x, y, 1.1, 0xff4a4a));
-    hover.addChild(legs, g);
+    ell(g, -9, 0, 12, 10, shade(c, 0.85));                       // abdomen
+    ell(g, -10, -2, 10.5, 8.5, c);
+    poly(g, [-13, -5, -9, -8, -5, -5, -9, -2, -5, 2, -9, 5, -13, 2, -9, -2], 0xe0405a);  // hourglass
+    ell(g, -13, -5, 4, 2, shade(c, 1.6), 0.5);
+    for (let k = 0; k < 7; k++) { g.lineStyle(1, shade(c, 0.5)); g.moveTo(-20 + k * 3, -6 + (k % 2) * 2); g.lineTo(-21 + k * 3, -10 + (k % 2) * 2); }
+    g.lineStyle(0);
+    ell(g, 6, -1, 7, 6, shade(c, 1.1));                           // head
+    [[10, -4], [12.5, -2.5], [9, -1.5], [11.5, 0], [8, -5], [13, -4.8]].forEach(([x, y]) => circ(g, x, y, 1.15, 0xff3a3a));
+    poly(g, [11, 2, 13, 7, 10, 4], 0xf0e8d8); poly(g, [8, 3, 9, 8, 7, 4], 0xf0e8d8);
+    const eyes = glowCircle(6, 0xff3a3a, 0.25); eyes.position.set(11, -2);
+    legs.forEach((l) => hover.addChild(l.g));
+    hover.addChild(g, eyes);
     body.addChild(hover);
     return {
         height: 26,
         anim: (e) => {
             body.scale.x = e.facing;
-            legs.scale.x = 1 + Math.sin(e.phase * 3) * 0.1;
-            legs.rotation = Math.sin(e.phase * 3) * 0.05;
-            hover.y = -12 + Math.abs(Math.sin(e.phase * 3)) * -2;
+            for (const l of legs) l.g.rotation = Math.sin(e.phase * 4 + l.i * 1.6 + (l.side > 0 ? Math.PI : 0)) * 0.12;
+            hover.y = -11 + Math.abs(Math.sin(e.phase * 4)) * -1.5;
             windupShake(e, body);
         }
     };
@@ -293,13 +325,27 @@ function mummy(body, t, r) {
 
 function scarab(body, t, r) {
     const c = t.color, g = new PIXI.Graphics();
-    g.lineStyle(1.5, 0x1a2a2a); [-3, 0, 3].forEach((x) => { g.moveTo(x, -4); g.lineTo(x - 4, 0); g.moveTo(x, -4); g.lineTo(x + 4, 0); }); g.lineStyle(0);
-    ell(g, 0, -5, 8, 6, shade(c, 0.7)); ell(g, 0, -6, 7, 5, c);
-    g.lineStyle(1, shade(c, 0.5)); g.moveTo(0, -11); g.lineTo(0, -1); g.lineStyle(0);
-    circ(g, 7, -5, 3, shade(c, 0.6));
-    ell(g, -2, -8, 3, 1.4, 0xffffff, 0.5);
-    body.addChild(g);
-    return { height: 16, anim: (e) => { body.scale.x = e.facing; body.y = Math.abs(Math.sin(e.phase * 4)) * -1.2; } };
+    const legs = new PIXI.Graphics();
+    legs.lineStyle(1.6, 0x10201e);
+    [-4, 0, 4].forEach((x) => { legs.moveTo(x, -4); legs.lineTo(x - 3, 1); legs.moveTo(x, -4); legs.lineTo(x + 3, 1); });
+    legs.lineStyle(0);
+    ell(g, 0, -5.5, 9, 6.5, shade(c, 0.6));
+    ell(g, -0.5, -6.5, 8.5, 6, c);                               // shell
+    ell(g, -3, -8.5, 4, 2.2, shade(c, 1.7), 0.55);                // iridescent sheen
+    ell(g, 2, -5, 3, 1.4, 0xd0a0ff, 0.35);
+    g.lineStyle(1, shade(c, 0.4)); g.moveTo(-0.5, -12); g.lineTo(-0.5, -1); g.lineStyle(0);
+    ell(g, 8, -6, 3.6, 3.2, shade(c, 0.5));                       // head
+    poly(g, [10, -8, 14, -12, 12, -7], shade(c, 0.45));          // horn
+    circ(g, 9.5, -7, 0.9, 0xffd84a);
+    body.addChild(legs, g);
+    return {
+        height: 16,
+        anim: (e) => {
+            body.scale.x = e.facing;
+            body.y = Math.abs(Math.sin(e.phase * 4)) * -1.2;
+            legs.scale.x = 1 + Math.sin(e.phase * 6) * 0.15;
+        }
+    };
 }
 
 function pharaoh(body, t, r) {
@@ -462,30 +508,58 @@ function bat(body, t) {
 
 function golem(body, t, r, opts = {}) {
     const c = t.color, s = r / 26, g = new PIXI.Graphics();
-    rect(g, -16 * s, -14 * s, 12 * s, 14 * s, shade(c, 0.55)); rect(g, 4 * s, -14 * s, 12 * s, 14 * s, shade(c, 0.55));
-    g.beginFill(shade(c, 0.7)); g.drawRoundedRect(-33 * s, -52 * s, 12 * s, 34 * s, 5); g.drawRoundedRect(21 * s, -52 * s, 12 * s, 34 * s, 5); g.endFill();
-    g.beginFill(shade(c, 0.75)); g.drawRoundedRect(-24 * s, -58 * s, 48 * s, 48 * s, 8); g.endFill();
-    g.beginFill(c); g.drawRoundedRect(-24 * s, -58 * s, 34 * s, 46 * s, 8); g.endFill();
-    g.beginFill(shade(c, 1.3), 0.7); g.drawRoundedRect(-20 * s, -55 * s, 20 * s, 8 * s, 4); g.endFill();
-    g.lineStyle(2, shade(c, 0.4)); g.moveTo(-6 * s, -50 * s); g.lineTo(2 * s, -38 * s); g.lineTo(-3 * s, -28 * s); g.lineStyle(0);
-    g.beginFill(shade(c, 0.85)); g.drawRoundedRect(-13 * s, -76 * s, 26 * s, 20 * s, 5); g.endFill();
     const eye = opts.eye || 0xffa030;
-    rect(g, -9 * s, -70 * s, 6 * s, 5 * s, eye); rect(g, 3 * s, -70 * s, 6 * s, 5 * s, eye);
+    const stone = (x, y, w, h, col) => {
+        g.lineStyle(1.6, shade(col, 0.35), 0.9);
+        g.beginFill(col); g.drawRoundedRect(x * s, y * s, w * s, h * s, 4 * s); g.endFill();
+        g.lineStyle(0);
+        g.beginFill(shade(col, 1.25), 0.6); g.drawRoundedRect((x + 2) * s, (y + 2) * s, (w - 4) * s, 4 * s, 2 * s); g.endFill();
+    };
+    // legs
+    stone(-17, -16, 13, 16, shade(c, 0.6)); stone(4, -16, 13, 16, shade(c, 0.66));
+    // arms of stacked boulders
+    const armL = new PIXI.Graphics(), armR = new PIXI.Graphics();
+    const boulderArm = (a, col) => {
+        a.lineStyle(1.6, shade(col, 0.35), 0.9);
+        a.beginFill(col); a.drawCircle(0, 0, 8 * s); a.drawCircle(0, 13 * s, 7 * s); a.endFill();
+        a.beginFill(shade(col, 0.85)); a.drawRoundedRect(-8 * s, 20 * s, 16 * s, 12 * s, 5 * s); a.endFill();
+        a.lineStyle(0);
+    };
+    boulderArm(armL, shade(c, 0.7)); boulderArm(armR, shade(c, 0.8));
+    armL.position.set(-29 * s, -50 * s); armR.position.set(29 * s, -50 * s);
+    // torso: big block with mortar lines, moss and a glowing rune crack
+    stone(-25, -60, 50, 48, shade(c, 0.85));
+    g.beginFill(c); g.drawRoundedRect(-24 * s, -59 * s, 34 * s, 46 * s, 6 * s); g.endFill();
+    g.lineStyle(1.4, shade(c, 0.45), 0.8);
+    g.moveTo(-24 * s, -42 * s); g.lineTo(24 * s, -42 * s); g.moveTo(-24 * s, -26 * s); g.lineTo(24 * s, -26 * s);
+    g.moveTo(-6 * s, -59 * s); g.lineTo(-6 * s, -42 * s); g.moveTo(8 * s, -42 * s); g.lineTo(8 * s, -26 * s); g.moveTo(-12 * s, -26 * s); g.lineTo(-12 * s, -13 * s);
+    g.lineStyle(0);
+    g.beginFill(0x5a8a3a, 0.85); g.drawEllipse(-15 * s, -58 * s, 9 * s, 3.5 * s); g.drawEllipse(14 * s, -14 * s, 7 * s, 3 * s); g.endFill();
+    g.lineStyle(2.4 * s, eye, 0.95); g.moveTo(2 * s, -54 * s); g.lineTo(-4 * s, -44 * s); g.lineTo(3 * s, -34 * s); g.lineTo(-2 * s, -24 * s); g.lineStyle(0);
+    // head
+    stone(-13, -78, 26, 20, shade(c, 0.9));
+    g.beginFill(0x1a1410); g.drawRect(-10 * s, -71 * s, 8 * s, 5 * s); g.drawRect(2 * s, -71 * s, 8 * s, 5 * s); g.endFill();
+    g.beginFill(eye); g.drawRect(-9 * s, -70 * s, 6 * s, 3.5 * s); g.drawRect(3 * s, -70 * s, 6 * s, 3.5 * s); g.endFill();
     if (opts.crystals) {
-        [[-28, -58, 0x5ad0ff], [26, -60, 0xc07aff], [0, -80, 0x5ad0ff]].forEach(([x, y, col]) => {
-            poly(g, [x * s - 6 * s, y * s, x * s, (y - 22) * s, x * s + 6 * s, y * s], shade(col, 0.8));
-            poly(g, [x * s - 6 * s, y * s, x * s, (y - 22) * s, x * s, y * s], shade(col, 1.3));
+        [[-26, -58, 0x5ad0ff], [24, -60, 0xc07aff], [0, -80, 0x5ad0ff], [-10, -62, 0xc07aff]].forEach(([x, y, col], i) => {
+            const hgt = i === 2 ? 24 : 18;
+            poly(g, [x * s - 6 * s, y * s, x * s, (y - hgt) * s, x * s + 6 * s, y * s], shade(col, 0.75));
+            poly(g, [x * s - 6 * s, y * s, x * s, (y - hgt) * s, x * s, y * s], shade(col, 1.3));
         });
     }
-    body.addChild(g);
-    const glow = glowCircle(r * 0.5, eye, 0.18); glow.y = -67 * s; body.addChild(glow);
+    body.addChild(armL, g, armR);
+    const glow = glowCircle(r * 0.55, eye, 0.3); glow.y = -68 * s; body.addChild(glow);
+    const rune = glowCircle(r * 0.5, eye, 0.18); rune.y = -40 * s; body.addChild(rune);
     return {
-        height: 78 * s,
+        height: 80 * s,
         anim: (e) => {
             const st = e.ai && e.ai.state;
             body.rotation = st === 'windup' ? -0.06 : Math.sin(e.phase * 0.7) * 0.04;
             body.y = st === 'windup' ? -4 : Math.abs(Math.sin(e.phase * 0.7)) * -2;
             body.scale.y = st === 'slam' || st === 'recover' ? 0.93 : 1;
+            const swing = st === 'windup' ? -0.9 : st === 'slam' ? 0.4 : Math.sin(e.phase * 0.7) * 0.15;
+            armL.rotation = swing; armR.rotation = -swing;
+            rune.alpha = glow.alpha = 0.35 + Math.abs(Math.sin(e.phase * 0.5)) * 0.4;
             windupShake(e, body);
         }
     };
@@ -528,26 +602,42 @@ function troll(body, t, r) {
 
 // -------------------------------------------------------------------- ruins
 function skeleton(body, t) {
-    const c = t.color, g = new PIXI.Graphics();
-    rect(g, -6, -18, 3.5, 18, c); rect(g, 2.5, -18, 3.5, 18, shade(c, 0.85));
-    rect(g, -9, -2, 7, 3, shade(c, 0.8)); rect(g, 2, -2, 7, 3, shade(c, 0.8));
-    rect(g, -2, -38, 4, 22, shade(c, 0.85));
-    for (let i = 0; i < 4; i++) ell(g, 0, -34 + i * 4.5, 10 - i, 2.4, c);
-    circ(g, 0, -46, 8, c);
-    rect(g, -4, -42, 8, 4, shade(c, 0.8));
-    circ(g, -3, -47, 2.2, 0x1a1008); circ(g, 3, -47, 2.2, 0x1a1008);
-    circ(g, -3, -47, 0.9, 0xff6a3a); circ(g, 3, -47, 0.9, 0xff6a3a);
-    g.lineStyle(3, shade(c, 0.9)); g.moveTo(-9, -34); g.lineTo(-13, -22); g.moveTo(9, -34); g.lineTo(15, -28); g.lineStyle(0);
-    // bow
-    g.lineStyle(2.5, 0x8a5a2a); g.moveTo(16, -48); g.quadraticCurveTo(26, -34, 16, -20);
-    g.lineStyle(1, 0xdddddd); g.moveTo(16, -48); g.lineTo(16, -20); g.lineStyle(0);
-    body.addChild(g);
+    const c = t.color, bone = c, dark = shade(c, 0.7);
+    const legL = new PIXI.Graphics(), legR = new PIXI.Graphics();
+    [legL, legR].forEach((l, i) => { rect(l, -1.6, 0, 3.2, 16, i ? dark : bone); ell(l, 2, 16.5, 4, 1.8, shade(c, 0.6)); });
+    legL.position.set(-4, -18); legR.position.set(4, -18);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -19, 7, 3.2, bone);                                           // pelvis
+    rect(g, -1.6, -40, 3.2, 22, dark);                                      // spine
+    // ribcage
+    for (let i = 0; i < 4; i++) { g.lineStyle(2.2, i % 2 ? dark : bone); g.arc(0, -34 + i * 3.6, 8 - i, Math.PI * 1.05, Math.PI * 1.95); g.arc(0, -34 + i * 3.6, 8 - i, Math.PI * 0.05, Math.PI * 0.95, false); }
+    g.lineStyle(0);
+    // tattered cloth
+    poly(g, [-7, -24, 7, -24, 8, -14, 4, -17, 1, -12, -3, -16, -7, -12], 0x4a3a5a);
+    // skull
+    circ(g, 0, -47, 8, bone);
+    rect(g, -4.5, -43, 9, 4.5, shade(c, 0.85));
+    g.beginFill(0x1a1008); g.drawEllipse(-3, -47.5, 2.4, 2.8); g.drawEllipse(3.2, -47.5, 2.4, 2.8); g.drawPolygon([0, -45, -1, -43, 1, -43]); g.endFill();
+    g.lineStyle(1, 0x1a1008); for (let k = -3; k <= 3; k += 2) { g.moveTo(k, -42.5); g.lineTo(k, -39); } g.lineStyle(0);
+    ell(g, -2.5, -51, 3, 1.6, 0xffffff, 0.6);
+    const eyes = new PIXI.Container();
+    const eL = glowCircle(3.6, 0xff6a3a, 0.6), eR = glowCircle(3.6, 0xff6a3a, 0.6);
+    eL.position.set(-3, -47.5); eR.position.set(3.2, -47.5); eyes.addChild(eL, eR);
+    // arms + bow
+    const arm = new PIXI.Graphics();
+    arm.lineStyle(2.6, bone); arm.moveTo(-8, -36); arm.lineTo(-11, -24); arm.moveTo(8, -36); arm.lineTo(14, -30); arm.lineStyle(0);
+    arm.lineStyle(2.6, 0x6a4422); arm.moveTo(16, -50); arm.quadraticCurveTo(27, -34, 16, -18);
+    arm.lineStyle(1, 0xdddddd); arm.moveTo(16, -50); arm.lineTo(13, -34); arm.lineTo(16, -18); arm.lineStyle(0);
+    body.addChild(legL, legR, g, arm, eyes);
     return {
         height: 58,
         anim: (e) => {
             body.scale.x = e.facing;
-            body.rotation = Math.sin(e.phase * 1.4) * 0.05;
-            body.y = Math.abs(Math.sin(e.phase * 1.4)) * -2;
+            const w = Math.sin(e.phase * 1.4);
+            legL.rotation = w * 0.35; legR.rotation = -w * 0.35;
+            g.rotation = arm.rotation = w * 0.03;
+            body.y = Math.abs(w) * -1.5;
+            eyes.alpha = 0.6 + Math.abs(Math.sin(e.phase * 0.8)) * 0.4;
             windupShake(e, body);
         }
     };
@@ -556,22 +646,31 @@ function skeleton(body, t) {
 function ghost(body, t) {
     const c = t.color, hover = new PIXI.Container();
     hover.y = -26;
+    const tail = new PIXI.Graphics();
+    tail.beginFill(c, 0.45); tail.drawPolygon([-12, 0, 12, 0, 8, 14, 3, 9, 0, 20, -4, 10, -9, 16]); tail.endFill();
+    tail.y = 2;
     const g = new PIXI.Graphics();
-    g.beginFill(c, 0.75);
-    g.drawPolygon([-13, 6, -14, -10, -8, -22, 0, -26, 8, -22, 14, -10, 13, 6, 8, 12, 4, 6, 0, 13, -4, 6, -8, 12]);
+    g.beginFill(c, 0.82);
+    g.drawPolygon([-13, 6, -14, -10, -8, -22, 0, -26, 8, -22, 14, -10, 13, 6, 8, 10, 4, 5, 0, 11, -4, 5, -8, 10]);
     g.endFill();
-    ell(g, -3, -14, 6, 8, 0xffffff, 0.35);
-    ell(g, -5, -12, 2.6, 4, 0x1a2438); ell(g, 5, -12, 2.6, 4, 0x1a2438);
-    ell(g, 0, -4, 3, 4, 0x1a2438, 0.8);
-    const glow = glowCircle(26, 0x9ad0ff, 0.2);
-    hover.addChild(glow, g);
+    g.beginFill(0xffffff, 0.35); g.drawEllipse(-4, -15, 6, 8); g.endFill();
+    // reaching arms
+    g.beginFill(c, 0.7); g.drawPolygon([12, -6, 22, -10, 24, -6, 13, -1]); g.drawPolygon([-12, -6, -20, -2, -19, 2, -12, 0]); g.endFill();
+    g.beginFill(0x10182a); g.drawEllipse(-5, -12, 3, 4.5); g.drawEllipse(5, -12, 3, 4.5); g.drawEllipse(0, -3, 3.2, 4.5); g.endFill();
+    const eyes = new PIXI.Container();
+    const eL = glowCircle(4, 0x9ad0ff, 0.6), eR = glowCircle(4, 0x9ad0ff, 0.6);
+    eL.position.set(-5, -12); eR.position.set(5, -12); eyes.addChild(eL, eR);
+    const aura = glowCircle(28, 0x9ad0ff, 0.22);
+    hover.addChild(aura, tail, g, eyes);
     body.addChild(hover);
     return {
         height: 50,
         anim: (e) => {
             hover.y = -26 + Math.sin(e.phase * 0.9) * 4;
-            g.alpha = e.ai && e.ai.state === 'windup' ? 1 : 0.8 + Math.sin(e.phase) * 0.12;
+            g.alpha = e.ai && e.ai.state === 'windup' ? 1 : 0.85 + Math.sin(e.phase) * 0.1;
             g.scale.x = 1 + Math.sin(e.phase * 1.3) * 0.05;
+            tail.scale.x = 1 + Math.sin(e.phase * 2.2) * 0.18;
+            tail.skew.x = Math.sin(e.phase * 1.5) * 0.25;
             e.shadow.alpha = 0.4;
             windupShake(e, body);
         }

@@ -66,8 +66,8 @@ export class UIManager {
 
         // Health panel
         this.panel = new PIXI.Graphics();
-        this.panel.beginFill(0x0a0e18, 0.6);
-        this.panel.lineStyle(1, 0xffffff, 0.15);
+        this.panel.beginFill(0x0a0e18, 0.72);
+        this.panel.lineStyle(1.5, 0xd9a440, 0.55);
         this.panel.drawRoundedRect(0, 0, 268, 64, 12);
         this.panel.endFill();
         this.panel.position.set(12, 26);
@@ -301,10 +301,28 @@ export class UIManager {
         // minimap
         this.mapBox = new PIXI.Container();
         this.mapFrame = new PIXI.Graphics();
-        this.mapFrame.beginFill(0x05070c, 0.85);
-        this.mapFrame.lineStyle(3, 0xffffff, 0.35);
-        this.mapFrame.drawRoundedRect(-6, -6, 182, 182, 16);
-        this.mapFrame.endFill();
+        // gilded frame with corner studs and a north plaque, matching the title screen
+        const mf = this.mapFrame;
+        mf.beginFill(0x000000, 0.35); mf.drawRoundedRect(-5, -3, 182, 182, 16); mf.endFill();
+        mf.beginFill(0x0e1220, 0.95);
+        mf.lineStyle(2.5, 0xd9a440, 1);
+        mf.drawRoundedRect(-7, -7, 184, 184, 16);
+        mf.endFill();
+        mf.lineStyle(1, 0x5a3a10, 0.9);
+        mf.drawRoundedRect(-2, -2, 174, 174, 13);
+        mf.lineStyle(0);
+        mf.beginFill(0xf3c75a);
+        for (const [x, y] of [[-4, -4], [174, -4], [-4, 174], [174, 174]]) mf.drawPolygon([x, y - 5, x + 5, y, x, y + 5, x - 5, y]);
+        mf.endFill();
+        mf.lineStyle(1.5, 0xd9a440, 1);
+        mf.beginFill(0x0e1220);
+        mf.drawRoundedRect(73, -15, 24, 16, 5);
+        mf.endFill();
+        mf.lineStyle(0);
+        const north = new PIXI.Text('N', { fontFamily: 'Georgia, serif', fontSize: 12, fontWeight: 'bold', fill: 0xf3c75a });
+        north.anchor.set(0.5);
+        north.position.set(85, -7);
+        mf.addChild(north);
         this.mapTexture = null;
         this.mapSprite = new PIXI.Sprite();
         const mask = new PIXI.Graphics();

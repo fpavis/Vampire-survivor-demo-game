@@ -37,13 +37,13 @@ check('party bar shows three portraits', (await page.locator('.vs-hero').count()
 await ev(() => { const g = window.game; g.godMode = false; g.state.nextLevel = 1e12; });
 const sw = await ev(() => {
   const g = window.game;
-  const before = { auto: g.spells.auto.map((u) => g.spells.item(u).tpl), robe: g.state.player.robe.tint };
+  const before = { auto: g.spells.auto.map((u) => g.spells.item(u).tpl), look: g.state.player.heroId };
   const ok = g.party.switchTo(1);
-  const after = { auto: g.spells.auto.map((u) => g.spells.item(u).tpl), robe: g.state.player.robe.tint, active: g.party.active };
+  const after = { auto: g.spells.auto.map((u) => g.spells.item(u).tpl), look: g.state.player.heroId, active: g.party.active };
   const again = g.party.switchTo(2);                 // cooldown
   return { ok, again, before, after };
 });
-check('switching changes the loadout and look', sw.ok && sw.after.active === 1 && sw.after.auto[0] === 'orbit' && sw.before.auto[0] === 'bolt' && sw.after.robe !== sw.before.robe, JSON.stringify(sw));
+check('switching changes the loadout and look', sw.ok && sw.after.active === 1 && sw.after.auto[0] === 'orbit' && sw.before.auto[0] === 'bolt' && sw.before.look === 'aria' && sw.after.look === 'brann', JSON.stringify(sw));
 check('switching has a cooldown', sw.again === false);
 await ev(() => { for (let i = 0; i < 200; i++) window.game.gameLoop(1); });
 await page.keyboard.press('3');

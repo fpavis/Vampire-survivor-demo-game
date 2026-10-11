@@ -26,6 +26,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - Rarity-tiered upgrade cards that show exactly what changes (e.g. `Damage: 22 → 28`)
   - Enemies scale with your level; elites appear and a regional warlord shows up every few levels
 - **Graphics**: baked ground textures with organic biome borders, shore foam, earthen banks and water depth; textured cliffs with moss, snow and glowing crystal veins; a light map for caves, ruins and the dark far regions (torches, crystals, spells and explosions glow); region ambience (leaves, pollen, blowing sand, snow, cave motes, ash); `npm run gallery` saves screenshots of every scene
+- **Art**: three distinct, rigged heroes (mage, knight, druid) with walk cycles; outlined, shaded monsters with animated legs, wings and glowing eyes; spell effects with trails, shockwaves, light pillars and dash afterimages; gabled, half-timbered town houses with shutters, flower boxes and lanterns; varied townsfolk; gilded minimap frame. `node scripts/artsheet.mjs` lays every sprite out on one sheet and `node scripts/spellshot.mjs` captures each spell
 - **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, spell and stat slots, mana bar and active skill bar, floating damage numbers with crits, damage vignette
 - **Responsive Controls**: keyboard (WASD / arrows), mouse (click and hold), touch and virtual joystick
 
