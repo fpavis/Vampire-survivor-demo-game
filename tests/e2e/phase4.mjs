@@ -160,7 +160,7 @@ const wipe = await page.evaluate(async () => {
   g.respawn(target);
   await new Promise((r) => setTimeout(r, 1500));
   for (let i = 0; i < 10; i++) g.gameLoop(1);
-  return { over, label: target.label, alive: g.party.heroes.every((h) => !h.dead && h.health > 0), partial: g.party.heroes.every((h) => h.health < 100), near: Math.hypot(g.state.player.wx - 3000, g.state.player.wy - 3040) < 200 };
+  return { over, label: target.label, alive: g.party.heroes.every((h) => !h.dead && h.health > 0), partial: g.party.heroes.every((h) => h.health < 100), near: Math.hypot(g.state.player.wx - 3000, g.state.player.wy - 3040) < Math.hypot(g.state.player.wx - 100, g.state.player.wy - 140) };   // closer to the last town than to the nearer one (the exact spot is nudged if that tile is water)
 });
 check('party wipe ends in the death screen', wipe.over);
 check('respawn at last visited town with the party revived but hurt', wipe.label === 'Lasttown' && wipe.alive && wipe.near && wipe.partial, JSON.stringify(wipe));
