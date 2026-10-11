@@ -5,8 +5,29 @@ type Migration = (raw: Record<string, any>) => Record<string, any>;
 // Each entry upgrades a save from version N to N + 1. Add new entries at the end when the schema changes.
 // Never edit an old migration: players may still have saves at that version.
 export const MIGRATIONS: Record<number, Migration> = {
-  // example shape for the future:
-  // 1: (raw) => ({ ...raw, version: 2, hero: { ...raw.hero, newField: 0 } })
+  // v1 -> v2: weapons become spell items, passives become stat-card picks, mana + loadout are added
+  1: (raw) => {
+    const old = raw.hero ?? {};
+    const spells = (old.weapons ?? []).map((w: any, i: number) => ({
+      uid: `m${i}${String(w.id)}`, tpl: String(w.id), level: Math.max(1, w.level | 0), xp: 0,
+      runes: [null, null]
+    }));
+    const dash = { uid: 'm-dash', tpl: 'dash', level: 1, xp: 0, runes: [null] };
+    spells.push(dash);
+    return {
+      ...raw,
+      version: 2,
+      hero: {
+        level: old.level, experience: old.experience, nextLevel: old.nextLevel, health: old.health,
+        mana: 60, pendingPicks: 0,
+        picks: { ...(old.passives ?? {}) },
+        spells,
+        runes: [],
+        auto: spells.filter((s: any) => s.tpl !== 'dash').slice(0, 5).map((s: any) => s.uid),
+        active: [dash.uid, null, null]
+      }
+    };
+  },
 };
 
 export class SaveError extends Error {

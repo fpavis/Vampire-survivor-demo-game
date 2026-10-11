@@ -110,8 +110,8 @@ check('zone level rises with distance', levels[60] === 1 && levels[600] > levels
 // ---- 4. persistence: write a recognisable state, save, reload the page, continue
 const before = await page.evaluate(async () => {
   const g = window.game;
-  g.state.level = 9; g.state.experience = 7; g.state.nextLevel = 150; g.state.passives = { might: 2 };
-  g.weapons.acquire('nova');
+  g.state.level = 9; g.state.experience = 7; g.state.nextLevel = 150; g.state.picks = { might: 2 };
+  g.spells.addSpell('nova');
   g.state.kills = 321; g.state.time = 777;
   const spot = g.world.findFree(5000, -3200, 14);
   g.state.player.wx = spot.x; g.state.player.wy = spot.y; g.lastFogTx = null;
@@ -131,8 +131,8 @@ const after = await page.evaluate(() => {
   const g = window.game;
   return {
     seed: g.overworld.seed, fogTiles: g.fog.revealedTileCount(), cleared: Object.keys(g.session.clearedCamps).length,
-    level: g.state.level, kills: g.state.kills, time: Math.round(g.state.time), might: g.state.passives.might,
-    nova: g.weapons.level('nova'), x: Math.round(g.state.player.wx), y: Math.round(g.state.player.wy)
+    level: g.state.level, kills: g.state.kills, time: Math.round(g.state.time), might: g.state.picks.might,
+    nova: g.spells.level('nova'), x: Math.round(g.state.player.wx), y: Math.round(g.state.player.wy)
   };
 });
 check('same world seed after reload', after.seed === before.seed);

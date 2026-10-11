@@ -11,12 +11,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/phase1.mjs",
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/phase1.mjs && node tests/e2e/phase2.mjs",
     "build:artifact": "npm run build:single && node scripts/make-artifact.mjs"
   },
   "dependencies": {
+    "@preact/signals": "^2.11.3",
     "fflate": "^0.8.3",
-    "pixi.js": "^7.4.3"
+    "pixi.js": "^7.4.3",
+    "preact": "^11.0.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

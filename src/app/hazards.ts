@@ -76,7 +76,7 @@ export class Hazards {
         flash.beginFill(color, 0.45); flash.drawCircle(x, y, radius); flash.endFill();
         flash.blendMode = PIXI.BLEND_MODES.ADD;
         game.groundLayer.addChild(flash);
-        game.weapons.decals.push({ g: flash, life: 12, max: 12 });
+        game.spells.decals.push({ g: flash, life: 12, max: 12 });
         this.hitPlayerIfInside(x, y, radius, damage);
     }
 

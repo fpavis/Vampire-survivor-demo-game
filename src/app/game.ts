@@ -8,7 +8,12 @@ import { EntityManager } from '../render/entities';
 import { UIManager } from './ui';
 import { World, BIOME } from '../render/world';
 import { Effects } from '../render/effects';
-import { WeaponSystem, computeStats, generateChoices } from './weapons';
+import { SpellSystem } from './spells';
+import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
+import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
+import { AudioManager } from './audio';
+import { mountUi } from '../ui/mount';
+import { ui as uiBridge } from '../ui/bridge';
 import { OverworldSource } from '../core/world/terrain';
 import { createInterior } from '../core/world/interiors';
 import { Hazards } from './hazards';
@@ -61,7 +66,10 @@ class Game {
 
         this.world = new World(this.app, this.groundLayer, this.objectLayer);
         this.fx = new Effects(this);
-        this.weapons = new WeaponSystem(this);
+        this.spells = new SpellSystem(this);
+        this.audio = new AudioManager();
+        this.lastMove = { x: 0, y: 0 };
+        this.safeFor = 0;
         this.hazards = new Hazards(this);
         this.critters = new Critters(this);
         this.map = new MapView();
@@ -335,7 +343,11 @@ class Game {
         window.addEventListener('keydown', (e) => {
             if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
             gameState.keys[e.key] = true;
+            this.audio.unlock();
             if (!gameState.player || gameState.gameOver) return;
+            if (e.key === ' ' && !e.repeat) this.spells.cast(0);
+            else if ((e.key === 'q' || e.key === 'Q') && !e.repeat) this.spells.cast(1);
+            else if ((e.key === 'r' || e.key === 'R') && !e.repeat) this.spells.cast(2);
             if (e.key === 'e' || e.key === 'E') this.interact();
             else if (e.key === 'm' || e.key === 'M') this.toggleMap();
         });
@@ -348,6 +360,7 @@ class Game {
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
         });
         this.app.stage.on('pointerdown', (e) => {
+            this.audio.unlock();
             if (gameState.levelUp || gameState.gameOver || gameState.paused) return;
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
             gameState.pointerDown = true;
@@ -367,7 +380,7 @@ class Game {
         this.interactables = [];
         this.critters.reset();
         this.hazards.reset();
-        this.weapons.clearProjectiles();
+        this.spells.clearProjectiles();
         this.fx.clear();
     }
 
@@ -375,7 +388,7 @@ class Game {
         const s = this.state;
         this.clearWorldEntities();
         if (s.player) EntityManager.cleanup(s.player);
-        this.weapons.reset();
+        this.spells.reset();
     }
 
     init(save = null) {
@@ -436,10 +449,11 @@ class Game {
 
         if (save) {
             const hero = save.hero;
-            this.weapons.list = hero.weapons.map((w) => ({ id: w.id, level: w.level, timer: 20 }));
-            gameState.passives = { ...hero.passives };
-            this.stats = computeStats(gameState.passives);
+            gameState.picks = { ...hero.picks };
+            this.stats = computeStats(gameState.picks);
             gameState.maxHealth = this.stats.maxHealth;
+            this.spells.load(hero);
+            gameState.pending = hero.pendingPicks || 0;
             gameState.level = hero.level;
             gameState.experience = hero.experience;
             gameState.nextLevel = hero.nextLevel;
@@ -449,9 +463,9 @@ class Game {
             gameState.bossesDefeated = save.stats.bossesDefeated;
             gameState.time = save.playSeconds;
         } else {
-            this.weapons.acquire('bolt');
             this.stats = computeStats({});
             gameState.maxHealth = this.stats.maxHealth;
+            this.spells.loadStarter();
             gameState.health = gameState.maxHealth;
             gameState.nextLevel = xpForLevel(1);
         }
@@ -465,6 +479,15 @@ class Game {
         this.syncMap();
 
         this.ui.game = this;
+        mountUi(this);
+        uiBridge.visible.value = true;
+        uiBridge.muted.value = this.audio.muted;
+        uiBridge.cards.value = [];
+        uiBridge.cardsOpen.value = false;
+        uiBridge.pending.value = gameState.pending;
+        this.cardsKey = '';
+        this.safeFor = 999;
+        this.ensureCards();
         this.ui.onInteract = () => this.interact();
         this.ui.onMapToggle = () => this.toggleMap();
         this.ui.setHUDVisible(true);
@@ -551,7 +574,9 @@ class Game {
         EntityManager.heroLevel = s.level;
         this.movePlayer(delta);
         this.updateFog();
-        this.weapons.update(delta);
+        this.spells.update(delta);
+        this.updateSafety(delta);
+        this.syncUi();
         this.updateEnemies(delta);
         this.hazards.update(delta);
         this.critters.update(delta);
@@ -612,6 +637,7 @@ class Game {
             const speed = this.state.playerSpeed * this.stats.speed * delta * mul;
             this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius);
             moving = true;
+            this.lastMove = { x: dx / (Math.hypot(dx, dy) || 1), y: dy / (Math.hypot(dx, dy) || 1) };
             if (Math.abs(dx) > 0.15) player.facing = dx > 0 ? 1 : -1;
         }
         player.moving = moving;
@@ -636,6 +662,8 @@ class Game {
     hurtPlayer(amount, burst = false) {
         const s = this.state;
         if (this.godMode) return;
+        if (this.spells.barrierActive || this.frame < (this.invulnUntil || 0)) return;
+        this.safeFor = 0;
         if (burst) {
             if (this.frame < (this.invulnUntil || 0)) return;
             this.invulnUntil = this.frame + 18;
@@ -783,10 +811,10 @@ class Game {
         // a sleeping or idle monster wakes up when hurt
         if (e.dormant) e.dormant = false;
         if (e.home && e.shell !== 'engaged') engage(this, e);
-        if (e.health <= 0) this.killEnemy(e);
+        if (e.health <= 0) this.killEnemy(e, opts.spell);
     }
 
-    killEnemy(e) {
+    killEnemy(e, spell) {
         if (e.dead) return;
         e.dead = true;
         const s = this.state;
@@ -798,6 +826,8 @@ class Game {
         if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy, e.level);
         this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss });
         this.popRuntime.onKill(e);
+        this.spells.onKill(e, spell);
+        this.rollSkillDrop(e);
 
         if (e.isBoss) {
             s.bossesDefeated++;
@@ -910,7 +940,7 @@ class Game {
                 if (!this.interiorState.altarUsed) {
                     this.interiorState.altarUsed = true;
                     this.fx.burst(this.interior.altar.x, this.interior.altar.y, 50, 0xc8a0ff, 30, 2.6, { size: 0.8, life: 40, up: 3.6 });
-                    this.openTreasure(1, 'BLESSING', 'The altar grants you a gift');
+                    this.grantLoot(2);
                 }
                 break;
         }
@@ -1002,24 +1032,47 @@ class Game {
         this.fx.burst(it.x, it.y, 28, 0xffd84a, 30, 3.2, { size: 0.9, life: 40, up: 4.2 });
         this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== '🎁');
         this.map.dirty = true;
-        this.openTreasure(it.big ? 2 : 1, 'TREASURE!', it.big ? 'A great hoard! Pick two rewards' : 'Choose a reward');
+        this.grantLoot(it.big ? 1 : 0);
     }
 
-    // free upgrade picks (chests and altars) -- they do not cost a level
-    openTreasure(picks, title, subtitle) {
-        const s = this.state;
-        s.levelUp = true;
-        s.pointerDown = false;
-        s.keys = {};
-        const offer = (n) => {
-            const choices = generateChoices(this, 3, { rarityBoost: picks > 1 ? 2 : 1 });
-            this.ui.showLevelUp(choices, 0, (choice) => {
-                this.applyUpgrade(choice);
-                if (n > 1) offer(n - 1);
-                else { s.levelUp = false; this.ui.shown.slots = ''; this.checkLevelUp(); }
-            }, { title, subtitle: n > 1 ? subtitle : (picks > 1 ? 'Pick your second reward' : subtitle) });
+    // Chests and altars hand out spells and runes (never blocks play).
+    grantLoot(tier) {
+        const rand = Math.random;
+        const found = [];
+        const roll = (power) => {
+            const d = rollSkillDrop(rand, power);
+            if (d.kind === 'spell') { this.spells.addSpell(d.tpl); found.push(`${TEMPLATES[d.tpl].icon} ${TEMPLATES[d.tpl].name}`); }
+            else { this.spells.addRune(d.id); found.push(`${RUNES[d.id].icon} ${RUNES[d.id].name} rune`); }
         };
-        offer(picks);
+        roll(1 + tier);
+        if (tier >= 1 || Math.random() < 0.3) roll(1 + tier);
+        if (tier >= 2) roll(2 + tier);
+        this.audio.play('loot');
+        this.ui.toast(`Found: ${found.join(', ')}`);
+        const p = this.state.player;
+        this.fx.popup(p.wx, p.wy, found[0], 0xffe27a, 20, 80);
+        uiBridge.version.value = this.spells.version;
+    }
+
+    // 0.1 % per kill, better for stronger monsters. Bosses always drop something good.
+    rollSkillDrop(e) {
+        const type = ENEMY_TYPES[e.type];
+        const strength = Math.min(3, (e.level || 1) / 25);
+        let chance = 0.001 * (1 + strength * 1.5);
+        if (e.elite) chance *= 8;
+        if (e.isBoss) chance = 1;
+        if (Math.random() >= chance) return;
+        const d = rollSkillDrop(Math.random, e.isBoss ? 3 : strength + (e.elite ? 1 : 0));
+        if (d.kind === 'spell') {
+            this.spells.addSpell(d.tpl);
+            this.ui.banner(`${TEMPLATES[d.tpl].icon} NEW SPELL: ${TEMPLATES[d.tpl].name.toUpperCase()}`, 0xb9a5ff);
+        } else {
+            this.spells.addRune(d.id);
+            this.ui.banner(`${RUNES[d.id].icon} RUNE: ${RUNES[d.id].name.toUpperCase()}`, 0x9ff2ff);
+        }
+        this.audio.play('loot');
+        uiBridge.version.value = this.spells.version;
+        void type;
     }
 
     // Switch the world back to the overworld and put the hero at (x, y).
@@ -1108,46 +1161,22 @@ class Game {
     }
 
     // ---------------------------------------------------- levelling & upgrades
+    // Levels queue up "pending picks"; nothing pauses. Cards are chosen from a side panel when the player wants.
     checkLevelUp() {
         const s = this.state;
-        if (s.levelUp || s.gameOver || s.experience < s.nextLevel) return;
-        s.levelUp = true;
-        s.pointerDown = false;
-        s.keys = {};
-        const choices = generateChoices(this, 3);
-        this.fx.burst(s.player.wx, s.player.wy, 20, 0xffe27a, 26, 4, { size: 0.9, life: 40, up: 4 });
-        this.ui.showLevelUp(choices, s.level + 1, (choice) => this.applyChoice(choice));
-    }
-
-    applyUpgrade(choice) {
-        const s = this.state;
-        switch (choice.kind) {
-            case 'weapon':
-                this.weapons.acquire(choice.id);
-                break;
-            case 'passive':
-                s.passives[choice.id] = choice.toLevel;
-                this.recalcStats();
-                break;
-            case 'heal':
-                s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.5);
-                break;
+        if (s.gameOver) return;
+        let gained = 0;
+        while (s.experience >= s.nextLevel) {
+            s.experience -= s.nextLevel;
+            s.level++;
+            s.nextLevel = xpForLevel(s.level);
+            s.pending++;
+            gained++;
+            s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.1);
+            this.events.emit('HeroLevelUp', { level: s.level });
         }
-        this.ui.shown.slots = '';
-    }
-
-    applyChoice(choice) {
-        const s = this.state;
-        this.applyUpgrade(choice);
-
-        s.experience = Math.max(0, s.experience - s.nextLevel);
-        s.level++;
-        s.nextLevel = xpForLevel(s.level);
-        s.levelUp = false;
-        s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.1);
+        if (!gained) return;
         this.ui.displayXp = s.experience;
-
-        // Level-up shockwave gives breathing room
         const p = s.player;
         for (const e of s.enemies) {
             const dx = e.wx - p.wx, dy = e.wy - p.wy;
@@ -1155,20 +1184,85 @@ class Game {
             if (d < 260) { e.kvx += (dx / d) * 10; e.kvy += (dy / d) * 10; }
         }
         this.fx.burst(p.wx, p.wy, 10, 0xffe27a, 30, 5, { size: 0.9, life: 34, up: 3 });
-        this.fx.addShake(5);
-
-        this.events.emit('HeroLevelUp', { level: s.level });
+        this.fx.addShake(3);
+        this.audio.play('levelup');
+        this.ui.toast(`Level ${s.level}!  ${s.pending} upgrade${s.pending > 1 ? 's' : ''} ready (U)`);
         this.requestSave('level', true);
-        this.checkLevelUp();
+        this.ensureCards();
+    }
+
+    ensureCards() {
+        const s = this.state;
+        uiBridge.pending.value = s.pending;
+        if (s.pending <= 0) { uiBridge.cards.value = []; uiBridge.cardsOpen.value = false; return; }
+        if (!uiBridge.cards.value.length) uiBridge.cards.value = offerCards(s.picks, Math.random, 3);
+        if (uiBridge.autoPick.value) this.autoPickCards();
+    }
+
+    autoPickCards() {
+        while (this.state.pending > 0 && uiBridge.cards.value.length) {
+            const dom = dominantPath(this.state.picks);
+            const cards = uiBridge.cards.value;
+            let idx = cards.findIndex((c) => dom && CARDS[c.id].path === dom);
+            if (idx < 0) idx = 0;
+            this.pickCard(idx);
+        }
+    }
+
+    pickCard(i) {
+        const s = this.state;
+        const card = uiBridge.cards.value[i];
+        if (!card || s.pending <= 0) return;
+        s.picks[card.id] = card.toLevel;
+        s.pending--;
+        this.recalcStats();
+        this.audio.play('pickup');
+        uiBridge.picks.value = { ...s.picks };
+        uiBridge.cards.value = [];
+        if (s.pending > 0) uiBridge.cards.value = offerCards(s.picks, Math.random, 3);
+        else uiBridge.cardsOpen.value = false;
+        uiBridge.pending.value = s.pending;
+        this.ui.shown.slots = '';
+        this.requestSave('pick', true);
     }
 
     recalcStats() {
         const s = this.state;
         const old = this.stats;
-        this.stats = computeStats(s.passives);
+        this.stats = computeStats(s.picks);
         s.maxHealth = this.stats.maxHealth;
         if (this.stats.maxHealth > old.maxHealth) s.health += this.stats.maxHealth - old.maxHealth;
         s.health = Math.min(s.health, s.maxHealth);
+        this.spells.mana.value = Math.min(this.spells.mana.value, this.stats.maxMana);
+    }
+
+    // threat awareness: spell/rune editing is only allowed in a quiet moment
+    updateSafety(delta) {
+        const s = this.state;
+        const p = s.player;
+        let threat = false;
+        for (const e of s.enemies) {
+            if (e.dead || e.dormant || e.shell === 'idle') continue;
+            if ((e.wx - p.wx) ** 2 + (e.wy - p.wy) ** 2 < 600 * 600) { threat = true; break; }
+        }
+        this.safeFor = threat ? 0 : this.safeFor + delta;
+    }
+
+    syncUi() {
+        if ((this.frame | 0) % 6 !== 0) return;
+        const b = uiBridge;
+        const sp = this.spells;
+        b.mana.value = sp.mana.value;
+        b.maxMana.value = this.stats.maxMana;
+        b.safe.value = this.godMode || this.safeFor >= 180;
+        b.version.value = sp.version;
+        b.pending.value = this.state.pending;
+        const keys = ['Space', 'Q', 'R'];
+        b.active.value = [0, 1, 2].map((i) => {
+            const v = sp.slotInfo(i);
+            if (!v) return null;
+            return { uid: v.item.uid, icon: v.r.tpl.icon, name: v.r.tpl.name, key: keys[i], cost: v.cost, cdFrac: Math.round(v.cdFrac * 20) / 20, affordable: v.affordable, color: v.r.color };
+        });
     }
 
     // ------------------------------------------------------------- visuals

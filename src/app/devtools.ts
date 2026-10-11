@@ -1,6 +1,7 @@
 import { encodeSave, toBase64, fromBase64, decodeSave } from '../core/save/codec';
 import { buildSave } from './saveManager';
 import { tierName } from '../core/world/difficulty';
+import { RUNES, TEMPLATES } from '../core/spells/spells';
 
 declare const __BUILD_INFO__: string;
 declare const __DEVTOOLS_BUTTON__: boolean;
@@ -108,6 +109,13 @@ export function installDevTools(game: any): void {
   button(hero, 'x2', () => { game.timeScale = 2; });
   button(hero, 'x4', () => { game.timeScale = 4; });
 
+  const loot = section('Spells & runes');
+  button(loot, 'All spells', () => { if (ready()) for (const id of Object.keys(TEMPLATES)) if (!game.spells.spells.some((x: any) => x.tpl === id)) game.spells.addSpell(id); });
+  button(loot, 'All runes', () => { if (ready()) for (const id of Object.keys(RUNES)) game.spells.addRune(id); });
+  button(loot, 'Spell lv max', () => { for (const it of game.spells.spells) it.level = TEMPLATES[it.tpl].max; game.spells.touch(); });
+  button(loot, '+Mana', () => { game.spells.mana.value = game.stats.maxMana; });
+  button(loot, '+3 level-ups', () => { game.state.experience += game.state.nextLevel * 3; game.checkLevelUp(); });
+  button(loot, 'Loot (chest)', () => { if (ready()) game.grantLoot(1); });
   const spawn = section('World');
   button(spawn, 'Warlord here', () => { if (ready() && game.mode === 'overworld') game.spawnBoss(); });
   button(spawn, 'Reveal map (60 tiles)', () => { if (ready()) { const p = game.state.player; (game.mode === 'overworld' ? game.fog : game.interiorFog).revealCircle(Math.floor(p.wx / 48), Math.floor(p.wy / 48), 60); } });

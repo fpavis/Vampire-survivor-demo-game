@@ -21,11 +21,11 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - Warlords (Boar King, Ancient Treant, Sand Pharaoh, Crab King, Stone Titan) chain dashes, slams, volleys, boulders and summons, and enrage below half health
   - Navigation: tile **raycasting** for line of sight, a small **flow field** that routes around lakes, mountains and walls, **whisker probes** for local obstacle avoidance and stuck detection
 - **Everything Levels Up**:
-  - 5 weapons with 8 levels each: Arcane Bolt, Spirit Blades, Chain Lightning, Frost Nova, Meteor
-  - 9 passives with 5 levels each: Might, Haste, Swiftness, Vitality, Recovery, Magnet, Armor, Wisdom, Precision
+  - Spells (equipment that levels from its own kills): Arcane Bolt, Spirit Blades, Chain Lightning, Frost Nova, Meteor (auto-cast, free) and Dash, Blink, Aegis (active: Space / Q / R, cost mana). Socket runes into spells (`I` opens the loadout; incompatible runes are greyed out)
+  - 12 hero stat cards in four paths (Arcane, Vigor, Wayfarer, Spirit). Level-ups never pause the game: press `U` to pick when convenient
   - Rarity-tiered upgrade cards that show exactly what changes (e.g. `Damage: 22 → 28`)
   - Enemies scale with your level; elites appear and a regional warlord shows up every few levels
-- **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, weapon/passive inventory, floating damage numbers with crits, damage vignette
+- **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, spell and stat slots, mana bar and active skill bar, floating damage numbers with crits, damage vignette
 - **Responsive Controls**: keyboard (WASD / arrows), mouse (click and hold), touch and virtual joystick
 
 ## 🚀 Getting Started

@@ -15,7 +15,8 @@ class GameState {
         this.time = 0;       // seconds survived
         this.kills = 0;
         this.bossesDefeated = 0;
-        this.passives = {};  // id -> level
+        this.picks = {};     // stat card id -> level
+        this.pending = 0;    // level-ups waiting for a card
 
         this.pointerPosition = null;
         this.pointerDown = false;

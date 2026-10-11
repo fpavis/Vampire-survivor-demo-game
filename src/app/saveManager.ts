@@ -18,8 +18,10 @@ export function buildSave(game: any): SaveData {
       experience: s.experience,
       nextLevel: s.nextLevel,
       health: Math.max(1, s.health),
-      passives: { ...s.passives },
-      weapons: game.weapons.list.map((w: any) => ({ id: w.id, level: w.level }))
+      mana: Math.round(game.spells.mana.value),
+      pendingPicks: s.pending,
+      picks: { ...s.picks },
+      ...(({ spells, runes, auto, active }) => ({ spells, runes, auto, active }))(game.spells.serialize())
     },
     stats: { kills: s.kills, score: s.score, bossesDefeated: s.bossesDefeated },
     world: {

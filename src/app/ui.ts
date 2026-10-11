@@ -2,7 +2,8 @@
 import * as PIXI from 'pixi.js';
 import { RARITY, LIMITS } from '../core/config';
 import { gameState } from './gameState';
-import { WEAPONS, PASSIVES } from './weapons';
+import { TEMPLATES, CORE_INFO } from '../core/spells/spells';
+import { CARDS } from '../core/hero/stats';
 
 import { WORLD_CONFIG } from '../core/config';
 const WORLD_T = WORLD_CONFIG.tile;
@@ -250,8 +251,8 @@ export class UIManager {
 
     updateSlots(game) {
         const s = game.state;
-        const sig = game.weapons.list.map((w) => w.id + w.level).join(',') + '|' +
-            Object.entries(s.passives).map(([k, v]) => k + v).join(',');
+        const sig = game.spells.auto.map((u) => { const it = game.spells.item(u); return it ? it.tpl + it.level : ''; }).join(',') + '|' +
+            Object.entries(s.picks).map(([k, v]) => k + v).join(',');
         if (sig === this.shown.slots) return;
         this.shown.slots = sig;
 
@@ -276,15 +277,16 @@ export class UIManager {
             c.addChild(bg, t, lv);
             this.slotsContainer.addChild(c);
         };
-        game.weapons.list.forEach((w, i) => {
-            drawSlot(i * 44, 0, WEAPONS[w.id].icon, w.level, WEAPONS[w.id].max, WEAPONS[w.id].color);
+        game.spells.auto.map((u) => game.spells.item(u)).filter(Boolean).forEach((it, i) => {
+            const t = TEMPLATES[it.tpl];
+            drawSlot(i * 44, 0, t.icon, it.level, t.max, CORE_INFO[t.core].color);
         });
-        Object.entries(s.passives).forEach(([id, lvl], i) => {
-            drawSlot(i * 44, 44, PASSIVES[id].icon, lvl, PASSIVES[id].max, 0x7be07b);
+        Object.entries(s.picks).forEach(([id, lvl], i) => {
+            drawSlot(i * 44, 44, CARDS[id].icon, lvl, CARDS[id].max, 0x7be07b);
         });
 
         const st = game.stats;
-        this.elements.statsText.position.set(12, 98 + (Object.keys(s.passives).length ? 92 : 48));
+        this.elements.statsText.position.set(12, 98 + (Object.keys(s.picks).length ? 92 : 48));
         this.elements.statsText.text =
             `Damage ×${st.might.toFixed(2)}   Speed ×${st.speed.toFixed(2)}\n` +
             `Crit ${Math.round(st.crit * 100)}%   Armor ${Math.round(st.armor * 100)}%   Regen ${st.regen.toFixed(1)}/s`;
@@ -569,195 +571,6 @@ export class UIManager {
             target.tint = 0xFFFFFF;
             target.flashTimeout = null;
         }, 250);
-    }
-
-    // ------------------------------------------------------------ level up
-    showLevelUp(choices, level, onPick, opts = {}) {
-        const app = this.app;
-        const overlay = new PIXI.Container();
-        overlay.zIndex = 3000;
-        overlay.eventMode = 'static';
-        app.stage.addChild(overlay);
-
-        let selected = 0;
-        let age = 0;
-        let cards = [];
-        let closed = false;
-        const parts = { dim: null, title: null, sub: null, hint: null };
-
-        const pick = (i) => {
-            if (closed || age < 14) return;   // ignore accidental instant clicks
-            closed = true;
-            teardown();
-            onPick(choices[i]);
-        };
-
-        const drawCard = (choice, w, h, compact, isSel) => {
-            const c = new PIXI.Container();
-            const rar = RARITY[choice.rarity];
-            const bg = new PIXI.Graphics();
-            bg.beginFill(0x131826, 0.96);
-            bg.lineStyle(isSel ? 4 : 3, isSel ? 0xffffff : rar.color, 1);
-            bg.drawRoundedRect(-w / 2, -h / 2, w, h, 16);
-            bg.endFill();
-            bg.beginFill(rar.color, isSel ? 0.28 : 0.14);
-            bg.drawRoundedRect(-w / 2 + 3, -h / 2 + 3, w - 6, compact ? h - 6 : 34, 13);
-            bg.endFill();
-            c.addChild(bg);
-
-            const tag = choice.kind === 'heal' ? 'CONSUMABLE'
-                : choice.isNew ? 'NEW' : `LV ${choice.toLevel - 1} → ${choice.toLevel}`;
-            const tagText = new PIXI.Text(`${rar.name.toUpperCase()}  ·  ${tag}${choice.max ? '  ·  MAX' : ''}`, {
-                fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: rar.color, letterSpacing: 1
-            });
-            const iconCircle = new PIXI.Graphics();
-            const ir = compact ? 34 : 46;
-            iconCircle.beginFill(choice.color, 0.22);
-            iconCircle.drawCircle(0, 0, ir);
-            iconCircle.endFill();
-            iconCircle.lineStyle(2, choice.color, 0.9);
-            iconCircle.drawCircle(0, 0, ir);
-            const icon = new PIXI.Text(choice.icon, { fontSize: compact ? 34 : 50 });
-            icon.anchor.set(0.5);
-            iconCircle.addChild(icon);
-
-            const name = new PIXI.Text(choice.name, {
-                fontFamily: FONT, fontSize: compact ? 20 : 24, fontWeight: 'bold', fill: 0xffffff
-            });
-            const textW = compact ? w - ir * 2 - 44 : w - 36;
-            const body = new PIXI.Text(choice.lines.join('\n'), {
-                fontFamily: FONT, fontSize: compact ? 13 : 15, fill: 0xc9d1e6,
-                wordWrap: true, wordWrapWidth: textW, align: compact ? 'left' : 'center', lineHeight: compact ? 17 : 21
-            });
-
-            if (compact) {
-                tagText.position.set(-w / 2 + 16, -h / 2 + 10);
-                iconCircle.position.set(-w / 2 + 16 + ir, 8);
-                name.position.set(-w / 2 + 32 + ir * 2, -h / 2 + 30);
-                body.position.set(-w / 2 + 32 + ir * 2, -h / 2 + 58);
-            } else {
-                tagText.anchor.set(0.5, 0);
-                tagText.position.set(0, -h / 2 + 10);
-                iconCircle.position.set(0, -h / 2 + 100);
-                name.anchor.set(0.5, 0);
-                name.position.set(0, -h / 2 + 164);
-                body.anchor.set(0.5, 0);
-                body.position.set(0, -h / 2 + 204);
-            }
-            c.addChild(tagText, iconCircle, name, body);
-
-            if (!compact) {
-                const key = new PIXI.Text(`[ ${cards.length + 1} ]`, {
-                    fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0x77809a
-                });
-                key.anchor.set(0.5, 1);
-                key.position.set(0, h / 2 - 10);
-                c.addChild(key);
-            }
-            return c;
-        };
-
-        const build = () => {
-            const w = app.screen.width, h = app.screen.height;
-            overlay.removeChildren().forEach((c) => c.destroy({ children: true }));
-            cards = [];
-
-            const dim = new PIXI.Graphics();
-            dim.beginFill(0x05070d, 0.78);
-            dim.drawRect(0, 0, w, h);
-            dim.endFill();
-            dim.eventMode = 'static';
-            overlay.addChild(dim);
-
-            const compact = w < 3 * 250 + 100 || h < 460;
-            const title = new PIXI.Text(opts.title || 'LEVEL UP!', {
-                fontFamily: FONT, fontSize: compact ? 34 : 52, fontWeight: 'bold',
-                fill: ['#fff2a8', '#ffb31a'], stroke: 0x2a1600, strokeThickness: 6,
-                dropShadow: true, dropShadowDistance: 4, dropShadowAlpha: 0.6
-            });
-            title.anchor.set(0.5);
-            const sub = new PIXI.Text(opts.subtitle || `You reached level ${level}  —  choose an upgrade`, {
-                fontFamily: FONT, fontSize: compact ? 14 : 18, fill: 0xd3d9ea
-            });
-            sub.anchor.set(0.5);
-
-            let cw, ch, positions;
-            if (compact) {
-                cw = Math.min(w - 32, 440);
-                ch = clamp((h - 150) / choices.length - 12, 96, 128);
-                const totalH = choices.length * ch + (choices.length - 1) * 12;
-                const top = Math.max(110, (h - totalH) / 2 + 40);
-                positions = choices.map((_, i) => ({ x: w / 2, y: top + ch / 2 + i * (ch + 12) }));
-                title.position.set(w / 2, Math.max(34, top - 62));
-                sub.position.set(w / 2, Math.max(64, top - 30));
-            } else {
-                cw = 250; ch = 330;
-                const gap = 28;
-                const totalW = choices.length * cw + (choices.length - 1) * gap;
-                positions = choices.map((_, i) => ({ x: w / 2 - totalW / 2 + cw / 2 + i * (cw + gap), y: h / 2 + 30 }));
-                title.position.set(w / 2, h / 2 - ch / 2 - 60);
-                sub.position.set(w / 2, h / 2 - ch / 2 - 18);
-            }
-            overlay.addChild(title, sub);
-
-            const hint = new PIXI.Text('Click a card, or use ←/→ and Enter, or press 1-3', {
-                fontFamily: FONT, fontSize: 13, fill: 0x8e97b0
-            });
-            hint.anchor.set(0.5);
-            hint.position.set(w / 2, h - 24);
-            overlay.addChild(hint);
-
-            choices.forEach((choice, i) => {
-                const card = drawCard(choice, cw, ch, compact, i === selected);
-                card.position.set(positions[i].x, positions[i].y);
-                card.baseY = positions[i].y;
-                card.eventMode = 'static';
-                card.cursor = 'pointer';
-                card.on('pointerover', () => { if (selected !== i) { selected = i; setTimeout(build, 0); } });
-                card.on('pointerdown', (e) => { e.stopPropagation(); pick(i); });
-                card.scale.set(i === selected ? 1.06 : 1);
-                overlay.addChild(card);
-                cards.push(card);
-            });
-            parts.compact = compact;
-        };
-
-        const tick = (d) => {
-            age += d;
-            cards.forEach((card, i) => {
-                const a = clamp((age - i * 4) / 12, 0, 1);
-                card.alpha = a;
-                card.y = card.baseY + (1 - a) * 40;
-            });
-        };
-
-        const onKey = (e) => {
-            if (closed) return;
-            const n = choices.length;
-            switch (e.key) {
-                case 'ArrowLeft': case 'ArrowUp': case 'a': case 'w':
-                    selected = (selected - 1 + n) % n; build(); break;
-                case 'ArrowRight': case 'ArrowDown': case 'd': case 's':
-                    selected = (selected + 1) % n; build(); break;
-                case 'Enter': case ' ': pick(selected); e.preventDefault(); break;
-                case '1': case '2': case '3':
-                    if (Number(e.key) <= n) { selected = Number(e.key) - 1; pick(selected); }
-                    break;
-            }
-        };
-
-        const teardown = () => {
-            app.ticker.remove(tick);
-            window.removeEventListener('keydown', onKey);
-            window.removeEventListener('resize', build);
-            app.stage.removeChild(overlay);
-            overlay.destroy({ children: true });
-        };
-
-        build();
-        app.ticker.add(tick);
-        window.addEventListener('keydown', onKey);
-        window.addEventListener('resize', build);
     }
 
     createJoystick() {

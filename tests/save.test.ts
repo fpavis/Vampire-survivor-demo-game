@@ -12,7 +12,11 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
   return {
     version: SAVE_VERSION, generatorVersion: GENERATOR_VERSION, seed: 123456, createdAt: 1, savedAt: 2, playSeconds: 345.5,
     player: { x: 100.5, y: -20 },
-    hero: { level: 7, experience: 33, nextLevel: 120, health: 80, passives: { might: 2 }, weapons: [{ id: 'bolt', level: 3 }, { id: 'nova', level: 1 }] },
+    hero: {
+      level: 7, experience: 33, nextLevel: 120, health: 80, mana: 40, pendingPicks: 1, picks: { might: 2 },
+      spells: [{ uid: 'a', tpl: 'bolt', level: 3, xp: 5, runes: ['swift', null] }, { uid: 'b', tpl: 'dash', level: 1, xp: 0, runes: [null] }],
+      runes: ['piercing'], auto: ['a'], active: ['b', null, null]
+    },
     stats: { kills: 321, score: 4000, bossesDefeated: 1 },
     world: {
       clearedCamps: { '3,4,0': 120 }, defeatedLairs: { '1,1': 300 },
@@ -75,17 +79,30 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[1] = (raw) => ({ ...raw, version: 2, hero: { ...raw.hero, extra: 5 } });
-    MIGRATIONS[2] = (raw) => ({ ...raw, version: 3, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[2] = (raw) => ({ ...raw, version: 3, hero: { ...raw.hero, extra: 5 } });
+    MIGRATIONS[3] = (raw) => ({ ...raw, version: 4, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 3);
-      expect(out.version).toBe(3);
+      const out: any = migrate(sampleSave(), 4);
+      expect(out.version).toBe(4);
       expect(out.hero.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[1];
       delete MIGRATIONS[2];
+      delete MIGRATIONS[3];
     }
+  });
+
+  it('migrates a v1 save: weapons become spells, passives become picks', () => {
+    const v1: any = sampleSave();
+    v1.version = 1;
+    v1.hero = { level: 7, experience: 33, nextLevel: 120, health: 80, passives: { might: 2 }, weapons: [{ id: 'bolt', level: 3 }, { id: 'nova', level: 2 }] };
+    const out = migrate(v1);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.hero.picks).toEqual({ might: 2 });
+    expect(out.hero.spells.map((x) => [x.tpl, x.level])).toEqual([['bolt', 3], ['nova', 2], ['dash', 1]]);
+    expect(out.hero.auto).toHaveLength(2);
+    expect(out.hero.active[0]).toBe(out.hero.spells[2].uid);
+    expect(validateSave(out)).toEqual([]);
   });
 });
 

@@ -1,17 +1,24 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
+
+export interface SpellSave { uid: string; tpl: string; level: number; xp: number; runes: (string | null)[] }
 
 export interface HeroSave {
   level: number;
   experience: number;
   nextLevel: number;
   health: number;
-  passives: Record<string, number>;
-  weapons: { id: string; level: number }[];
+  mana: number;
+  pendingPicks: number;
+  picks: Record<string, number>;   // stat card id -> level
+  spells: SpellSave[];             // every spell item owned
+  runes: string[];                 // loose runes in the inventory
+  auto: string[];                  // uids of equipped auto-cast spells
+  active: (string | null)[];       // uids bound to the active skill slots
 }
 
 export interface PlaceState {
@@ -66,8 +73,10 @@ export function validateSave(data: unknown): string[] {
   if (!isObj(hero)) errs.push('hero missing');
   else {
     for (const k of ['level', 'experience', 'nextLevel', 'health']) if (!isNum(hero[k])) errs.push(`hero.${k} must be a number`);
-    if (!isObj(hero.passives)) errs.push('hero.passives missing');
-    if (!Array.isArray(hero.weapons)) errs.push('hero.weapons missing');
+    if (!isObj(hero.picks)) errs.push('hero.picks missing');
+    if (!Array.isArray(hero.spells)) errs.push('hero.spells missing');
+    if (!Array.isArray(hero.runes)) errs.push('hero.runes missing');
+    if (!Array.isArray(hero.auto) || !Array.isArray(hero.active)) errs.push('hero loadout missing');
   }
   const stats = data.stats;
   if (!isObj(stats) || !isNum(stats.kills) || !isNum(stats.score)) errs.push('stats missing');
