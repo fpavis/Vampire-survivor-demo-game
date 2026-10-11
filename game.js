@@ -7,8 +7,17 @@ import { UIManager } from './ui.js';
 import { World, BIOME } from './world.js';
 import { Effects } from './effects.js';
 import { WeaponSystem, computeStats, generateChoices } from './weapons.js';
+import { OverworldSource } from './terrain.js';
+import { createInterior } from './interiors.js';
+import { Hazards } from './hazards.js';
+import { Critters } from './critters.js';
+import { MapView } from './map.js';
+import { FlowField } from './nav.js';
+import { updateEnemy, SpatialHash } from './ai.js';
+import { GROUP_INFO, POI_INFO, ROSTERS, WARLORDS } from './biomes.js';
 
 const TILT = WORLD_CONFIG.tilt;
+const T = WORLD_CONFIG.tile;
 const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -39,11 +48,24 @@ class Game {
         this.world = new World(this.app, this.groundLayer, this.objectLayer);
         this.fx = new Effects(this);
         this.weapons = new WeaponSystem(this);
+        this.hazards = new Hazards(this);
+        this.critters = new Critters(this);
+        this.map = new MapView();
+        this.hash = new SpatialHash();
+        this.flow = new FlowField(this.world, 40);
+        this.counts = { lunging: 0 };
+        this.uidCounter = 0;
+        this.interactables = [];
+        this.visited = {};
+        this.mode = 'overworld';
+        this.busy = false;
+        this.playerVel = { x: 0, y: 0 };
+        this.ambient = 0;
         this.ui = new UIManager(this.app);
 
         window.addEventListener('resize', () => this.handleResize());
 
-        this.world.reset();
+        this.world.setSource(new OverworldSource(Math.floor(Math.random() * 1e9)));
         this.applyCamera();
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
 
@@ -78,6 +100,21 @@ class Game {
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
         });
+        // cave / ruin darkness: only a pool of light around the player
+        const dark = mk(256, 256, (ctx, w, h) => {
+            const gr = ctx.createRadialGradient(w / 2, h / 2, w * 0.1, w / 2, h / 2, w * 0.5);
+            gr.addColorStop(0, 'rgba(2,2,8,0)');
+            gr.addColorStop(0.55, 'rgba(2,2,8,0.7)');
+            gr.addColorStop(1, 'rgba(2,2,8,1)');
+            ctx.fillStyle = gr;
+            ctx.fillRect(0, 0, w, h);
+        });
+        this.darkSprite = new PIXI.Sprite(dark);
+        this.darkSprite.eventMode = 'none';
+        this.darkSprite.zIndex = 9;
+        this.darkSprite.anchor.set(0.5);
+        this.darkSprite.visible = false;
+        this.app.stage.addChild(this.darkSprite);
         this.vignetteSprite = new PIXI.Sprite(vig);
         this.hazeSprite = new PIXI.Sprite(haze);
         [this.hazeSprite, this.vignetteSprite].forEach((s) => {
@@ -94,6 +131,10 @@ class Game {
         this.vignetteSprite.height = height;
         this.hazeSprite.width = width;
         this.hazeSprite.height = height * 0.7;
+        this.darkSprite.position.set(width / 2, height / 2);
+        const dk = Math.max(width, height) * 1.5;
+        this.darkSprite.width = dk;
+        this.darkSprite.height = dk;
     }
 
     handleResize() {
@@ -215,6 +256,9 @@ class Game {
         window.addEventListener('keydown', (e) => {
             if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
             gameState.keys[e.key] = true;
+            if (!gameState.player || gameState.gameOver) return;
+            if (e.key === 'e' || e.key === 'E') this.interact();
+            else if (e.key === 'm' || e.key === 'M') this.toggleMap();
         });
         window.addEventListener('keyup', (e) => { gameState.keys[e.key] = false; });
         window.addEventListener('blur', () => { gameState.keys = {}; });
@@ -234,33 +278,61 @@ class Game {
     }
 
     // ------------------------------------------------------------ new game
-    clearEntities() {
+    clearWorldEntities() {
         const s = this.state;
         s.enemies.forEach((e) => EntityManager.cleanup(e));
         s.gems.forEach((g) => EntityManager.cleanup(g));
+        s.enemies = [];
+        s.gems = [];
+        this.interactables.forEach((i) => { if (i.sprite) { this.objectLayer.removeChild(i.sprite); i.sprite.destroy(); } });
+        this.interactables = [];
+        this.critters.reset();
+        this.hazards.reset();
+        this.weapons.clearProjectiles();
+        this.fx.clear();
+    }
+
+    clearEntities() {
+        const s = this.state;
+        this.clearWorldEntities();
         if (s.player) EntityManager.cleanup(s.player);
         this.weapons.reset();
-        this.fx.clear();
     }
 
     init() {
         this.clearEntities();
         gameState.reset();
         this.bossCount = 0;
+        this.pendingBoss = false;
         this.frame = 0;
+        this.visited = {};
+        this.mode = 'overworld';
+        this.busy = false;
+        this.zoneGroup = null;
+        this.zoneLabel = '';
 
         this.app.ticker.remove(this.menuTicker);
         if (this.gameTicker) this.app.ticker.remove(this.gameTicker);
 
-        this.world.reset();
+        this.overworld = new OverworldSource(Math.floor(Math.random() * 1e9));
+        this.world.setSource(this.overworld);
+        this.map.reset();
+        this.map.setMode('overworld');
+        this.world.onChunk = (chunk) => this.map.discover(chunk);
+        this.setAmbient(0);
+        this.flow.centerTx = NaN;
+
         const player = EntityManager.createPlayer();
         const spot = this.world.findFree(0, 0, player.radius + 2);
         player.wx = spot.x;
         player.wy = spot.y;
         player.facing = 1;
+        player.slowUntil = 0;
+        player.slowAmt = 0;
         this.objectLayer.addChild(player);
         EntityManager.place(player);
         gameState.player = player;
+        this.playerVel = { x: 0, y: 0 };
 
         this.weapons.acquire('bolt');
         this.stats = computeStats({});
@@ -273,13 +345,28 @@ class Game {
         this.applyCamera();
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
 
+        this.ui.game = this;
+        this.ui.onInteract = () => this.interact();
+        this.ui.onMapToggle = () => this.toggleMap();
         this.ui.setHUDVisible(true);
         this.ui.shown = { hp: -1, xp: -1, level: -1, slots: '' };
         this.ui.displayHp = gameState.health;
         this.ui.displayXp = 0;
+        this.ui.fadeAlpha = 0; this.ui.fadeTarget = 0;
 
         this.gameTicker = (delta) => this.gameLoop(delta);
         this.app.ticker.add(this.gameTicker);
+    }
+
+    setAmbient(amount) {
+        this.ambient = amount;
+        this.darkSprite.visible = amount > 0.01;
+        this.darkSprite.alpha = Math.min(0.95, amount);
+    }
+
+    toggleMap() {
+        if (!this.state.player || this.busy) return;
+        this.ui.toggleMap(this);
     }
 
     // ------------------------------------------------------------ game loop
@@ -291,6 +378,8 @@ class Game {
             this.world.animate(rawDelta);
             return;
         }
+        // keep the fade animation running during scene changes
+        if (this.busy) { this.ui.updateExtras(this, rawDelta); this.world.animate(rawDelta); return; }
         if (s.levelUp || s.paused) return;
 
         const delta = Math.min(rawDelta, 2.5);
@@ -300,7 +389,10 @@ class Game {
         this.movePlayer(delta);
         this.weapons.update(delta);
         this.updateEnemies(delta);
+        this.hazards.update(delta);
+        this.critters.update(delta);
         this.updateGems(delta);
+        this.updateInteraction(delta);
         this.regen(delta);
         this.fx.update(delta);
         this.reap();
@@ -308,6 +400,7 @@ class Game {
         this.updateCamera(delta);
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
         this.world.animate(delta);
+        this.updateZone();
         this.ui.update(this, delta);
 
         if (s.health <= 0) this.showGameOver();
@@ -337,18 +430,28 @@ class Game {
             if (dist > 8) { dx = ddx / dist; dy = ddy / dist; }
         }
 
+        const ox = player.wx, oy = player.wy;
         let moving = false;
         if (dx !== 0 || dy !== 0) {
             const len = Math.hypot(dx, dy);
             if (!analog || len > 1) { dx /= len; dy /= len; }
-            // Screen-space feel: vertical ground speed is boosted to offset the tilt
             const inShallows = this.world.biomeAtPos(player.wx, player.wy) === BIOME.SHALLOW;
-            const speed = this.state.playerSpeed * this.stats.speed * delta * (inShallows ? 0.72 : 1);
+            let mul = inShallows ? 0.72 : 1;
+            if (this.frame < player.slowUntil) mul *= 1 - player.slowAmt;
+            const speed = this.state.playerSpeed * this.stats.speed * delta * mul;
             this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius);
             moving = true;
             if (Math.abs(dx) > 0.15) player.facing = dx > 0 ? 1 : -1;
         }
         player.moving = moving;
+        this.playerVel.x = (player.wx - ox) / Math.max(delta, 0.001);
+        this.playerVel.y = (player.wy - oy) / Math.max(delta, 0.001);
+    }
+
+    slowPlayer(frames, amount) {
+        const p = this.state.player;
+        p.slowUntil = Math.max(p.slowUntil, this.frame + frames);
+        p.slowAmt = amount;
     }
 
     regen(delta) {
@@ -358,8 +461,13 @@ class Game {
         }
     }
 
-    hurtPlayer(amount) {
+    // burst hits (dashes, slams, projectiles) grant a short grace period so stacked attacks stay fair
+    hurtPlayer(amount, burst = false) {
         const s = this.state;
+        if (burst) {
+            if (this.frame < (this.invulnUntil || 0)) return;
+            this.invulnUntil = this.frame + 18;
+        }
         s.health -= amount * (1 - this.stats.armor);
         if (this.frame - (this.lastHurt || -99) > 12) {
             this.lastHurt = this.frame;
@@ -380,59 +488,45 @@ class Game {
     updateEnemies(delta) {
         const s = this.state;
         const p = s.player;
-        this.spawnEnemies(delta);
+        if (this.mode === 'overworld') this.spawnEnemies(delta);
 
+        this.hash.clear();
         const list = s.enemies;
+        for (let i = 0; i < list.length; i++) if (!list[i].dead) this.hash.insert(list[i]);
+        this.counts.lunging = 0;
+        this.flow.update(p.wx, p.wy);
+
         for (let i = 0; i < list.length; i++) {
             const e = list[i];
             if (e.dead) continue;
-            const dx = p.wx - e.wx, dy = p.wy - e.wy;
-            const dist = Math.hypot(dx, dy) || 1;
-
-            if (dist > SPAWN_CONFIG.despawnDistance) { e.dead = true; e.silent = true; continue; }
-
-            let mul = 1 + clamp((dist - 520) / 500, 0, 1.6);
-            if (this.frame < e.slowUntil) mul *= 1 - e.slowAmount;
-            if (!e.flying && this.world.biomeAtPos(e.wx, e.wy) === BIOME.SHALLOW) mul *= 0.8;
-
-            const step = e.speed * mul * delta;
-            const vx = (dx / dist) * step + e.kvx * delta;
-            const vy = (dy / dist) * step + e.kvy * delta;
-            e.kvx *= Math.pow(0.86, delta);
-            e.kvy *= Math.pow(0.86, delta);
-            if (e.flying) { e.wx += vx; e.wy += vy; } else this.world.tryMove(e, vx, vy, e.radius * 0.8);
-            if (Math.abs(dx) > 4) e.facing = dx > 0 ? 1 : -1;
-
-            // soft separation so packs don't stack into a single blob
-            for (let j = i + 1; j < list.length; j++) {
-                const o = list[j];
-                if (o.dead) continue;
-                const ox = o.wx - e.wx, oy = o.wy - e.wy;
-                const min = (e.radius + o.radius) * 0.8;
-                if (Math.abs(ox) > min || Math.abs(oy) > min) continue;
-                const d = Math.hypot(ox, oy) || 0.01;
-                if (d >= min) continue;
-                const push = (min - d) * 0.2 * delta;
-                const nx = ox / d * push, ny = oy / d * push;
-                if (e.flying) { e.wx -= nx; e.wy -= ny; } else this.world.tryMove(e, -nx, -ny, e.radius * 0.8);
-                if (o.flying) { o.wx += nx; o.wy += ny; } else this.world.tryMove(o, nx, ny, o.radius * 0.8);
+            if (this.mode === 'overworld' && !e.isBoss && Math.hypot(p.wx - e.wx, p.wy - e.wy) > SPAWN_CONFIG.despawnDistance) {
+                e.dead = true; e.silent = true;
+                continue;
             }
+            updateEnemy(this, e, delta);
+        }
 
-            // contact damage
-            const touch = e.radius + p.radius;
-            if (dist < touch) this.hurtPlayer(e.damage * (delta / 60));
+        // clearing every monster of a place pays out once
+        if (this.mode === 'interior' && this.interiorState && !this.interiorState.cleared && this.interiorHostiles > 0) {
+            if (!list.some((e) => !e.dead && !e.minion)) {
+                this.interiorState.cleared = true;
+                this.ui.banner('PLACE CLEARED!', 0xffd84a);
+                this.dropGem(p.wx + 30, p.wy + 20, 0, 'heart');
+                for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + this.state.level * 2);
+            }
         }
     }
 
-    pickEnemyType(level) {
-        const options = Object.entries(ENEMY_TYPES).filter(([, t]) => !t.boss && t.minLevel <= level);
-        const total = options.reduce((sum, [, t]) => sum + t.weight, 0);
+    pickFromRoster(group, level) {
+        const roster = ROSTERS[group] || ROSTERS.field;
+        const options = roster.filter((r) => r.level <= level);
+        const total = options.reduce((sum, r) => sum + r.weight, 0);
         let roll = Math.random() * total;
-        for (const [key, t] of options) {
-            roll -= t.weight;
-            if (roll <= 0) return key;
+        for (const r of options) {
+            roll -= r.weight;
+            if (roll <= 0) return r;
         }
-        return options[0][0];
+        return options[0];
     }
 
     spawnPoint(flying) {
@@ -457,6 +551,29 @@ class Game {
         e.experienceValue = Math.max(1, Math.round(type.experience * (1 + LEVEL_SCALING.experienceScale * ls)));
     }
 
+    makeEnemy(key, x, y, opts = {}) {
+        const type = ENEMY_TYPES[key];
+        const e = EntityManager.createEnemy(key, x, y);
+        e.uid = ++this.uidCounter;
+        e.bossName = type.name.toUpperCase();
+        this.scaleEnemy(e, type);
+        const eliteChance = opts.noElite || type.boss ? 0 : (opts.elite ? 1 : (this.state.level >= 3 ? Math.min(0.2, SPAWN_CONFIG.eliteChance + 0.004 * this.state.level) : 0));
+        if (Math.random() < eliteChance) {
+            const m = SPAWN_CONFIG.eliteModifiers;
+            EntityManager.markElite(e);
+            e.health = e.maxHealth = e.health * m.health;
+            e.experienceValue = Math.round(e.experienceValue * m.experience);
+            e.speed *= m.speed;
+            e.damage *= m.damage;
+        }
+        if (opts.dormant) { e.dormant = true; e.aggro = opts.aggro || 420; }
+        if (opts.minion) e.minion = true;
+        this.objectLayer.addChild(e);
+        EntityManager.place(e);
+        this.state.enemies.push(e);
+        return e;
+    }
+
     spawnEnemies(delta) {
         const s = this.state;
         const max = Math.min(SPAWN_CONFIG.maxCap, SPAWN_CONFIG.baseMax + SPAWN_CONFIG.maxPerLevel * s.level);
@@ -464,53 +581,61 @@ class Game {
         const rate = SPAWN_CONFIG.baseRate * (1 + SPAWN_CONFIG.rateGrowth * (s.level - 1)) * (1 + s.time / 500);
         if (Math.random() >= rate * delta) return;
 
-        const group = s.level >= 3 && Math.random() < 0.12 ? 2 + Math.floor(Math.random() * 3) : 1;
-        const key = this.pickEnemyType(s.level);
-        const type = ENEMY_TYPES[key];
-        const origin = this.spawnPoint(type.flying);
+        // the region at the spawn point decides what comes out of the dark
+        const origin = this.spawnPoint(true);
         if (!origin) return;
-        for (let i = 0; i < group && s.enemies.length < max; i++) {
-            const x = origin.x + (i ? (Math.random() - 0.5) * 90 : 0);
-            const y = origin.y + (i ? (Math.random() - 0.5) * 90 : 0);
+        const group = this.world.groupAtPos(origin.x, origin.y);
+        const entry = this.pickFromRoster(group, s.level);
+        const type = ENEMY_TYPES[entry.type];
+        if (!type.flying && this.world.blocked(origin.x, origin.y, 24)) {
+            const f = this.spawnPoint(false);
+            if (!f) return;
+            origin.x = f.x; origin.y = f.y;
+        }
+
+        let count = 1;
+        if (entry.group) {
+            const [lo, hi] = entry.group;
+            count = s.level >= 4 ? lo + Math.floor(Math.random() * (hi - lo + 1)) : lo;
+        } else if (s.level >= 3 && Math.random() < 0.1) count = 2;
+        for (let i = 0; i < count && s.enemies.length < max; i++) {
+            const x = origin.x + (i ? (Math.random() - 0.5) * 100 : 0);
+            const y = origin.y + (i ? (Math.random() - 0.5) * 100 : 0);
             if (!type.flying && this.world.blocked(x, y, type.radius)) continue;
-            const e = EntityManager.createEnemy(key, x, y);
-            this.scaleEnemy(e, type);
-            const eliteChance = s.level >= 3 ? Math.min(0.2, SPAWN_CONFIG.eliteChance + 0.004 * s.level) : 0;
-            if (Math.random() < eliteChance) {
-                const m = SPAWN_CONFIG.eliteModifiers;
-                EntityManager.markElite(e);
-                e.health = e.maxHealth = e.health * m.health;
-                e.experienceValue = Math.round(e.experienceValue * m.experience);
-                e.speed *= m.speed;
-                e.damage *= m.damage;
-            }
-            this.objectLayer.addChild(e);
-            EntityManager.place(e);
-            s.enemies.push(e);
+            this.makeEnemy(entry.type, x, y, { noElite: count > 1 && i > 0 });
+        }
+    }
+
+    spawnMinions(key, count, x, y) {
+        const type = ENEMY_TYPES[key];
+        for (let i = 0; i < count; i++) {
+            const a = (i / count) * Math.PI * 2 + Math.random();
+            const r = 60 + Math.random() * 50;
+            let px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+            if (!type.flying && this.world.blocked(px, py, type.radius)) { const f = this.world.findFree(px, py, type.radius); px = f.x; py = f.y; }
+            const m = this.makeEnemy(key, px, py, { noElite: true, minion: true });
+            m.experienceValue = Math.max(1, Math.floor(m.experienceValue * 0.5));
         }
     }
 
     spawnBoss() {
         const s = this.state;
         const p = s.player;
-        const type = ENEMY_TYPES.BOSS;
+        const group = this.world.groupAtPos(p.wx, p.wy);
+        const key = WARLORDS[group] || WARLORDS.field;
+        const type = ENEMY_TYPES[key];
         const pt = this.spawnPoint(false) || { x: p.wx + 700, y: p.wy };
-        const e = EntityManager.createEnemy('BOSS', pt.x, pt.y);
-        this.scaleEnemy(e, type);
+        const e = this.makeEnemy(key, pt.x, pt.y, { noElite: true });
         e.health = e.maxHealth = e.health * (1 + this.bossCount * 0.6);
-        e.isBoss = true;
         this.bossCount++;
-        this.objectLayer.addChild(e);
-        EntityManager.place(e);
-        s.enemies.push(e);
-        this.ui.banner('⚠  A WARLORD APPROACHES  ⚠', 0xff5a5a);
+        this.ui.banner(`⚠  ${type.name.toUpperCase()} APPROACHES  ⚠`, 0xff5a5a);
         this.fx.addShake(6);
     }
 
     damageEnemy(e, amount, opts = {}) {
-        if (e.dead) return;
+        if (e.dead || e.untargetable) return;
         const crit = !opts.noCrit && Math.random() < this.stats.crit;
-        const dmg = amount * (crit ? 2 : 1);
+        const dmg = amount * (crit ? 2 : 1) * (1 - (e.armor || 0));
         e.health -= dmg;
         e.hitFlash = 6;
         this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
@@ -518,10 +643,12 @@ class Game {
         const k = opts.knock;
         if (k) {
             const len = Math.hypot(k.x, k.y) || 1;
-            const resist = e.type === 'BOSS' ? 0.25 : e.type === 'TANK' ? 0.6 : 1;
+            const resist = e.isBoss ? 0.2 : e.radius > 22 ? 0.55 : 1;
             e.kvx += (k.x / len) * k.force * resist;
             e.kvy += (k.y / len) * k.force * resist;
         }
+        // a sleeping monster wakes up when hurt
+        if (e.dormant) e.dormant = false;
         if (e.health <= 0) this.killEnemy(e);
     }
 
@@ -529,10 +656,12 @@ class Game {
         if (e.dead) return;
         e.dead = true;
         const s = this.state;
+        const type = ENEMY_TYPES[e.type];
         s.kills++;
         s.score += e.experienceValue * 2;
-        const type = ENEMY_TYPES[e.type];
-        this.fx.death(e.wx, e.wy, type.color, !!e.isBoss);
+        this.fx.death(e.wx, e.wy, type.color, e.isBoss);
+
+        if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy);
 
         if (e.isBoss) {
             s.bossesDefeated++;
@@ -542,7 +671,7 @@ class Game {
             this.dropGem(e.wx, e.wy + 20, 0, 'heart');
             this.dropGem(e.wx + 30, e.wy, 0, 'heart');
             this.fx.addShake(12);
-            this.ui.banner('WARLORD DEFEATED!', 0xffd84a);
+            this.ui.banner(`${type.name.toUpperCase()} DEFEATED!`, 0xffd84a);
         } else {
             this.dropGem(e.wx, e.wy, e.experienceValue);
             if (Math.random() < (e.elite ? 0.12 : 0.025)) this.dropGem(e.wx + 14, e.wy + 6, 0, 'heart');
@@ -551,7 +680,6 @@ class Game {
 
     dropGem(x, y, value, kind = 'gem') {
         const s = this.state;
-        // keep the number of gems bounded: the oldest one is absorbed immediately
         if (s.gems.length > 260) {
             const old = s.gems.shift();
             if (old.kind === 'gem') this.gainExp(old.value);
@@ -571,6 +699,211 @@ class Game {
             if (!e.dead) return true;
             EntityManager.cleanup(e);
             return false;
+        });
+    }
+
+    // ------------------------------------------------- zones & places of interest
+    updateZone() {
+        if ((this.frame | 0) % 20 !== 0) return;
+        if (this.mode !== 'overworld') return;
+        const p = this.state.player;
+        const group = this.world.groupAtPos(p.wx, p.wy);
+        if (group !== this.zoneGroup) {
+            this.zoneGroup = group;
+            const info = GROUP_INFO[group];
+            this.zoneLabel = `${info.icon} ${info.name}`;
+            if (this.frame > 30) this.ui.showZone(info.name, info.icon, info.color);
+        }
+    }
+
+    updateInteraction() {
+        const p = this.state.player;
+        let target = null;
+
+        if (this.mode === 'overworld') {
+            const poi = this.world.nearestPoi(p.wx, p.wy, 72);
+            if (poi) target = { kind: 'enter', poi, text: `[E]  Enter ${poi.name}` };
+        } else {
+            let best = Infinity;
+            const consider = (t, x, y, r) => {
+                const d = Math.hypot(p.wx - x, p.wy - y);
+                if (d < r && d < best) { best = d; target = t; }
+            };
+            for (const it of this.interactables) {
+                if (it.kind === 'chest' && !it.opened) consider({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64);
+            }
+            const src = this.interior;
+            if (src.fountain) consider({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96);
+            if (src.altar) consider({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80);
+            consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
+        }
+        this.target = target;
+        this.ui.setPrompt(target ? target.text : null);
+    }
+
+    fountainReady() {
+        return this.frame - (this.interiorState.fountainAt || -99999) > 1500;
+    }
+
+    interact() {
+        const t = this.target;
+        const s = this.state;
+        if (!t || this.busy || s.levelUp || s.paused || s.gameOver) return;
+        switch (t.kind) {
+            case 'enter': this.enterPlace(t.poi); break;
+            case 'exit': this.exitPlace(); break;
+            case 'chest': this.openChest(t.it); break;
+            case 'fountain':
+                if (this.fountainReady()) {
+                    this.interiorState.fountainAt = this.frame;
+                    s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.6);
+                    const f = this.interior.fountain;
+                    this.fx.popup(s.player.wx, s.player.wy, 'Refreshed!', 0x7ad0ff, 20, 70);
+                    this.fx.burst(f.x, f.y, 40, 0x9adfff, 26, 2.6, { size: 0.7, life: 34, up: 3.4 });
+                }
+                break;
+            case 'altar':
+                if (!this.interiorState.altarUsed) {
+                    this.interiorState.altarUsed = true;
+                    this.fx.burst(this.interior.altar.x, this.interior.altar.y, 50, 0xc8a0ff, 30, 2.6, { size: 0.8, life: 40, up: 3.6 });
+                    this.openTreasure(1, 'BLESSING', 'The altar grants you a gift');
+                }
+                break;
+        }
+    }
+
+    enterPlace(poi) {
+        if (this.busy) return;
+        this.busy = true;
+        this.state.pointerDown = false;
+        this.state.keys = {};
+        this.ui.fade(1, 0.09, () => {
+            const s = this.state;
+            const p = s.player;
+            // gems on the ground are banked so nothing is lost
+            let banked = 0;
+            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; });
+            this.clearWorldEntities();
+            s.experience += banked * this.stats.growth;
+
+            const src = createInterior(poi);
+            this.interior = src;
+            this.interiorPoi = poi;
+            this.interiorName = poi.name;
+            this.visited[poi.id] = this.visited[poi.id] || { opened: [], cleared: false, altarUsed: false };
+            this.interiorState = this.visited[poi.id];
+
+            this.world.setSource(src);
+            this.world.onChunk = (c) => this.map.discover(c);
+            this.map.setMode('interior');
+            this.mode = 'interior';
+            this.flow.centerTx = NaN;
+            this.setAmbient(src.ambient);
+
+            const spot = this.world.findFree(src.start.x, src.start.y, p.radius + 2);
+            p.wx = spot.x; p.wy = spot.y;
+            this.cam.x = p.wx; this.cam.y = p.wy;
+            this.populateInterior(src, poi);
+            this.zoneLabel = `${POI_INFO[poi.type].icon} ${poi.name}`;
+            this.ui.showZone(poi.name, POI_INFO[poi.type].icon, GROUP_INFO[poi.type].color);
+
+            this.applyCamera();
+            this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+            this.ui.fade(0, 0.06, () => { this.busy = false; this.checkLevelUp(); });
+        });
+    }
+
+    populateInterior(src, poi) {
+        const st = this.interiorState;
+        this.interiorHostiles = 0;
+        if (!st.cleared) {
+            src.spawns.forEach((sp) => {
+                const type = ENEMY_TYPES[sp.type];
+                let x = sp.x, y = sp.y;
+                if (!type.flying && this.world.blocked(x, y, type.radius)) { const f = this.world.findFree(x, y, type.radius); x = f.x; y = f.y; }
+                this.makeEnemy(sp.type, x, y, { dormant: true, aggro: 380, elite: !!sp.elite });
+                this.interiorHostiles++;
+            });
+        }
+        src.chests.forEach((c, i) => {
+            const set = this.world.decorTextures.chest;
+            const opened = st.opened.includes(i);
+            const sprite = new PIXI.Sprite(set[opened ? 1 : 0].texture);
+            sprite.anchor.set(0.5, set[0].anchorY);
+            sprite.position.set(c.x, c.y * TILT);
+            sprite.zIndex = c.y;
+            if (c.big) sprite.scale.set(1.35);
+            this.objectLayer.addChild(sprite);
+            this.interactables.push({ kind: 'chest', x: c.x, y: c.y, idx: i, big: !!c.big, opened, sprite });
+            if (!opened) this.map.markers.push({ tx: c.x / T, ty: c.y / T, icon: '🎁' });
+        });
+        this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: '🚪' });
+        src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
+    }
+
+    openChest(it) {
+        if (it.opened) return;
+        it.opened = true;
+        this.interiorState.opened.push(it.idx);
+        const set = this.world.decorTextures.chest;
+        it.sprite.texture = set[1].texture;
+        this.fx.burst(it.x, it.y, 28, 0xffd84a, 30, 3.2, { size: 0.9, life: 40, up: 4.2 });
+        this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== '🎁');
+        this.map.dirty = true;
+        this.openTreasure(it.big ? 2 : 1, 'TREASURE!', it.big ? 'A great hoard! Pick two rewards' : 'Choose a reward');
+    }
+
+    // free upgrade picks (chests and altars) -- they do not cost a level
+    openTreasure(picks, title, subtitle) {
+        const s = this.state;
+        s.levelUp = true;
+        s.pointerDown = false;
+        s.keys = {};
+        const offer = (n) => {
+            const choices = generateChoices(this, 3, { rarityBoost: picks > 1 ? 2 : 1 });
+            this.ui.showLevelUp(choices, 0, (choice) => {
+                this.applyUpgrade(choice);
+                if (n > 1) offer(n - 1);
+                else { s.levelUp = false; this.ui.shown.slots = ''; this.checkLevelUp(); }
+            }, { title, subtitle: n > 1 ? subtitle : (picks > 1 ? 'Pick your second reward' : subtitle) });
+        };
+        offer(picks);
+    }
+
+    exitPlace() {
+        if (this.busy) return;
+        this.busy = true;
+        this.state.pointerDown = false;
+        this.state.keys = {};
+        this.ui.fade(1, 0.09, () => {
+            const s = this.state;
+            const p = s.player;
+            let banked = 0;
+            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; });
+            this.clearWorldEntities();
+            s.experience += banked * this.stats.growth;
+
+            const poi = this.interiorPoi;
+            this.world.setSource(this.overworld);
+            this.world.onChunk = (c) => this.map.discover(c);
+            this.map.setMode('overworld');
+            this.mode = 'overworld';
+            this.interior = null;
+            this.flow.centerTx = NaN;
+            this.setAmbient(0);
+            this.zoneGroup = null;
+
+            const spot = this.world.findFree(poi.ex, poi.ey + 34, p.radius + 2);
+            p.wx = spot.x; p.wy = spot.y;
+            this.cam.x = p.wx; this.cam.y = p.wy;
+            this.applyCamera();
+            this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+            this.map.dirty = true;
+            this.ui.fade(0, 0.06, () => {
+                this.busy = false;
+                if (this.pendingBoss) { this.pendingBoss = false; this.spawnBoss(); }
+                this.checkLevelUp();
+            });
         });
     }
 
@@ -626,7 +959,7 @@ class Game {
         this.ui.showLevelUp(choices, s.level + 1, (choice) => this.applyChoice(choice));
     }
 
-    applyChoice(choice) {
+    applyUpgrade(choice) {
         const s = this.state;
         switch (choice.kind) {
             case 'weapon':
@@ -640,6 +973,12 @@ class Game {
                 s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.5);
                 break;
         }
+        this.ui.shown.slots = '';
+    }
+
+    applyChoice(choice) {
+        const s = this.state;
+        this.applyUpgrade(choice);
 
         s.experience = Math.max(0, s.experience - s.nextLevel);
         s.level++;
@@ -647,18 +986,20 @@ class Game {
         s.levelUp = false;
         s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.1);
         this.ui.displayXp = s.experience;
-        this.ui.shown.slots = '';
 
         // Level-up shockwave gives breathing room
         const p = s.player;
         for (const e of s.enemies) {
             const dx = e.wx - p.wx, dy = e.wy - p.wy;
-            if (dx * dx + dy * dy < 260 * 260) e.kvx += (dx / (Math.hypot(dx, dy) || 1)) * 10, e.kvy += (dy / (Math.hypot(dx, dy) || 1)) * 10;
+            const d = Math.hypot(dx, dy) || 1;
+            if (d < 260) { e.kvx += (dx / d) * 10; e.kvy += (dy / d) * 10; }
         }
         this.fx.burst(p.wx, p.wy, 10, 0xffe27a, 30, 5, { size: 0.9, life: 34, up: 3 });
         this.fx.addShake(5);
 
-        if (s.level % SPAWN_CONFIG.bossEvery === 0) this.spawnBoss();
+        if (s.level % SPAWN_CONFIG.bossEvery === 0) {
+            if (this.mode === 'overworld') this.spawnBoss(); else this.pendingBoss = true;
+        }
         this.checkLevelUp();
     }
 
