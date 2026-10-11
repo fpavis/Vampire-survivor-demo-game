@@ -120,7 +120,8 @@ function weaponLines(id, from, to) {
     return lines;
 }
 
-export function generateChoices(game, count = 3) {
+export function generateChoices(game, count = 3, opts = {}) {
+    const boost = opts.rarityBoost || 0;
     const owned = game.weapons.list;
     const passives = game.state.passives;
     const pool = [];
@@ -135,7 +136,7 @@ export function generateChoices(game, count = 3) {
             card: {
                 kind: 'weapon', id, toLevel: cur + 1, isNew: cur === 0,
                 name: def.name, icon: def.icon, color: def.color,
-                rarity: WEAPON_RARITY[cur], max: cur + 1 === def.max,
+                rarity: Math.min(3, WEAPON_RARITY[cur] + boost), max: cur + 1 === def.max,
                 lines: weaponLines(id, cur, cur + 1)
             }
         });
@@ -152,7 +153,7 @@ export function generateChoices(game, count = 3) {
             card: {
                 kind: 'passive', id, toLevel: cur + 1, isNew: cur === 0,
                 name: def.name, icon: def.icon, color: 0x7be07b,
-                rarity: PASSIVE_RARITY[cur], max: cur + 1 === def.max,
+                rarity: Math.min(3, PASSIVE_RARITY[cur] + boost), max: cur + 1 === def.max,
                 lines: cur === 0
                     ? [def.desc, `${def.label}: ${def.fmt(def.value(1))}`]
                     : [`${def.label}: ${def.fmt(def.value(cur))} → ${def.fmt(def.value(cur + 1))}`]
@@ -216,6 +217,17 @@ export class WeaponSystem {
         this.orbitAngle = 0;
     }
 
+    // drop in-flight attacks (used when moving between the overworld and a place)
+    clearProjectiles() {
+        this.bullets.forEach((b) => EntityManager.cleanup(b.sprite));
+        this.rings.forEach((r) => r.g.destroy());
+        this.meteors.forEach((m) => { m.tele.destroy(); EntityManager.cleanup(m.rock); });
+        this.bolts.forEach((b) => b.g.destroy());
+        this.decals.forEach((d) => d.g.destroy());
+        this.blades.forEach((b) => EntityManager.cleanup(b));
+        this.bullets = []; this.rings = []; this.meteors = []; this.bolts = []; this.decals = []; this.blades = [];
+    }
+
     level(id) {
         const w = this.list.find((x) => x.id === id);
         return w ? w.level : 0;
@@ -256,7 +268,7 @@ export class WeaponSystem {
         const out = [];
         const r2 = range * range;
         for (const e of this.game.state.enemies) {
-            if (e.dead) continue;
+            if ((e.dead || e.untargetable)) continue;
             const dx = e.wx - x, dy = e.wy - y;
             const d = dx * dx + dy * dy;
             if (d <= r2) out.push({ e, d });
@@ -303,7 +315,7 @@ export class WeaponSystem {
             if (!remove) {
                 for (let j = 0; j < enemies.length; j++) {
                     const e = enemies[j];
-                    if (e.dead || b.hits.has(e)) continue;
+                    if ((e.dead || e.untargetable) || b.hits.has(e)) continue;
                     const dx = e.wx - sp.wx, dy = e.wy - sp.wy;
                     const rr = e.radius + 8;
                     if (dx * dx + dy * dy < rr * rr) {
@@ -343,7 +355,7 @@ export class WeaponSystem {
             // blade points along its direction of travel (screen space)
             b.blade.rotation = Math.atan2(Math.cos(a) * TILT, -Math.sin(a)) + Math.PI / 2 * 0 + Math.PI / 2;
             for (const e of game.state.enemies) {
-                if (e.dead || game.frame - e.lastOrbit < 24) continue;
+                if ((e.dead || e.untargetable) || game.frame - e.lastOrbit < 24) continue;
                 const dx = e.wx - b.wx, dy = e.wy - b.wy;
                 const rr = e.radius + 14;
                 if (dx * dx + dy * dy < rr * rr) {
@@ -376,7 +388,7 @@ export class WeaponSystem {
         for (let j = 0; j < s.jumps; j++) {
             let best = null, bd = 240 * 240;
             for (const e of game.state.enemies) {
-                if (e.dead || hit.has(e)) continue;
+                if ((e.dead || e.untargetable) || hit.has(e)) continue;
                 const dx = e.wx - cur.wx, dy = e.wy - cur.wy;
                 const d = dx * dx + dy * dy;
                 if (d < bd) { bd = d; best = e; }
@@ -457,7 +469,7 @@ export class WeaponSystem {
             if (r.r < r.maxR) {
                 r.r = Math.min(r.maxR, r.r + (6 + (r.maxR - r.r) * 0.06) * delta);
                 for (const e of game.state.enemies) {
-                    if (e.dead || r.hit.has(e)) continue;
+                    if ((e.dead || e.untargetable) || r.hit.has(e)) continue;
                     const dx = e.wx - r.x, dy = e.wy - r.y;
                     const rr = r.r + e.radius;
                     if (dx * dx + dy * dy <= rr * rr) {
@@ -546,7 +558,7 @@ export class WeaponSystem {
 
             if (m.t >= m.delay) {
                 for (const e of game.state.enemies) {
-                    if (e.dead) continue;
+                    if ((e.dead || e.untargetable)) continue;
                     const dx = e.wx - m.x, dy = e.wy - m.y;
                     const rr = m.radius + e.radius;
                     if (dx * dx + dy * dy <= rr * rr) {

@@ -1,4 +1,5 @@
 import { ENEMY_TYPES, WORLD_CONFIG } from './config.js';
+import { ENEMY_ART } from './enemyArt.js';
 
 const TILT = WORLD_CONFIG.tilt;
 
@@ -160,38 +161,38 @@ export class EntityManager {
         const container = new PIXI.Container();
         const r = type.radius;
         const body = new PIXI.Container();
-        let height;
-
-        switch (typeKey) {
-            case 'FAST': height = 30; EntityManager.drawBat(body, type); break;
-            case 'TANK': height = r * 2.6; EntityManager.drawGolem(body, type, false); break;
-            case 'BOSS': height = r * 2.9; EntityManager.drawGolem(body, type, true); break;
-            default: height = r * 2; EntityManager.drawSlime(body, type); break;
-        }
+        const art = ENEMY_ART[type.art](body, type, r);
+        const height = art.height;
 
         const shadow = makeShadow(r * 1.05, r * 0.42, 0.38);
         const marker = new PIXI.Graphics();
-        container.addChild(shadow, marker, body);
-        const hp = drawHealthBar(container, Math.max(26, r * 1.8), -height - (typeKey === 'FAST' ? 26 : 10));
+        const tele = new PIXI.Graphics();
+        container.addChild(shadow, marker, tele, body);
+        const hp = drawHealthBar(container, Math.max(26, r * 1.8), -height - 10);
 
         Object.assign(container, {
             type: typeKey,
             wx: x, wy: y, z: 0,
             radius: r,
-            body, shadow, marker,
+            body, shadow, marker, tele,
             hpBar: hp,
+            art,
             health: type.health,
             maxHealth: type.health,
             speed: type.speed,
             damage: type.damage,
+            armor: type.armor || 0,
             experienceValue: type.experience,
             flying: type.flying,
+            phasing: !!type.phase,
+            isBoss: !!type.boss,
             kvx: 0, kvy: 0,
             slowUntil: 0, slowAmount: 0,
             hitFlash: 0,
             lastOrbit: 0,
             elite: false,
             dead: false,
+            untargetable: false,
             phase: Math.random() * 10,
             facing: 1,
             baseHeight: height
@@ -207,171 +208,50 @@ export class EntityManager {
         const halo = glowCircle(enemy.radius * 1.1, 0xffd84a, 0.16);
         halo.y = -enemy.baseHeight * 0.5;
         enemy.body.addChildAt(halo, 0);
-        enemy.body.scale.set(1.12);
     }
 
-    static drawSlime(body, type) {
-        const r = type.radius;
-        const c = type.color;
-        const g = new PIXI.Graphics();
-        g.beginFill(shade(c, 0.6));
-        g.drawEllipse(0, -r * 0.62, r * 1.05, r * 0.78);
-        g.endFill();
-        g.beginFill(c);
-        g.drawEllipse(-1, -r * 0.72, r * 0.98, r * 0.7);
-        g.endFill();
-        g.beginFill(shade(c, 1.45), 0.85);
-        g.drawEllipse(-r * 0.38, -r * 1.1, r * 0.34, r * 0.2);
-        g.endFill();
-        // eyes
-        g.beginFill(0xffffff);
-        g.drawCircle(-r * 0.32, -r * 0.7, r * 0.22);
-        g.drawCircle(r * 0.32, -r * 0.7, r * 0.22);
-        g.endFill();
-        g.beginFill(0x162016);
-        g.drawCircle(-r * 0.27, -r * 0.68, r * 0.11);
-        g.drawCircle(r * 0.37, -r * 0.68, r * 0.11);
-        g.endFill();
-        g.lineStyle(2, 0x162016);
-        g.moveTo(-r * 0.2, -r * 0.34);
-        g.quadraticCurveTo(0, -r * 0.2, r * 0.2, -r * 0.34);
-        body.addChild(g);
-        body.pivot.set(0, 0);
-    }
-
-    static drawBat(body, type) {
-        const c = type.color;
-        const hover = new PIXI.Container();
-        hover.y = -26;
-        const wingL = new PIXI.Graphics();
-        const wingR = new PIXI.Graphics();
-        [wingL, wingR].forEach((w, i) => {
-            const s = i === 0 ? -1 : 1;
-            w.beginFill(shade(c, 0.55));
-            w.drawPolygon([0, 0, s * 26, -14, s * 20, -2, s * 30, 4, s * 14, 8, 0, 6]);
-            w.endFill();
-            w.beginFill(shade(c, 0.85), 0.8);
-            w.drawPolygon([0, 0, s * 20, -10, s * 14, 0, s * 8, 4]);
-            w.endFill();
-        });
-        const torso = new PIXI.Graphics();
-        torso.beginFill(shade(c, 0.7));
-        torso.drawEllipse(0, 2, 9, 11);
-        torso.endFill();
-        torso.beginFill(c);
-        torso.drawCircle(0, -6, 8);
-        torso.endFill();
-        torso.beginFill(shade(c, 0.6));
-        torso.drawPolygon([-7, -10, -5, -20, -1, -12]);
-        torso.drawPolygon([7, -10, 5, -20, 1, -12]);
-        torso.endFill();
-        torso.beginFill(0xff4040);
-        torso.drawCircle(-3, -7, 2);
-        torso.drawCircle(3, -7, 2);
-        torso.endFill();
-        hover.addChild(wingL, wingR, torso);
-        body.addChild(hover);
-        body.hover = hover;
-        body.wingL = wingL;
-        body.wingR = wingR;
-    }
-
-    static drawGolem(body, type, boss) {
-        const r = type.radius;
-        const c = type.color;
-        const g = new PIXI.Graphics();
-        const s = r / 26;
-        // legs
-        g.beginFill(shade(c, 0.55));
-        g.drawRect(-16 * s, -14 * s, 12 * s, 14 * s);
-        g.drawRect(4 * s, -14 * s, 12 * s, 14 * s);
-        g.endFill();
-        // arms
-        g.beginFill(shade(c, 0.7));
-        g.drawRoundedRect(-33 * s, -52 * s, 12 * s, 34 * s, 5);
-        g.drawRoundedRect(21 * s, -52 * s, 12 * s, 34 * s, 5);
-        g.endFill();
-        // torso
-        g.beginFill(shade(c, 0.75));
-        g.drawRoundedRect(-24 * s, -58 * s, 48 * s, 48 * s, 8);
-        g.endFill();
-        g.beginFill(c);
-        g.drawRoundedRect(-24 * s, -58 * s, 34 * s, 46 * s, 8);
-        g.endFill();
-        g.beginFill(shade(c, 1.3), 0.7);
-        g.drawRoundedRect(-20 * s, -55 * s, 20 * s, 8 * s, 4);
-        g.endFill();
-        // cracks
-        g.lineStyle(2, shade(c, 0.4));
-        g.moveTo(-6 * s, -50 * s); g.lineTo(2 * s, -38 * s); g.lineTo(-3 * s, -28 * s);
-        g.lineStyle(0);
-        // head
-        g.beginFill(shade(c, 0.85));
-        g.drawRoundedRect(-13 * s, -76 * s, 26 * s, 20 * s, 5);
-        g.endFill();
-        const eye = boss ? 0xff3a3a : 0xffa030;
-        g.beginFill(eye);
-        g.drawRect(-9 * s, -70 * s, 6 * s, 5 * s);
-        g.drawRect(3 * s, -70 * s, 6 * s, 5 * s);
-        g.endFill();
-        if (boss) {
-            g.beginFill(0xf1e3c2);
-            g.drawPolygon([-13 * s, -74 * s, -22 * s, -96 * s, -6 * s, -78 * s]);
-            g.drawPolygon([13 * s, -74 * s, 22 * s, -96 * s, 6 * s, -78 * s]);
-            g.endFill();
-            g.beginFill(0xffc233);
-            g.drawPolygon([-11 * s, -76 * s, -8 * s, -88 * s, -3 * s, -78 * s, 0, -90 * s, 3 * s, -78 * s, 8 * s, -88 * s, 11 * s, -76 * s]);
-            g.endFill();
-        }
-        body.addChild(g);
-        const glow = glowCircle(r * 0.5, eye, 0.18);
-        glow.y = -67 * s;
-        body.addChild(glow);
-    }
-
-    static animateEnemy(e, t) {
+    static animateEnemy(e) {
         e.phase += 0.12;
-        const b = e.body;
-        const base = e.elite ? 1.12 : 1;
-        switch (e.type) {
-            case 'FAST': {
-                const flap = Math.sin(e.phase * 2.6);
-                b.wingL.scale.y = 0.55 + Math.abs(flap) * 0.6;
-                b.wingR.scale.y = b.wingL.scale.y;
-                b.wingL.rotation = flap * 0.35;
-                b.wingR.rotation = -flap * 0.35;
-                b.hover.y = -26 + Math.sin(e.phase) * 3;
-                e.shadow.scale.set(1 - Math.sin(e.phase) * 0.05);
-                break;
-            }
-            case 'TANK':
-            case 'BOSS':
-                b.rotation = Math.sin(e.phase * 0.7) * 0.04;
-                b.y = Math.abs(Math.sin(e.phase * 0.7)) * -2;
-                break;
-            default: {
-                const sq = Math.sin(e.phase * 1.3);
-                b.scale.set(base * (1 + sq * 0.07), base * (1 - sq * 0.09));
-                break;
-            }
-        }
-        if (e.type !== 'BASIC') b.scale.x = e.facing * base * (e.type === 'FAST' ? 1 : 1);
+        e.art.anim(e);
         if (e.hitFlash > 0) {
             e.hitFlash--;
-            b.alpha = e.hitFlash % 2 ? 0.55 : 1;
-        } else {
-            b.alpha = 1;
+            e.body.alpha = e.hitFlash % 2 ? 0.55 : 1;
+        } else if (!e.untargetable) {
+            e.body.alpha = e.phasing ? 0.85 : 1;
         }
-        // health bar
         const hp = e.hpBar;
         if (e.health < e.maxHealth && !e.dead) {
             hp.bar.visible = true;
             const frac = Math.max(0, e.health / e.maxHealth);
             hp.fg.scale.x = frac;
-            hp.fg.position.x = -hp.width / 2 * (1 - frac) * 0;
             hp.fg.tint = frac < 0.3 ? 0xff4747 : frac < 0.6 ? 0xffc233 : 0x4cd964;
         }
     }
+
+    // Ground telegraphs for attacks (drawn on the enemy's own container, tilted like the ground)
+    static teleLine(e, angle, length, width, intensity = 1) {
+        const g = e.tele;
+        g.clear();
+        const ex = Math.cos(angle) * length, ey = Math.sin(angle) * length * TILT;
+        g.lineStyle(width, 0xff3030, 0.18 + 0.28 * intensity);
+        g.moveTo(0, 0); g.lineTo(ex, ey);
+        g.lineStyle(Math.max(2, width * 0.3), 0xff8a6a, 0.35 + 0.5 * intensity);
+        g.moveTo(0, 0); g.lineTo(ex, ey);
+        g.lineStyle(0);
+        g.beginFill(0xff3030, 0.3 + 0.4 * intensity); g.drawCircle(ex, ey, width * 0.5); g.endFill();
+    }
+
+    static teleCircle(e, radius, intensity = 1, color = 0xff3030) {
+        const g = e.tele;
+        g.clear();
+        g.beginFill(color, 0.06 + 0.2 * intensity);
+        g.drawEllipse(0, 0, radius * intensity, radius * intensity * TILT);
+        g.endFill();
+        g.lineStyle(3, color, 0.3 + 0.5 * intensity);
+        g.drawEllipse(0, 0, radius, radius * TILT);
+    }
+
+    static clearTele(e) { e.tele.clear(); }
 
     // ------------------------------------------------------------ bullets
     static createBolt(x, y, angle, color = 0xffd84a) {

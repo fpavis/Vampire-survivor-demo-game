@@ -2,6 +2,8 @@ import { RARITY, LIMITS } from './config.js';
 import { gameState } from './gameState.js';
 import { WEAPONS, PASSIVES } from './weapons.js';
 
+import { WORLD_CONFIG } from './config.js';
+const WORLD_T = WORLD_CONFIG.tile;
 const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -28,7 +30,7 @@ export class UIManager {
         this.createJoystick();
 
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.toggleSettings();
+            if (e.key === 'Escape') { if (this.mapOverlay) this.toggleMap(this.game); else this.toggleSettings(); }
         });
         window.addEventListener('resize', () => this.layoutHUD());
 
@@ -123,6 +125,7 @@ export class UIManager {
         this.settingsButton = settingsButton;
         hud.addChild(settingsButton);
 
+        this.createExtras();
         this.setHUDVisible(false);
     }
 
@@ -135,6 +138,7 @@ export class UIManager {
         this.settingsButton.position.set(w - 34, 50);
         this.elements.xpText.x = w / 2;
         this.elements.banner.position.set(w / 2, h * 0.24);
+        this.layoutExtras();
         this.shown.xp = -1; // force redraw of the wide bar
         this.drawVignette(this.vigAlpha || 0);
     }
@@ -230,6 +234,8 @@ export class UIManager {
             this.drawVignette(vig);
         }
 
+        this.updateExtras(game, delta);
+
         // banner animation
         if (this.bannerTimer > 0) {
             this.bannerTimer -= delta;
@@ -282,6 +288,252 @@ export class UIManager {
             `Crit ${Math.round(st.crit * 100)}%   Armor ${Math.round(st.armor * 100)}%   Regen ${st.regen.toFixed(1)}/s`;
     }
 
+
+    // --------------------------------------------- minimap, prompt, zone name, boss bar, map
+    createExtras() {
+        const hud = this.hud;
+
+        // minimap
+        this.mapBox = new PIXI.Container();
+        this.mapFrame = new PIXI.Graphics();
+        this.mapFrame.beginFill(0x05070c, 0.85);
+        this.mapFrame.lineStyle(3, 0xffffff, 0.35);
+        this.mapFrame.drawRoundedRect(-6, -6, 182, 182, 16);
+        this.mapFrame.endFill();
+        this.mapTexture = null;
+        this.mapSprite = new PIXI.Sprite();
+        const mask = new PIXI.Graphics();
+        mask.beginFill(0xffffff); mask.drawRoundedRect(0, 0, 170, 170, 12); mask.endFill();
+        this.mapSprite.mask = mask;
+        this.mapZone = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3
+        });
+        this.mapZone.anchor.set(0.5, 0);
+        this.mapZone.position.set(85, 178);
+        const hint = new PIXI.Text('[M] world map', { fontFamily: FONT, fontSize: 11, fill: 0xaab4cc, stroke: 0x000000, strokeThickness: 3 });
+        hint.anchor.set(0.5, 0);
+        hint.position.set(85, 196);
+        this.mapBox.addChild(this.mapFrame, this.mapSprite, mask, this.mapZone, hint);
+        this.mapBox.eventMode = 'static';
+        this.mapBox.cursor = 'pointer';
+        this.mapBox.on('pointerdown', (e) => { e.stopPropagation(); if (this.onMapToggle) this.onMapToggle(); });
+        hud.addChild(this.mapBox);
+
+        // interaction prompt
+        this.prompt = new PIXI.Container();
+        const pbg = new PIXI.Graphics();
+        this.promptBg = pbg;
+        this.promptText = new PIXI.Text('', { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', fill: 0xffffff });
+        this.promptText.anchor.set(0.5);
+        this.prompt.addChild(pbg, this.promptText);
+        this.prompt.eventMode = 'static';
+        this.prompt.cursor = 'pointer';
+        this.prompt.on('pointerdown', (e) => { e.stopPropagation(); if (this.onInteract) this.onInteract(); });
+        this.prompt.visible = false;
+        this.promptKey = '';
+        hud.addChild(this.prompt);
+
+        // zone name banner
+        this.zoneText = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 30, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 6,
+            dropShadow: true, dropShadowDistance: 3, dropShadowAlpha: 0.6, letterSpacing: 2
+        });
+        this.zoneText.anchor.set(0.5);
+        this.zoneText.visible = false;
+        this.zoneTimer = 0;
+        hud.addChild(this.zoneText);
+
+        // boss bar
+        this.bossBox = new PIXI.Container();
+        this.bossName = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 16, fontWeight: 'bold', fill: 0xffe8e8, stroke: 0x000000, strokeThickness: 4, letterSpacing: 2
+        });
+        this.bossName.anchor.set(0.5, 1);
+        this.bossBar = new PIXI.Graphics();
+        this.bossBox.addChild(this.bossName, this.bossBar);
+        this.bossBox.visible = false;
+        this.bossShown = -1;
+        hud.addChild(this.bossBox);
+
+        // full screen fade (used when entering / leaving places)
+        this.fadeG = new PIXI.Graphics();
+        this.fadeG.zIndex = 10;
+        this.fadeAlpha = 0;
+        this.fadeTarget = 0;
+        this.fadeSpeed = 0.06;
+        this.fadeCb = null;
+        this.fadeG.eventMode = 'none';
+        this.container.addChild(this.fadeG);
+        this.container.sortableChildren = true;
+
+        this.mapOverlay = null;
+    }
+
+    layoutExtras() {
+        const w = this.app.screen.width, h = this.app.screen.height;
+        this.mapBox.position.set(w - 182, 92);
+        this.prompt.position.set(w / 2, h - 120);
+        this.zoneText.position.set(w / 2, h * 0.16);
+        this.bossBox.position.set(w / 2, 62);
+        this.bossShown = -1;
+        this.drawFade();
+    }
+
+    drawFade() {
+        const w = this.app.screen.width, h = this.app.screen.height;
+        this.fadeG.clear();
+        this.fadeG.beginFill(0x000000, 1);
+        this.fadeG.drawRect(0, 0, w, h);
+        this.fadeG.endFill();
+        this.fadeG.alpha = this.fadeAlpha;
+    }
+
+    fade(target, speed = 0.06, cb = null) {
+        this.fadeTarget = target;
+        this.fadeSpeed = speed;
+        this.fadeCb = cb;
+        this.fadeG.visible = true;
+    }
+
+    setPrompt(text) {
+        if (!text) { this.prompt.visible = false; this.promptKey = ''; return; }
+        this.prompt.visible = true;
+        if (text === this.promptKey) return;
+        this.promptKey = text;
+        this.promptText.text = text;
+        const w = this.promptText.width + 44, h = 44;
+        this.promptBg.clear();
+        this.promptBg.beginFill(0x0a0e18, 0.88);
+        this.promptBg.lineStyle(2, 0xffd84a, 0.9);
+        this.promptBg.drawRoundedRect(-w / 2, -h / 2, w, h, 14);
+        this.promptBg.endFill();
+    }
+
+    showZone(name, icon, color) {
+        this.zoneText.text = `${icon}  ${name}`;
+        this.zoneText.style.fill = color;
+        this.zoneText.visible = true;
+        this.zoneText.alpha = 0;
+        this.zoneTimer = 190;
+    }
+
+    updateExtras(game, delta) {
+        // minimap refreshes a few times per second
+        if (game.map.dirty || game.frame - (this.lastMapDraw || -99) > 7) {
+            this.lastMapDraw = game.frame;
+            game.map.dirty = false;
+            const p = game.state.player;
+            game.map.updateMinimap(p.wx, p.wy, game.frame, game.world.bounded ? 3 : 2);
+            if (!this.mapTexture) {
+                this.mapTexture = PIXI.Texture.from(game.map.minimap);
+                this.mapSprite.texture = this.mapTexture;
+            } else {
+                this.mapTexture.baseTexture.update();
+            }
+        }
+        const zoneName = game.zoneLabel || '';
+        if (zoneName !== this.shownZone) {
+            this.shownZone = zoneName;
+            this.mapZone.text = zoneName;
+        }
+
+        if (this.zoneTimer > 0) {
+            this.zoneTimer -= delta;
+            const t = this.zoneTimer;
+            this.zoneText.alpha = Math.min(1, (190 - t) / 25, t / 40);
+            this.zoneText.y = this.app.screen.height * 0.16 + (t < 40 ? (40 - t) * -0.4 : 0);
+            if (t <= 0) this.zoneText.visible = false;
+        }
+
+        // warlord health bar
+        const boss = game.state.enemies.find((e) => e.isBoss && !e.dead);
+        if (boss) {
+            this.bossBox.visible = true;
+            const frac = Math.max(0, boss.health / boss.maxHealth);
+            const key = Math.round(frac * 200) + boss.type;
+            if (key !== this.bossShown) {
+                this.bossShown = key;
+                this.bossName.text = boss.enraged ? `${boss.bossName} — ENRAGED` : boss.bossName;
+                this.drawBar(this.bossBar, 340, 14, frac, boss.enraged ? 0xff3a3a : 0xc03030, 0xff9a9a);
+                this.bossBar.position.set(-170, 4);
+            }
+        } else this.bossBox.visible = false;
+
+        // fade
+        if (this.fadeAlpha !== this.fadeTarget) {
+            const dir = this.fadeTarget > this.fadeAlpha ? 1 : -1;
+            this.fadeAlpha = clamp(this.fadeAlpha + dir * this.fadeSpeed * delta, 0, 1);
+            if ((dir > 0 && this.fadeAlpha >= this.fadeTarget) || (dir < 0 && this.fadeAlpha <= this.fadeTarget)) {
+                this.fadeAlpha = this.fadeTarget;
+                const cb = this.fadeCb;
+                this.fadeCb = null;
+                if (cb) cb();
+            }
+            this.fadeG.alpha = this.fadeAlpha;
+        }
+        this.fadeG.visible = this.fadeAlpha > 0.001;
+    }
+
+    // Full-screen world map
+    toggleMap(game) {
+        if (this.mapOverlay) {
+            this.app.stage.removeChild(this.mapOverlay.root);
+            this.mapOverlay.root.destroy({ children: true });
+            window.removeEventListener('resize', this.mapOverlay.onResize);
+            this.mapOverlay = null;
+            gameState.paused = false;
+            return;
+        }
+        if (gameState.levelUp || gameState.gameOver) return;
+        gameState.paused = true;
+        const root = new PIXI.Container();
+        root.zIndex = 2500;
+        root.eventMode = 'static';
+        root.on('pointerdown', (e) => { e.stopPropagation(); this.toggleMap(game); });
+        this.app.stage.addChild(root);
+
+        const build = () => {
+            root.removeChildren().forEach((c) => c.destroy({ children: true }));
+            const w = this.app.screen.width, h = this.app.screen.height;
+            const dim = new PIXI.Graphics();
+            dim.beginFill(0x04060c, 0.9); dim.drawRect(0, 0, w, h); dim.endFill();
+            root.addChild(dim);
+            const side = Math.max(260, Math.min(w - 40, h - 150));
+            const canvas = document.createElement('canvas');
+            canvas.width = side; canvas.height = side;
+            const p = game.state.player;
+            const ppt = game.world.bounded ? 6 : 4;
+            const ctx = game.map.render(canvas, p.wx / WORLD_T, p.wy / WORLD_T, ppt, { big: true });
+            game.map.drawPlayer(canvas, p.wx, p.wy, ppt, p.wx / WORLD_T, p.wy / WORLD_T, 1, game.frame);
+            const sprite = new PIXI.Sprite(PIXI.Texture.from(canvas));
+            sprite.position.set((w - side) / 2, 76);
+            const border = new PIXI.Graphics();
+            border.lineStyle(3, 0xffffff, 0.4);
+            border.drawRoundedRect(sprite.x - 3, sprite.y - 3, side + 6, side + 6, 10);
+            const title = new PIXI.Text(game.world.bounded ? game.interiorName : 'WORLD MAP', {
+                fontFamily: FONT, fontSize: 28, fontWeight: 'bold', fill: 0xffffff, letterSpacing: 4
+            });
+            title.anchor.set(0.5);
+            title.position.set(w / 2, 38);
+            const pois = game.world.bounded ? [] : game.map.discoveredPois();
+            const legend = new PIXI.Text(game.world.bounded
+                ? 'You are here (blue marker)   ·   🚪 exit' + (game.map.markers.some((m) => m.icon === '🎁') ? '   ·   🎁 treasure' : '')
+                : `${pois.length} place${pois.length === 1 ? '' : 's'} discovered   ·   🕳️ cave   🏛️ ruins   🏘️ town`, {
+                fontFamily: FONT, fontSize: 15, fill: 0xc9d1e6
+            });
+            legend.anchor.set(0.5);
+            legend.position.set(w / 2, sprite.y + side + 26);
+            const close = new PIXI.Text('Press M, Esc or click to close', { fontFamily: FONT, fontSize: 12, fill: 0x8e97b0 });
+            close.anchor.set(0.5);
+            close.position.set(w / 2, sprite.y + side + 50);
+            root.addChild(sprite, border, title, legend, close);
+        };
+        build();
+        const onResize = () => build();
+        window.addEventListener('resize', onResize);
+        this.mapOverlay = { root, onResize };
+    }
+
     createFlashEffect(target) {
         if (!target.originalScale) target.originalScale = { x: target.scale.x, y: target.scale.y };
         if (target.flashTimeout) clearTimeout(target.flashTimeout);
@@ -295,7 +547,7 @@ export class UIManager {
     }
 
     // ------------------------------------------------------------ level up
-    showLevelUp(choices, level, onPick) {
+    showLevelUp(choices, level, onPick, opts = {}) {
         const app = this.app;
         const overlay = new PIXI.Container();
         overlay.zIndex = 3000;
@@ -393,13 +645,13 @@ export class UIManager {
             overlay.addChild(dim);
 
             const compact = w < 3 * 250 + 100 || h < 460;
-            const title = new PIXI.Text('LEVEL UP!', {
+            const title = new PIXI.Text(opts.title || 'LEVEL UP!', {
                 fontFamily: FONT, fontSize: compact ? 34 : 52, fontWeight: 'bold',
                 fill: ['#fff2a8', '#ffb31a'], stroke: 0x2a1600, strokeThickness: 6,
                 dropShadow: true, dropShadowDistance: 4, dropShadowAlpha: 0.6
             });
             title.anchor.set(0.5);
-            const sub = new PIXI.Text(`You reached level ${level}  —  choose an upgrade`, {
+            const sub = new PIXI.Text(opts.subtitle || `You reached level ${level}  —  choose an upgrade`, {
                 fontFamily: FONT, fontSize: compact ? 14 : 18, fill: 0xd3d9ea
             });
             sub.anchor.set(0.5);

@@ -6,16 +6,26 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 
 ## 🌟 Features
 
-- **Pseudo-3D View**: Tilted ground plane, upright billboard sprites sorted by depth, raised mountain blocks, cliffs, shadows, atmospheric haze and vignette
-- **Infinite Procedural World**: Chunk-streamed terrain generated from layered noise, so you can walk forever
-  - Biomes: deep/shallow water, sand, dry lands, grassland, forest, hills, mountains and snowy peaks
-  - Trees, pines, rocks, bushes, cacti and dead trees that block movement; deep water and mountains are impassable, shallows slow you down
+- **Pseudo-3D View**: Tilted ground plane, upright billboard sprites sorted by depth, raised walls and mountains, cliffs, shadows, atmospheric haze and vignette
+- **Five Biomes, Infinite World**: Chunk-streamed terrain from layered noise
+  - 🌾 **Verdant Fields** (apple trees, birches, flower beds, haystacks, scarecrows) · 🌲 **Whispering Woods** (oaks, pines, giant and glowing mushrooms, logs, ferns) · 🏜️ **Scorched Dunes** (cacti, spires, bones, oasis palms) · 🏖️ **Salt Shore** (palms, shells, driftwood, sea stacks, shallows and deep water) · ⛰️ **Stonecrest Mountains** (snowy pines, boulders, crystals, ore, tall walls and peaks)
+  - Harmless wildlife per biome (rabbits, butterflies, deer, foxes, lizards, snakes, sandpipers, goats) that flee from you
+- **Places to Enter**: caves, ruins and towns are scattered across the world map. Walk up to an entrance and press **E** (or tap the prompt)
+  - 🕳️ **Caves** – cellular-automata tunnels, crystals, guarded treasure chests
+  - 🏛️ **Ruins** – rooms and corridors with pillars, torches and a guardian vault
+  - 🏘️ **Towns** – safe streets with markets, villagers, a healing fountain and an altar that grants a free upgrade
+  - Treasure chests and altars give free upgrade picks without costing a level
+- **World Map**: live minimap plus a full-screen map (**M**) that remembers everything you have explored and every place you have discovered
+- **Smart Enemies** (18 regular types + 5 warlords): each region has its own roster and its own warlord
+  - Behaviours: chasing slimes, swarming bees/bats/scarabs, boars that wind up and charge (and get stunned by walls), wolf packs that circle, lunge and retreat, web-spitting spiders and skeleton archers that kite, slamming golems/treants with ground telegraphs, burrowing scorpions, diving vultures, strafing crabs, boulder-lobbing trolls, jellyfish nova bursts, phasing ghosts
+  - Warlords (Boar King, Ancient Treant, Sand Pharaoh, Crab King, Stone Titan) chain dashes, slams, volleys, boulders and summons, and enrage below half health
+  - Navigation: tile **raycasting** for line of sight, a small **flow field** that routes around lakes, mountains and walls, **whisker probes** for local obstacle avoidance and stuck detection
 - **Everything Levels Up**:
   - 5 weapons with 8 levels each: Arcane Bolt, Spirit Blades, Chain Lightning, Frost Nova, Meteor
   - 9 passives with 5 levels each: Might, Haste, Swiftness, Vitality, Recovery, Magnet, Armor, Wisdom, Precision
   - Rarity-tiered upgrade cards that show exactly what changes (e.g. `Damage: 22 → 28`)
-  - Enemies scale with your level; new enemy types unlock (Slime, Bat, Golem), elites appear and a boss shows up every 5 levels
-- **Modern UI**: XP bar, animated health bar, timer/kill/score counters, weapon and passive inventory, floating damage numbers with crits, damage vignette
+  - Enemies scale with your level; elites appear and a regional warlord shows up every few levels
+- **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, weapon/passive inventory, floating damage numbers with crits, damage vignette
 - **Responsive Controls**: keyboard (WASD / arrows), mouse (click and hold), touch and virtual joystick
 
 ## 🚀 Getting Started
