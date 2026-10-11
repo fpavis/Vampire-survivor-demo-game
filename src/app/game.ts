@@ -1,7 +1,7 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import * as PIXI from 'pixi.js';
 import {
-    GAME_CONFIG, ENEMY_TYPES, LEVEL_SCALING, WORLD_CONFIG, SPAWN_CONFIG, xpForLevel
+    GAME_CONFIG, ENEMY_TYPES, WORLD_CONFIG, SPAWN_CONFIG, xpForLevel
 } from '../core/config';
 import { gameState } from './gameState';
 import { EntityManager } from '../render/entities';
@@ -16,7 +16,19 @@ import { Critters } from '../render/critters';
 import { MapView } from '../render/map';
 import { FlowField } from '../core/world/nav';
 import { updateEnemy, SpatialHash } from '../core/ai/ai';
-import { GROUP_INFO, POI_INFO, ROSTERS, WARLORDS } from '../core/world/biomes';
+import { GROUP_INFO, POI_INFO, WARLORDS, groupOf } from '../core/world/biomes';
+import { FogOfWar } from '../core/world/fog';
+import { EventBus } from '../core/sim/events';
+import { randomSeed } from '../core/sim/rng';
+import {
+    enemyDamageScale, enemyHealthScale, enemySpeedScale, enemyXpScale, threatBand, tierName, tierOf
+} from '../core/world/difficulty';
+import { createSaveStore } from '../core/save/store';
+import { buildSave } from './saveManager';
+import { PopulationRuntime } from './populationRuntime';
+import { perceptionOf } from '../core/config';
+import { engage } from '../core/ai/ai';
+import { installDevTools } from './devtools';
 
 const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
@@ -65,9 +77,30 @@ class Game {
         this.ambient = 0;
         this.ui = new UIManager(this.app);
 
-        window.addEventListener('resize', () => this.handleResize());
+        // persistent-world plumbing
+        this.events = new EventBus();
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [] };
+        this.fog = new FogOfWar();
+        this.interiorFog = new FogOfWar();
+        this.popRuntime = new PopulationRuntime(this);
+        this.enemyTypes = ENEMY_TYPES;
+        this.createdAt = Date.now();
+        this.accum = 0;
+        this.timeScale = 1;
+        this.godMode = false;
+        this.zoneLevelNow = 1;
+        this.zoneThreat = 'even';
+        this.autosaveTimer = 1800;
+        this.lastSaveAt = 0;
+        this.saveSlot = 'autosave';
+        this.storeReady = createSaveStore().then((store) => { this.store = store; return store; });
 
-        this.world.setSource(new OverworldSource(Math.floor(Math.random() * 1e9)));
+        window.addEventListener('resize', () => this.handleResize());
+        const flush = () => { if (this.state.player && !this.state.gameOver && this.mode) this.requestSave('hidden', true); };
+        document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+        window.addEventListener('pagehide', flush);
+
+        this.world.setSource(new OverworldSource(randomSeed()));
         this.applyCamera();
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
 
@@ -163,6 +196,31 @@ class Game {
     }
 
     // --------------------------------------------------------- start screen
+    makeMenuButton(text, fill, width = 280) {
+        const button = new PIXI.Container();
+        button.eventMode = 'static';
+        button.cursor = 'pointer';
+        const bg = new PIXI.Graphics();
+        const draw = (hover) => {
+            bg.clear();
+            bg.beginFill(hover ? fill.hover : fill.base);
+            bg.lineStyle(3, 0xffffff, 0.8);
+            bg.drawRoundedRect(-width / 2, -28, width, 56, 16);
+            bg.endFill();
+            bg.beginFill(0xffffff, 0.2);
+            bg.drawRoundedRect(-width / 2 + 6, -24, width - 12, 20, 10);
+            bg.endFill();
+        };
+        draw(false);
+        const label = new PIXI.Text(text, { fontFamily: FONT, fontSize: 26, fontWeight: 'bold', fill: fill.text, letterSpacing: 2 });
+        label.anchor.set(0.5);
+        button.addChild(bg, label);
+        button.on('pointerover', () => { draw(true); button.scale.set(1.05); });
+        button.on('pointerout', () => { draw(false); button.scale.set(1); });
+        button.label = label;
+        return button;
+    }
+
     showStartScreen() {
         const { app } = this;
         const screen = new PIXI.Container();
@@ -176,40 +234,25 @@ class Game {
             stroke: 0x0a1230, strokeThickness: 9, dropShadow: true, dropShadowDistance: 6, dropShadowAlpha: 0.6, letterSpacing: 6
         });
         title.anchor.set(0.5);
-        const subtitle = new PIXI.Text('An endless world awaits', {
-            fontFamily: FONT, fontSize: 22, fill: 0xcfd8f0, letterSpacing: 3
-        });
+        const subtitle = new PIXI.Text('An endless world awaits', { fontFamily: FONT, fontSize: 22, fill: 0xcfd8f0, letterSpacing: 3 });
         subtitle.anchor.set(0.5);
         const info = new PIXI.Text(
-            'WASD / arrows / mouse / touch to move\nYour weapons fire automatically\nCollect gems to level up and pick upgrades\nMountains and deep water block your way', {
-            fontFamily: FONT, fontSize: 19, fill: 0xd8deef, align: 'center', lineHeight: 30
+            'WASD / arrows / mouse / touch to move  ·  E to interact  ·  M for the map\nYour spells fire automatically  ·  The farther you travel, the deadlier it gets\nProgress is saved automatically', {
+            fontFamily: FONT, fontSize: 18, fill: 0xd8deef, align: 'center', lineHeight: 28
         });
         info.anchor.set(0.5);
+        const note = new PIXI.Text('', { fontFamily: FONT, fontSize: 14, fill: 0xffc98a, align: 'center' });
+        note.anchor.set(0.5);
 
-        const button = new PIXI.Container();
-        button.eventMode = 'static';
-        button.cursor = 'pointer';
-        const bg = new PIXI.Graphics();
-        const drawButton = (hover) => {
-            bg.clear();
-            bg.beginFill(hover ? 0x5fe28a : 0x3fcf6a);
-            bg.lineStyle(3, 0xd9ffe6, 0.9);
-            bg.drawRoundedRect(-120, -32, 240, 64, 18);
-            bg.endFill();
-            bg.beginFill(0xffffff, 0.22);
-            bg.drawRoundedRect(-114, -28, 228, 24, 12);
-            bg.endFill();
-        };
-        drawButton(false);
-        const label = new PIXI.Text('START', {
-            fontFamily: FONT, fontSize: 32, fontWeight: 'bold', fill: 0x0b2a14, letterSpacing: 3
-        });
-        label.anchor.set(0.5);
-        button.addChild(bg, label);
-        button.on('pointerover', () => { drawButton(true); button.scale.set(1.06); });
-        button.on('pointerout', () => { drawButton(false); button.scale.set(1); });
-
-        screen.addChild(dim, title, subtitle, info, button);
+        const green = { base: 0x3fcf6a, hover: 0x5fe28a, text: 0x0b2a14 };
+        const blue = { base: 0x4a7fe0, hover: 0x6a9aff, text: 0x061233 };
+        const continueBtn = this.makeMenuButton('CONTINUE', green, 340);
+        const newBtn = this.makeMenuButton('NEW GAME', blue, 340);
+        const summary = new PIXI.Text('', { fontFamily: FONT, fontSize: 14, fill: 0xb8c4e0 });
+        summary.anchor.set(0.5);
+        continueBtn.visible = false;
+        summary.visible = false;
+        screen.addChild(dim, title, subtitle, info, continueBtn, summary, newBtn, note);
 
         const layout = () => {
             const w = app.screen.width, h = app.screen.height;
@@ -219,17 +262,22 @@ class Game {
             dim.endFill();
             const s = clamp(w / 900, 0.55, 1);
             title.scale.set(s);
-            title.position.set(w / 2, h * 0.24);
-            subtitle.position.set(w / 2, h * 0.24 + 70 * s);
-            info.scale.set(clamp(w / 700, 0.7, 1));
-            info.position.set(w / 2, h * 0.5);
-            button.position.set(w / 2, h * 0.76);
+            title.position.set(w / 2, h * 0.2);
+            subtitle.position.set(w / 2, h * 0.2 + 70 * s);
+            info.scale.set(clamp(w / 760, 0.62, 1));
+            info.position.set(w / 2, h * 0.43);
+            continueBtn.position.set(w / 2, h * 0.62);
+            summary.position.set(w / 2, h * 0.62 + 40);
+            newBtn.position.set(w / 2, continueBtn.visible ? h * 0.62 + 90 : h * 0.66);
+            note.position.set(w / 2, h * 0.9);
         };
         layout();
         window.addEventListener('resize', layout);
 
         let started = false;
-        const start = () => {
+        let save = null;
+        let confirmNew = false;
+        const begin = (data) => {
             if (started) return;
             started = true;
             window.removeEventListener('resize', layout);
@@ -237,18 +285,47 @@ class Game {
             app.stage.removeChild(screen);
             screen.destroy({ children: true });
             this.bindEvents();
-            this.init();
+            this.init(data);
         };
-        const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') start(); };
+        const startNew = () => {
+            if (save && !confirmNew) {
+                confirmNew = true;
+                newBtn.label.text = 'OVERWRITE SAVE?';
+                setTimeout(() => { confirmNew = false; if (!started) newBtn.label.text = 'NEW GAME'; }, 3500);
+                return;
+            }
+            begin(null);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { if (save) begin(save); else startNew(); }
+        };
         window.addEventListener('keydown', onKey);
-        button.on('pointerdown', (e) => { e.stopPropagation(); start(); });
+        continueBtn.on('pointerdown', (e) => { e.stopPropagation(); if (save) begin(save); });
+        newBtn.on('pointerdown', (e) => { e.stopPropagation(); startNew(); });
+
+        // look for an existing save once the store is ready
+        this.storeReady.then(async (store) => {
+            if (!store.persistent) note.text = 'Progress cannot be saved in this environment (no browser storage available).';
+            try {
+                const data = await store.load(this.saveSlot);
+                if (data && !started) {
+                    save = data;
+                    const mins = Math.floor(data.playSeconds / 60);
+                    summary.text = `Level ${data.hero.level}  ·  ${mins} min played  ·  ${Object.keys(data.world.clearedCamps).length} camps cleared  ·  ${data.world.cities.length} towns visited`;
+                    continueBtn.visible = true;
+                    summary.visible = true;
+                    layout();
+                }
+            } catch (err) {
+                note.text = `Could not read the saved game (${err && err.message ? err.message : err}). You can start a new game.`;
+            }
+        });
 
         // gentle idle animation
         const idle = () => {
             if (started) { app.ticker.remove(idle); return; }
-            title.y = h(app) * 0.24 + Math.sin(this.frame * 0.03) * 4;
+            title.y = app.screen.height * 0.2 + Math.sin(this.frame * 0.03) * 4;
         };
-        const h = (a) => a.screen.height;
         app.ticker.add(idle);
     }
 
@@ -301,31 +378,52 @@ class Game {
         this.weapons.reset();
     }
 
-    init() {
+    init(save = null) {
         this.clearEntities();
         gameState.reset();
         this.bossCount = 0;
         this.pendingBoss = false;
         this.frame = 0;
-        this.visited = {};
+        this.accum = 0;
         this.mode = 'overworld';
         this.busy = false;
         this.zoneGroup = null;
         this.zoneLabel = '';
+        this.interior = null;
+        this.interiorPoi = null;
+        this.autosaveTimer = 1800;
+        this.createdAt = save ? save.createdAt : Date.now();
+        this.lastFogTx = null;
+        this.lastFogTy = null;
 
         this.app.ticker.remove(this.menuTicker);
         if (this.gameTicker) this.app.ticker.remove(this.gameTicker);
 
-        this.overworld = new OverworldSource(Math.floor(Math.random() * 1e9));
+        // the world: seed + saved deltas
+        this.overworld = new OverworldSource(save ? save.seed : randomSeed());
         this.world.setSource(this.overworld);
+        this.world.onChunk = null;
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [] };
+        this.visited = {};
+        this.fog = new FogOfWar();
+        this.interiorFog = new FogOfWar();
+        if (save) {
+            this.session.clearedCamps = { ...save.world.clearedCamps };
+            this.session.defeatedLairs = { ...save.world.defeatedLairs };
+            this.session.cities = save.world.cities.map((c) => ({ ...c }));
+            this.visited = JSON.parse(JSON.stringify(save.world.places));
+            this.fog = FogOfWar.fromJSON(save.world.fog);
+        }
+        this.popRuntime.reset(this.overworld);
         this.map.reset();
         this.map.setMode('overworld');
-        this.world.onChunk = (chunk) => this.map.discover(chunk);
+        this.map.lairDefeated = (id) => this.session.defeatedLairs[id] !== undefined;
         this.setAmbient(0);
         this.flow.centerTx = NaN;
 
         const player = EntityManager.createPlayer();
-        const spot = this.world.findFree(0, 0, player.radius + 2);
+        const start = save ? save.player : { x: 0, y: 0 };
+        const spot = this.world.findFree(start.x, start.y, player.radius + 2);
         player.wx = spot.x;
         player.wy = spot.y;
         player.facing = 1;
@@ -336,16 +434,35 @@ class Game {
         gameState.player = player;
         this.playerVel = { x: 0, y: 0 };
 
-        this.weapons.acquire('bolt');
-        this.stats = computeStats({});
-        gameState.maxHealth = this.stats.maxHealth;
-        gameState.health = gameState.maxHealth;
-        gameState.nextLevel = xpForLevel(1);
+        if (save) {
+            const hero = save.hero;
+            this.weapons.list = hero.weapons.map((w) => ({ id: w.id, level: w.level, timer: 20 }));
+            gameState.passives = { ...hero.passives };
+            this.stats = computeStats(gameState.passives);
+            gameState.maxHealth = this.stats.maxHealth;
+            gameState.level = hero.level;
+            gameState.experience = hero.experience;
+            gameState.nextLevel = hero.nextLevel;
+            gameState.health = clamp(hero.health, 1, gameState.maxHealth);
+            gameState.kills = save.stats.kills;
+            gameState.score = save.stats.score;
+            gameState.bossesDefeated = save.stats.bossesDefeated;
+            gameState.time = save.playSeconds;
+        } else {
+            this.weapons.acquire('bolt');
+            this.stats = computeStats({});
+            gameState.maxHealth = this.stats.maxHealth;
+            gameState.health = gameState.maxHealth;
+            gameState.nextLevel = xpForLevel(1);
+        }
+        EntityManager.heroLevel = gameState.level;
 
         this.cam.x = player.wx;
         this.cam.y = player.wy;
         this.applyCamera();
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+        this.updateFog();
+        this.syncMap();
 
         this.ui.game = this;
         this.ui.onInteract = () => this.interact();
@@ -353,11 +470,44 @@ class Game {
         this.ui.setHUDVisible(true);
         this.ui.shown = { hp: -1, xp: -1, level: -1, slots: '' };
         this.ui.displayHp = gameState.health;
-        this.ui.displayXp = 0;
+        this.ui.displayXp = gameState.experience;
         this.ui.fadeAlpha = 0; this.ui.fadeTarget = 0;
 
         this.gameTicker = (delta) => this.gameLoop(delta);
         this.app.ticker.add(this.gameTicker);
+        this.events.emit('GameLoaded', { slot: save ? this.saveSlot : 'new' });
+        if (!save) this.requestSave('new', true);
+    }
+
+    // ------------------------------------------------------------- saving
+    async requestSave(reason, force = false) {
+        if (!this.store || !this.state.player || this.state.gameOver) return;
+        const now = performance.now();
+        if (!force && now - this.lastSaveAt < 3000) return;
+        this.lastSaveAt = now;
+        try {
+            await this.store.save(this.saveSlot, buildSave(this));
+            this.events.emit('GameSaved', { slot: this.saveSlot });
+            if (reason !== 'auto' && reason !== 'hidden' && reason !== 'new') this.ui.toast('Game saved');
+        } catch (err) {
+            console.warn('save failed', err);
+            this.ui.toast('Saving failed');
+        }
+    }
+
+    // reveal the map around the player (called whenever they enter a new tile)
+    updateFog() {
+        const p = this.state.player;
+        const tx = Math.floor(p.wx / T), ty = Math.floor(p.wy / T);
+        if (tx === this.lastFogTx && ty === this.lastFogTy) return;
+        this.lastFogTx = tx; this.lastFogTy = ty;
+        if (this.mode === 'overworld') this.fog.revealCircle(tx, ty, 17);
+        else this.interiorFog.revealCircle(tx, ty, 9);
+    }
+
+    syncMap() {
+        const fog = this.mode === 'overworld' ? this.fog : this.interiorFog;
+        this.map.sync(fog, this.world, this.mode === 'overworld' ? this.popRuntime.population : null, this.session);
     }
 
     setAmbient(amount) {
@@ -372,12 +522,22 @@ class Game {
     }
 
     // ------------------------------------------------------------ game loop
+    // The simulation advances in fixed 1/60 s steps; rendering simply follows the latest state.
     gameLoop(rawDelta) {
+        this.accum = Math.min(this.accum + rawDelta * this.timeScale, 5 * this.timeScale);
+        while (this.accum >= 1) {
+            this.accum -= 1;
+            this.step(1);
+        }
+    }
+
+    step(rawDelta) {
         const s = this.state;
         if (s.gameOver) {
             this.fx.update(rawDelta);
             this.applyCamera();
             this.world.animate(rawDelta);
+            this.ui.updateExtras(this, rawDelta);   // keeps the respawn fade running
             return;
         }
         // keep the fade animation running during scene changes
@@ -388,7 +548,9 @@ class Game {
         this.frame += delta;
         s.time += delta / 60;
 
+        EntityManager.heroLevel = s.level;
         this.movePlayer(delta);
+        this.updateFog();
         this.weapons.update(delta);
         this.updateEnemies(delta);
         this.hazards.update(delta);
@@ -403,7 +565,14 @@ class Game {
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
         this.world.animate(delta);
         this.updateZone();
+        this.syncMap();
         this.ui.update(this, delta);
+
+        this.autosaveTimer -= delta;
+        if (this.autosaveTimer <= 0) {
+            this.autosaveTimer = 1800;
+            if (this.mode === 'overworld') this.requestSave('auto');
+        }
 
         if (s.health <= 0) this.showGameOver();
     }
@@ -466,6 +635,7 @@ class Game {
     // burst hits (dashes, slams, projectiles) grant a short grace period so stacked attacks stay fair
     hurtPlayer(amount, burst = false) {
         const s = this.state;
+        if (this.godMode) return;
         if (burst) {
             if (this.frame < (this.invulnUntil || 0)) return;
             this.invulnUntil = this.frame + 18;
@@ -490,7 +660,8 @@ class Game {
     updateEnemies(delta) {
         const s = this.state;
         const p = s.player;
-        if (this.mode === 'overworld') this.spawnEnemies(delta);
+        // resident camps, lairs and a few roamers come to life near the player
+        this.popRuntime.update(delta);
 
         this.hash.clear();
         const list = s.enemies;
@@ -501,10 +672,6 @@ class Game {
         for (let i = 0; i < list.length; i++) {
             const e = list[i];
             if (e.dead) continue;
-            if (this.mode === 'overworld' && !e.isBoss && Math.hypot(p.wx - e.wx, p.wy - e.wy) > SPAWN_CONFIG.despawnDistance) {
-                e.dead = true; e.silent = true;
-                continue;
-            }
             updateEnemy(this, e, delta);
         }
 
@@ -514,21 +681,9 @@ class Game {
                 this.interiorState.cleared = true;
                 this.ui.banner('PLACE CLEARED!', 0xffd84a);
                 this.dropGem(p.wx + 30, p.wy + 20, 0, 'heart');
-                for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + this.state.level * 2);
+                for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + this.zoneLevelNow * 2);
             }
         }
-    }
-
-    pickFromRoster(group, level) {
-        const roster = ROSTERS[group] || ROSTERS.field;
-        const options = roster.filter((r) => r.level <= level);
-        const total = options.reduce((sum, r) => sum + r.weight, 0);
-        let roll = Math.random() * total;
-        for (const r of options) {
-            roll -= r.weight;
-            if (roll <= 0) return r;
-        }
-        return options[0];
     }
 
     spawnPoint(flying) {
@@ -545,28 +700,36 @@ class Game {
         return null;
     }
 
-    scaleEnemy(e, type) {
-        const ls = this.state.level - 1;
-        e.health = e.maxHealth = type.health * Math.pow(LEVEL_SCALING.enemyHealthScale, ls);
-        e.speed = type.speed * Math.min(LEVEL_SCALING.enemySpeedCap, Math.pow(LEVEL_SCALING.enemySpeedScale, ls));
-        e.damage = type.damage * Math.pow(LEVEL_SCALING.enemyDamageScale, ls);
-        e.experienceValue = Math.max(1, Math.round(type.experience * (1 + LEVEL_SCALING.experienceScale * ls)));
-    }
-
+    // Enemy strength comes from the monster's own level (its zone), never from the hero.
     makeEnemy(key, x, y, opts = {}) {
         const type = ENEMY_TYPES[key];
+        const level = Math.max(1, Math.round(opts.level ?? 1));
         const e = EntityManager.createEnemy(key, x, y);
         e.uid = ++this.uidCounter;
-        e.bossName = type.name.toUpperCase();
-        this.scaleEnemy(e, type);
-        const eliteChance = opts.noElite || type.boss ? 0 : (opts.elite ? 1 : (this.state.level >= 3 ? Math.min(0.2, SPAWN_CONFIG.eliteChance + 0.004 * this.state.level) : 0));
-        if (Math.random() < eliteChance) {
+        e.level = level;
+        e.tier = tierOf(level);
+        const prefix = tierName(e.tier);
+        e.bossName = `${prefix ? prefix + ' ' : ''}${type.name}`.toUpperCase();
+        e.health = e.maxHealth = type.health * enemyHealthScale(level);
+        e.speed = type.speed * enemySpeedScale(level);
+        e.damage = type.damage * enemyDamageScale(level);
+        e.experienceValue = Math.max(1, Math.round(type.experience * enemyXpScale(level)));
+        if (opts.elite && !type.boss) {
             const m = SPAWN_CONFIG.eliteModifiers;
             EntityManager.markElite(e);
             e.health = e.maxHealth = e.health * m.health;
             e.experienceValue = Math.round(e.experienceValue * m.experience);
             e.speed *= m.speed;
             e.damage *= m.damage;
+        }
+        e.perc = perceptionOf(key);
+        if (opts.home) {
+            e.home = { x: opts.home.x, y: opts.home.y };
+            e.leash = opts.leash || e.perc.leash;
+            e.shell = 'idle';
+            e.campId = opts.campId;
+            e.roamer = !!opts.roamer;
+            e.isLair = !!opts.lair;
         }
         if (opts.dormant) { e.dormant = true; e.aggro = opts.aggro || 420; }
         if (opts.minion) e.minion = true;
@@ -576,60 +739,28 @@ class Game {
         return e;
     }
 
-    spawnEnemies(delta) {
-        const s = this.state;
-        const max = Math.min(SPAWN_CONFIG.maxCap, SPAWN_CONFIG.baseMax + SPAWN_CONFIG.maxPerLevel * s.level);
-        if (s.enemies.length >= max) return;
-        const rate = SPAWN_CONFIG.baseRate * (1 + SPAWN_CONFIG.rateGrowth * (s.level - 1)) * (1 + s.time / 500);
-        if (Math.random() >= rate * delta) return;
-
-        // the region at the spawn point decides what comes out of the dark
-        const origin = this.spawnPoint(true);
-        if (!origin) return;
-        const group = this.world.groupAtPos(origin.x, origin.y);
-        const entry = this.pickFromRoster(group, s.level);
-        const type = ENEMY_TYPES[entry.type];
-        if (!type.flying && this.world.blocked(origin.x, origin.y, 24)) {
-            const f = this.spawnPoint(false);
-            if (!f) return;
-            origin.x = f.x; origin.y = f.y;
-        }
-
-        let count = 1;
-        if (entry.group) {
-            const [lo, hi] = entry.group;
-            count = s.level >= 4 ? lo + Math.floor(Math.random() * (hi - lo + 1)) : lo;
-        } else if (s.level >= 3 && Math.random() < 0.1) count = 2;
-        for (let i = 0; i < count && s.enemies.length < max; i++) {
-            const x = origin.x + (i ? (Math.random() - 0.5) * 100 : 0);
-            const y = origin.y + (i ? (Math.random() - 0.5) * 100 : 0);
-            if (!type.flying && this.world.blocked(x, y, type.radius)) continue;
-            this.makeEnemy(entry.type, x, y, { noElite: count > 1 && i > 0 });
-        }
-    }
-
-    spawnMinions(key, count, x, y) {
+    spawnMinions(key, count, x, y, level = this.zoneLevelNow) {
         const type = ENEMY_TYPES[key];
         for (let i = 0; i < count; i++) {
             const a = (i / count) * Math.PI * 2 + Math.random();
             const r = 60 + Math.random() * 50;
             let px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
             if (!type.flying && this.world.blocked(px, py, type.radius)) { const f = this.world.findFree(px, py, type.radius); px = f.x; py = f.y; }
-            const m = this.makeEnemy(key, px, py, { noElite: true, minion: true });
+            const m = this.makeEnemy(key, px, py, { level, minion: true });
             m.experienceValue = Math.max(1, Math.floor(m.experienceValue * 0.5));
+            engage(this, m, false);
         }
     }
 
+    // test helper: summon the regional warlord next to the player
     spawnBoss() {
-        const s = this.state;
-        const p = s.player;
+        const p = this.state.player;
         const group = this.world.groupAtPos(p.wx, p.wy);
         const key = WARLORDS[group] || WARLORDS.field;
         const type = ENEMY_TYPES[key];
         const pt = this.spawnPoint(false) || { x: p.wx + 700, y: p.wy };
-        const e = this.makeEnemy(key, pt.x, pt.y, { noElite: true });
-        e.health = e.maxHealth = e.health * (1 + this.bossCount * 0.6);
-        this.bossCount++;
+        const e = this.makeEnemy(key, pt.x, pt.y, { level: this.zoneLevelNow + 2 });
+        e.shell = 'engaged'; e.ai = null;
         this.ui.banner(`⚠  ${type.name.toUpperCase()} APPROACHES  ⚠`, 0xff5a5a);
         this.fx.addShake(6);
     }
@@ -649,8 +780,9 @@ class Game {
             e.kvx += (k.x / len) * k.force * resist;
             e.kvy += (k.y / len) * k.force * resist;
         }
-        // a sleeping monster wakes up when hurt
+        // a sleeping or idle monster wakes up when hurt
         if (e.dormant) e.dormant = false;
+        if (e.home && e.shell !== 'engaged') engage(this, e);
         if (e.health <= 0) this.killEnemy(e);
     }
 
@@ -663,7 +795,9 @@ class Game {
         s.score += e.experienceValue * 2;
         this.fx.death(e.wx, e.wy, type.color, e.isBoss);
 
-        if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy);
+        if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy, e.level);
+        this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss });
+        this.popRuntime.onKill(e);
 
         if (e.isBoss) {
             s.bossesDefeated++;
@@ -674,6 +808,7 @@ class Game {
             this.dropGem(e.wx + 30, e.wy, 0, 'heart');
             this.fx.addShake(12);
             this.ui.banner(`${type.name.toUpperCase()} DEFEATED!`, 0xffd84a);
+            this.requestSave('boss', true);
         } else {
             this.dropGem(e.wx, e.wy, e.experienceValue);
             if (Math.random() < (e.elite ? 0.12 : 0.025)) this.dropGem(e.wx + 14, e.wy + 6, 0, 'heart');
@@ -709,12 +844,19 @@ class Game {
         if ((this.frame | 0) % 20 !== 0) return;
         if (this.mode !== 'overworld') return;
         const p = this.state.player;
+        const tx = Math.floor(p.wx / T), ty = Math.floor(p.wy / T);
         const group = this.world.groupAtPos(p.wx, p.wy);
+        const level = this.overworld.levelAt(tx, ty);
+        const tier = tierOf(level);
+        const info = GROUP_INFO[group];
+        this.zoneLevelNow = level;
+        this.zoneThreat = threatBand(level, this.state.level);
+        this.zoneLabel = `${info.icon} ${info.name} · Lv ${level}`;
         if (group !== this.zoneGroup) {
             this.zoneGroup = group;
-            const info = GROUP_INFO[group];
-            this.zoneLabel = `${info.icon} ${info.name}`;
-            if (this.frame > 30) this.ui.showZone(info.name, info.icon, info.color);
+            const prefix = tierName(tier);
+            if (this.frame > 30) this.ui.showZone(`${prefix ? prefix + ' ' : ''}${info.name}  ·  Lv ${level}`, info.icon, info.color);
+            this.events.emit('ZoneChanged', { group, level, tier });
         }
     }
 
@@ -786,6 +928,7 @@ class Game {
             let banked = 0;
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; });
             this.clearWorldEntities();
+            this.popRuntime.clearActive();
             s.experience += banked * this.stats.growth;
 
             const src = createInterior(poi);
@@ -794,9 +937,15 @@ class Game {
             this.interiorName = poi.name;
             this.visited[poi.id] = this.visited[poi.id] || { opened: [], cleared: false, altarUsed: false };
             this.interiorState = this.visited[poi.id];
+            // visited towns become respawn points
+            if (poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id)) {
+                this.session.cities.push({ id: poi.id, name: poi.name, ex: poi.ex, ey: poi.ey });
+            }
+            this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type });
 
             this.world.setSource(src);
-            this.world.onChunk = (c) => this.map.discover(c);
+            this.interiorFog = new FogOfWar();
+            this.lastFogTx = null;
             this.map.setMode('interior');
             this.mode = 'interior';
             this.flow.centerTx = NaN;
@@ -811,6 +960,7 @@ class Game {
 
             this.applyCamera();
             this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+            this.requestSave('place', true);
             this.ui.fade(0, 0.06, () => { this.busy = false; this.checkLevelUp(); });
         });
     }
@@ -823,7 +973,7 @@ class Game {
                 const type = ENEMY_TYPES[sp.type];
                 let x = sp.x, y = sp.y;
                 if (!type.flying && this.world.blocked(x, y, type.radius)) { const f = this.world.findFree(x, y, type.radius); x = f.x; y = f.y; }
-                this.makeEnemy(sp.type, x, y, { dormant: true, aggro: 380, elite: !!sp.elite });
+                this.makeEnemy(sp.type, x, y, { dormant: true, aggro: 380, elite: !!sp.elite, level: Math.max(1, this.overworld.levelAt(poi.tx, poi.ty)) });
                 this.interiorHostiles++;
             });
         }
@@ -872,6 +1022,30 @@ class Game {
         offer(picks);
     }
 
+    // Switch the world back to the overworld and put the hero at (x, y).
+    applyOverworld(x, y) {
+        const s = this.state;
+        const p = s.player;
+        this.clearWorldEntities();
+        this.popRuntime.clearActive();
+        this.world.setSource(this.overworld);
+        this.map.setMode('overworld');
+        this.mode = 'overworld';
+        this.interior = null;
+        this.interiorPoi = null;
+        this.flow.centerTx = NaN;
+        this.setAmbient(0);
+        this.zoneGroup = null;
+        this.lastFogTx = null;
+        const spot = this.world.findFree(x, y, p.radius + 2);
+        p.wx = spot.x; p.wy = spot.y;
+        this.cam.x = p.wx; this.cam.y = p.wy;
+        this.applyCamera();
+        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+        this.updateFog();
+        this.map.dirty = true;
+    }
+
     exitPlace() {
         if (this.busy) return;
         this.busy = true;
@@ -879,31 +1053,15 @@ class Game {
         this.state.keys = {};
         this.ui.fade(1, 0.09, () => {
             const s = this.state;
-            const p = s.player;
             let banked = 0;
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; });
-            this.clearWorldEntities();
             s.experience += banked * this.stats.growth;
-
             const poi = this.interiorPoi;
-            this.world.setSource(this.overworld);
-            this.world.onChunk = (c) => this.map.discover(c);
-            this.map.setMode('overworld');
-            this.mode = 'overworld';
-            this.interior = null;
-            this.flow.centerTx = NaN;
-            this.setAmbient(0);
-            this.zoneGroup = null;
-
-            const spot = this.world.findFree(poi.ex, poi.ey + 34, p.radius + 2);
-            p.wx = spot.x; p.wy = spot.y;
-            this.cam.x = p.wx; this.cam.y = p.wy;
-            this.applyCamera();
-            this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
-            this.map.dirty = true;
+            this.events.emit('PlaceLeft', { id: poi.id });
+            this.applyOverworld(poi.ex, poi.ey + 34);
+            this.requestSave('place', true);
             this.ui.fade(0, 0.06, () => {
                 this.busy = false;
-                if (this.pendingBoss) { this.pendingBoss = false; this.spawnBoss(); }
                 this.checkLevelUp();
             });
         });
@@ -999,9 +1157,8 @@ class Game {
         this.fx.burst(p.wx, p.wy, 10, 0xffe27a, 30, 5, { size: 0.9, life: 34, up: 3 });
         this.fx.addShake(5);
 
-        if (s.level % SPAWN_CONFIG.bossEvery === 0) {
-            if (this.mode === 'overworld') this.spawnBoss(); else this.pendingBoss = true;
-        }
+        this.events.emit('HeroLevelUp', { level: s.level });
+        this.requestSave('level', true);
         this.checkLevelUp();
     }
 
@@ -1034,6 +1191,33 @@ class Game {
     }
 
     // ------------------------------------------------------------ game over
+    // The whole party is down. The world persists: respawn at the nearest visited town, or the start.
+    respawnTarget() {
+        const p = this.state.player;
+        const from = this.mode === 'interior' && this.interiorPoi ? { x: this.interiorPoi.ex, y: this.interiorPoi.ey } : { x: p.wx, y: p.wy };
+        let best = null, bd = Infinity;
+        for (const c of this.session.cities) {
+            const d = Math.hypot(c.ex - from.x, c.ey - from.y);
+            if (d < bd) { bd = d; best = c; }
+        }
+        return best ? { x: best.ex, y: best.ey + 40, label: best.name } : { x: 0, y: 0, label: 'the starting area' };
+    }
+
+    respawn(target) {
+        const s = this.state;
+        this.ui.fade(1, 0.1, () => {
+            s.gameOver = false;
+            s.health = s.maxHealth;
+            s.player.visible = true;
+            s.pointerDown = false;
+            this.applyOverworld(target.x, target.y);
+            this.map.dirty = true;
+            this.invulnUntil = this.frame + 120;
+            this.ui.fade(0, 0.06, () => {});
+            this.requestSave('respawn', true);
+        });
+    }
+
     showGameOver() {
         const s = this.state;
         if (s.gameOver) return;
@@ -1043,6 +1227,7 @@ class Game {
         this.ui.update(this, 1);
         this.fx.death(s.player.wx, s.player.wy, 0x6aa8ff, true);
         s.player.visible = false;
+        this.events.emit('HeroDied', { respawnAt: this.respawnTarget().label });
 
         const { app } = this;
         const screen = new PIXI.Container();
@@ -1052,7 +1237,7 @@ class Game {
         app.stage.addChild(screen);
 
         const dim = new PIXI.Graphics();
-        const title = new PIXI.Text('YOU DIED', {
+        const title = new PIXI.Text('YOU FELL', {
             fontFamily: FONT, fontSize: 76, fontWeight: 'bold', fill: ['#ff6a6a', '#a10d0d'],
             stroke: 0x1a0000, strokeThickness: 8, dropShadow: true, dropShadowDistance: 6, dropShadowAlpha: 0.6, letterSpacing: 4
         });
@@ -1065,10 +1250,10 @@ class Game {
         pbg.drawRoundedRect(-190, -95, 380, 190, 16);
         pbg.endFill();
         const rows = [
-            ['Time survived', this.formatTime(s.time)],
-            ['Level reached', `${s.level}`],
+            ['Time played', this.formatTime(s.time)],
+            ['Hero level', `${s.level}`],
             ['Enemies defeated', `${s.kills}`],
-            ['Score', `${Math.floor(s.score)}`]
+            ['Zone level', `${this.zoneLevelNow}`]
         ];
         panel.addChild(pbg);
         rows.forEach(([k, v], i) => {
@@ -1081,25 +1266,14 @@ class Game {
             panel.addChild(kt, vt);
         });
 
-        const button = new PIXI.Container();
-        button.eventMode = 'static';
-        button.cursor = 'pointer';
-        const bg = new PIXI.Graphics();
-        const drawButton = (hover) => {
-            bg.clear();
-            bg.beginFill(hover ? 0x5fe28a : 0x3fcf6a);
-            bg.lineStyle(3, 0xd9ffe6, 0.9);
-            bg.drawRoundedRect(-120, -28, 240, 56, 16);
-            bg.endFill();
-        };
-        drawButton(false);
-        const label = new PIXI.Text('PLAY AGAIN', { fontFamily: FONT, fontSize: 26, fontWeight: 'bold', fill: 0x0b2a14, letterSpacing: 2 });
-        label.anchor.set(0.5);
-        button.addChild(bg, label);
-        button.on('pointerover', () => { drawButton(true); button.scale.set(1.06); });
-        button.on('pointerout', () => { drawButton(false); button.scale.set(1); });
-
-        screen.addChild(dim, title, panel, button);
+        const target = this.respawnTarget();
+        const green = { base: 0x3fcf6a, hover: 0x5fe28a, text: 0x0b2a14 };
+        const blue = { base: 0x4a7fe0, hover: 0x6a9aff, text: 0x061233 };
+        const respawnBtn = this.makeMenuButton(`RESPAWN AT ${target.label.toUpperCase()}`, green, 420);
+        const newBtn = this.makeMenuButton('NEW GAME', blue, 420);
+        const hint = new PIXI.Text('Your progress, the map and cleared places are kept.', { fontFamily: FONT, fontSize: 14, fill: 0xb8c4e0 });
+        hint.anchor.set(0.5);
+        screen.addChild(dim, title, panel, respawnBtn, hint, newBtn);
 
         const layout = () => {
             const w = app.screen.width, h = app.screen.height;
@@ -1109,9 +1283,11 @@ class Game {
             dim.endFill();
             const sc = clamp(w / 800, 0.55, 1);
             title.scale.set(sc);
-            title.position.set(w / 2, h * 0.2);
-            panel.position.set(w / 2, h * 0.47);
-            button.position.set(w / 2, h * 0.47 + 165);
+            title.position.set(w / 2, h * 0.17);
+            panel.position.set(w / 2, h * 0.42);
+            respawnBtn.position.set(w / 2, h * 0.42 + 150);
+            hint.position.set(w / 2, h * 0.42 + 190);
+            newBtn.position.set(w / 2, h * 0.42 + 240);
         };
         layout();
         window.addEventListener('resize', layout);
@@ -1123,19 +1299,36 @@ class Game {
         app.ticker.add(fade);
 
         let done = false;
-        const restart = () => {
-            if (done || screen.alpha < 0.6) return;
+        let confirmNew = false;
+        const close = () => {
             done = true;
             app.ticker.remove(fade);
             window.removeEventListener('resize', layout);
             window.removeEventListener('keydown', onKey);
             app.stage.removeChild(screen);
             screen.destroy({ children: true });
-            this.init();
         };
-        const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') restart(); };
+        const doRespawn = () => {
+            if (done || screen.alpha < 0.6) return;
+            close();
+            this.respawn(target);
+        };
+        const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') doRespawn(); };
         window.addEventListener('keydown', onKey);
-        button.on('pointerdown', (e) => { e.stopPropagation(); restart(); });
+        respawnBtn.on('pointerdown', (e) => { e.stopPropagation(); doRespawn(); });
+        newBtn.on('pointerdown', (e) => {
+            e.stopPropagation();
+            if (done || screen.alpha < 0.6) return;
+            if (!confirmNew) {
+                confirmNew = true;
+                newBtn.label.text = 'THIS ERASES YOUR SAVE - CLICK TO CONFIRM';
+                setTimeout(() => { confirmNew = false; if (!done) newBtn.label.text = 'NEW GAME'; }, 3500);
+                return;
+            }
+            close();
+            this.state.gameOver = false;
+            this.init(null);
+        });
     }
 
     formatTime(seconds) {
@@ -1149,5 +1342,6 @@ export function startGame() {
     const game = new Game();
     // exposed for debugging and the in-page test tools
     (window as any).game = game;
+    installDevTools(game);
     return game;
 }

@@ -120,7 +120,10 @@ export const INITIAL_STATE = {
 };
 
 // XP needed to go from `level` to `level + 1`
+export const HERO_SOFT_CAP = 99;
+
 export function xpForLevel(level: number): number {
+    if (level > HERO_SOFT_CAP) return Math.floor(xpForLevel(HERO_SOFT_CAP) * Math.pow(1.14, level - HERO_SOFT_CAP));
     return Math.floor(18 + 11 * (level - 1) + 2.6 * Math.pow(level - 1, 1.55));
 }
 

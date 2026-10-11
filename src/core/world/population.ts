@@ -73,7 +73,7 @@ export class Population {
 
     if (dist >= POPULATION.noCampRadius) {
       const level = this.source.levelAt(Math.floor(centerTx), Math.floor(centerTy));
-      const chance = Math.min(0.8, 0.30 + 0.012 * level);
+      const chance = Math.min(0.62, 0.28 + 0.008 * level);
       const count = hash(cx, cy, seed + 4001) < chance ? (level > 10 && hash(cx, cy, seed + 4002) < chance * 0.3 ? 2 : 1) : 0;
       for (let i = 0; i < count; i++) {
         const camp = this.makeCamp(cx, cy, i);

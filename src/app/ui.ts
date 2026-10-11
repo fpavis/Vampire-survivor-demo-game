@@ -369,11 +369,28 @@ export class UIManager {
         this.container.sortableChildren = true;
 
         this.mapOverlay = null;
+
+        // small non-blocking message (saves, discoveries)
+        this.toastText = new PIXI.Text('', {
+            fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xdfe8ff, stroke: 0x000000, strokeThickness: 4
+        });
+        this.toastText.anchor.set(0, 1);
+        this.toastText.visible = false;
+        this.toastTimer = 0;
+        hud.addChild(this.toastText);
+    }
+
+    toast(text) {
+        this.toastText.text = text;
+        this.toastText.visible = true;
+        this.toastText.alpha = 1;
+        this.toastTimer = 150;
     }
 
     layoutExtras() {
         const w = this.app.screen.width, h = this.app.screen.height;
         this.mapBox.position.set(w - 182, 92);
+        this.toastText.position.set(14, h - 14);
         this.prompt.position.set(w / 2, h - 120);
         this.zoneText.position.set(w / 2, h * 0.16);
         this.bossBox.position.set(w / 2, 62);
@@ -461,6 +478,12 @@ export class UIManager {
             }
         } else this.bossBox.visible = false;
 
+        if (this.toastTimer > 0) {
+            this.toastTimer -= delta;
+            this.toastText.alpha = Math.min(1, this.toastTimer / 40);
+            if (this.toastTimer <= 0) this.toastText.visible = false;
+        }
+
         // fade
         if (this.fadeAlpha !== this.fadeTarget) {
             const dir = this.fadeTarget > this.fadeAlpha ? 1 : -1;
@@ -520,7 +543,7 @@ export class UIManager {
             const pois = game.world.bounded ? [] : game.map.discoveredPois();
             const legend = new PIXI.Text(game.world.bounded
                 ? 'You are here (blue marker)   ·   🚪 exit' + (game.map.markers.some((m) => m.icon === '🎁') ? '   ·   🎁 treasure' : '')
-                : `${pois.length} place${pois.length === 1 ? '' : 's'} discovered   ·   🕳️ cave   🏛️ ruins   🏘️ town`, {
+                : `${pois.length} place${pois.length === 1 ? '' : 's'} discovered   ·   🕳️ cave   🏛️ ruins   🏘️ town   💀 warlord lair`, {
                 fontFamily: FONT, fontSize: 15, fill: 0xc9d1e6
             });
             legend.anchor.set(0.5);

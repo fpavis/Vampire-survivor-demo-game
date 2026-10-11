@@ -7,13 +7,15 @@ const T = WORLD_CONFIG.tile;
 
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
-function paintChunk(chunk) {
+function paintChunk(chunk, fog) {
     const canvas = document.createElement('canvas');
     canvas.width = CT;
     canvas.height = CT;
     const ctx = canvas.getContext('2d');
     const img = ctx.createImageData(CT, CT);
     for (let i = 0; i < CT * CT; i++) {
+        const tx = chunk.cx * CT + (i % CT), ty = chunk.cy * CT + Math.floor(i / CT);
+        if (fog && !fog.isRevealed(tx, ty)) { img.data[i * 4 + 3] = 0; continue; } // unexplored: stays dark
         const b = chunk.biomes[i];
         let c = BIOME_COLOR[b];
         if (b === BIOME.PEAK) c = 0xf0f4f8;
@@ -34,6 +36,8 @@ export class MapView {
     constructor() {
         this.maps = { overworld: new Map(), interior: new Map() };
         this.pois = new Map();
+        this.lairs = new Map();
+        this.lairDefeated = () => false;
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
         this.minimap = document.createElement('canvas');
@@ -46,6 +50,7 @@ export class MapView {
         this.maps.overworld.clear();
         this.maps.interior.clear();
         this.pois.clear();
+        this.lairs.clear();
         this.markers = [];
         this.dirty = true;
     }
@@ -57,12 +62,24 @@ export class MapView {
         this.dirty = true;
     }
 
-    discover(chunk) {
+    // Repaint chunks whose fog changed, and pick up places / warlord lairs that have been seen.
+    sync(fog, world, population, session) {
+        if (!fog.dirty.size) return;
         const map = this.maps[this.mode];
-        const key = `${chunk.cx},${chunk.cy}`;
-        if (map.has(key)) return;
-        map.set(key, paintChunk(chunk));
-        if (this.mode === 'overworld') for (const p of chunk.pois) this.pois.set(p.id, p);
+        for (const key of fog.dirty) {
+            const [cx, cy] = key.split(',').map(Number);
+            const chunk = world.getChunk(cx, cy);
+            map.set(key, paintChunk(chunk, fog));
+            if (this.mode === 'overworld') {
+                for (const p of chunk.pois) if (fog.isRevealed(p.tx, p.ty)) this.pois.set(p.id, p);
+                if (population) {
+                    for (const c of population.campsForChunk(cx, cy)) {
+                        if (c.lair && fog.isRevealed(c.tx, c.ty)) this.lairs.set(c.id, c);
+                    }
+                }
+            }
+        }
+        fog.dirty.clear();
         this.dirty = true;
     }
 
@@ -104,6 +121,25 @@ export class MapView {
                     ctx.lineWidth = 3;
                     ctx.strokeText(p.name, x, y + 24);
                     ctx.fillText(p.name, x, y + 24);
+                    ctx.font = `${iconSize}px sans-serif`;
+                }
+            }
+        }
+        if (this.mode === 'overworld') {
+            for (const l of this.lairs.values()) {
+                if (this.lairDefeated(l.id)) continue;
+                const x = ox + l.tx * ppt, y = oy + l.ty * ppt;
+                if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
+                ctx.fillStyle = 'rgba(80,0,0,0.65)';
+                ctx.beginPath(); ctx.arc(x, y, iconSize * 0.62, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillText('💀', x, y + 1);
+                if (opts.big) {
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                    ctx.strokeText(`Lv ${l.level}`, x, y + 24);
+                    ctx.fillStyle = '#ffb0b0';
+                    ctx.fillText(`Lv ${l.level}`, x, y + 24);
                     ctx.font = `${iconSize}px sans-serif`;
                 }
             }

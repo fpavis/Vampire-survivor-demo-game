@@ -2,6 +2,9 @@
 import * as PIXI from 'pixi.js';
 import { ENEMY_TYPES, WORLD_CONFIG } from '../core/config';
 import { ENEMY_ART } from './enemyArt';
+import { threatBand } from '../core/world/difficulty';
+
+const THREAT_COLORS = { low: 0x9aa4b2, even: 0x8ae08a, high: 0xffc233, deadly: 0xff4a4a };
 
 const TILT = WORLD_CONFIG.tilt;
 
@@ -52,6 +55,9 @@ function drawHealthBar(container, width, y) {
 }
 
 export class EntityManager {
+    // hero level, kept up to date by the game; used to colour enemy level tags by threat
+    static heroLevel = 1;
+
     // Project a ground-plane entity to the screen (in world-container space)
     static place(entity) {
         entity.position.set(entity.wx, entity.wy * TILT);
@@ -227,6 +233,21 @@ export class EntityManager {
             const frac = Math.max(0, e.health / e.maxHealth);
             hp.fg.scale.x = frac;
             hp.fg.tint = frac < 0.3 ? 0xff4747 : frac < 0.6 ? 0xffc233 : 0x4cd964;
+            if (e.level && !hp.label) {
+                // level tag, created lazily so undamaged monsters stay cheap
+                const label = new PIXI.Text(`Lv ${e.level}`, { fontFamily: 'Arial', fontSize: 11, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
+                label.anchor.set(0.5, 1);
+                label.position.set(0, -2);
+                hp.bar.addChild(label);
+                hp.label = label;
+            }
+            if (hp.label) {
+                const band = threatBand(e.level, EntityManager.heroLevel);
+                hp.label.style.fill = THREAT_COLORS[band];
+                if (e.isBoss) hp.label.text = `Lv ${e.level} ${e.bossName ?? ''}`;
+            }
+        } else if (hp.bar.visible && e.health >= e.maxHealth) {
+            hp.bar.visible = false;
         }
     }
 

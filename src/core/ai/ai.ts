@@ -1,5 +1,5 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
-import { WORLD_CONFIG, ENEMY_TYPES } from '../config';
+import { WORLD_CONFIG, ENEMY_TYPES, perceptionOf } from '../config';
 import { BIOME } from '../world/biomes';
 import { lineOfSight } from '../world/nav';
 import { EntityManager } from '../../render/entities';
@@ -700,7 +700,7 @@ const BEHAVIOUR = {
                     game.fx.addShake(8);
                     a.state = 'recover'; a.t = 40 * tm;
                 } else if (a.sub === 'summon') {
-                    game.spawnMinions(cfg.summon.type, cfg.summon.count + (enraged ? 1 : 0), e.wx, e.wy);
+                    game.spawnMinions(cfg.summon.type, cfg.summon.count + (enraged ? 1 : 0), e.wx, e.wy, e.level);
                     game.fx.burst(e.wx, e.wy, 20, 0xb060ff, 24, 3.5, { size: 0.9, life: 34, up: 3 });
                     a.state = 'recover'; a.t = 32 * tm;
                 } else if (a.sub === 'volley') {
@@ -751,6 +751,106 @@ const BEHAVIOUR = {
     }
 };
 
+
+// ---------------------------------------------------------------------------
+// Perception shell for resident monsters (camps, lairs, roamers):
+//   idle -> engaged -> returning -> idle
+// Monsters only notice the player inside their own sight range, give up after losing track, and never
+// follow beyond their leash, so a field monster no longer chases you across a biome border.
+// ---------------------------------------------------------------------------
+function canSee(game, e, perc) {
+    if (e.pd > perc.sight) return false;
+    if (e.flying || e.phasing || e.pd < perc.sight * 0.4) return true;
+    const p = game.state.player;
+    refreshLOS(game, e, p.wx, p.wy, e.pd);
+    return e.los;
+}
+
+export function engage(game, e, alertAllies = true) {
+    if (e.shell === 'engaged') return;
+    e.shell = 'engaged';
+    e.lostFor = 0;
+    e.ai = initAI(e);
+    if (alertAllies) {
+        const buf = [];
+        game.hash.near(e.wx, e.wy, e.perc.alert, buf);
+        for (const o of buf) if (o !== e && !o.dead && o.home && o.shell !== 'engaged') engage(game, o, false);
+    }
+}
+
+function idleWander(game, e, delta) {
+    e.untargetable = false;
+    e.phasing = !!ENEMY_TYPES[e.type].phase;
+    if (!e.wander) e.wander = { tx: e.home.x, ty: e.home.y, wait: rnd(30, 200) };
+    const w = e.wander;
+    w.wait -= delta;
+    const dx = w.tx - e.wx, dy = w.ty - e.wy;
+    const d = Math.hypot(dx, dy);
+    if (d < 10) {
+        hold(game, e, delta);
+        if (w.wait <= 0) {
+            for (let i = 0; i < 6; i++) {
+                const a = Math.random() * TAU, r = rnd(30, 130);
+                const tx = e.home.x + Math.cos(a) * r, ty = e.home.y + Math.sin(a) * r;
+                if (e.flying || !game.world.blocked(tx, ty, e.radius)) { w.tx = tx; w.ty = ty; break; }
+            }
+            w.wait = rnd(90, 260);
+        }
+    } else {
+        steer(game, e, dx / d, dy / d, e.speed * 0.35, delta, false);
+        face(e, dx);
+    }
+}
+
+function walkHome(game, e, delta) {
+    const dx = e.home.x - e.wx, dy = e.home.y - e.wy;
+    const d = Math.hypot(dx, dy);
+    if (d < 36) {
+        e.shell = 'idle';
+        e.health = e.maxHealth;
+        e.ai = initAI(e);
+        e.untargetable = false;
+        e.phasing = !!ENEMY_TYPES[e.type].phase;
+        e.dashing = false;
+        e.enraged = false;
+        return;
+    }
+    tmpDir.x = dx / d; tmpDir.y = dy / d;
+    if (!e.flying && !e.phasing) { avoid(game, e, tmpDir); }
+    steer(game, e, tmpDir.x, tmpDir.y, e.speed * 1.3, delta, false);
+    face(e, dx);
+}
+
+// returns true when the shell fully handled this frame (monster is idle or walking home)
+function perceptionShell(game, e, delta) {
+    const perc = e.perc;
+    if (!e.shell) e.shell = 'idle';
+    const homeD = Math.hypot(e.wx - e.home.x, e.wy - e.home.y);
+
+    if (e.shell === 'idle') {
+        if (canSee(game, e, perc)) { engage(game, e); return false; }
+        idleWander(game, e, delta);
+        return true;
+    }
+    if (e.shell === 'returning') {
+        if (e.pd < perc.sight * 0.6 && homeD < e.leash * 0.7) { engage(game, e); return false; }
+        walkHome(game, e, delta);
+        return true;
+    }
+    // engaged
+    const lost = e.pd > perc.sight * perc.loseMul;
+    const leashed = homeD > e.leash;
+    if (lost || leashed) {
+        e.lostFor = (e.lostFor || 0) + delta;
+        if (leashed || e.lostFor > perc.memory) {
+            e.shell = 'returning';
+            EntityManager.clearTele(e);
+            e.dashing = false;
+        }
+    } else e.lostFor = 0;
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Entry point, called once per living enemy per frame
 // ---------------------------------------------------------------------------
@@ -770,6 +870,9 @@ export function updateEnemy(game, e, delta) {
         if (e.pd < (e.aggro || 420)) e.dormant = false;
         else { hold(game, e, delta); return; }
     }
+
+    if (!e.perc) e.perc = perceptionOf(e.type);
+    if (e.home && perceptionShell(game, e, delta)) return;
 
     if (e.nudge > 0) e.nudge -= delta;
     BEHAVIOUR[e.ai.kind](game, e, e.ai, delta);

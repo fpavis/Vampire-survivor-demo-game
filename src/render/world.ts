@@ -33,6 +33,18 @@ class ChunkData {
     }
 }
 
+// Higher-level regions change the land itself: blighted, ashen, abyssal ... (tier = floor((level - 1) / 12))
+const TIER_TINT: [number, number][] = [
+    [0, 0], [0x6a3a7a, 0.2], [0x5a5048, 0.34], [0x1a2a4a, 0.44], [0x5a1a1a, 0.46], [0x2a0a3a, 0.52]
+];
+
+function mixColor(a: number, b: number, k: number): number {
+    const r = Math.round(((a >> 16) & 255) * (1 - k) + ((b >> 16) & 255) * k);
+    const g = Math.round(((a >> 8) & 255) * (1 - k) + ((b >> 8) & 255) * k);
+    const bl = Math.round((a & 255) * (1 - k) + (b & 255) * k);
+    return (r << 16) | (g << 8) | bl;
+}
+
 const chunkKey = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
 
 export class World {
@@ -261,6 +273,10 @@ export class World {
                 if (src.bounded) light = 1 + (light - 1) * 0.45;
                 let color = BIOME_COLOR[biome];
                 if (biome === BIOME.CITY_FLOOR && theme && theme.floor) color = theme.floor;
+                if (!src.bounded && !isWaterBiome(biome) && (src as any).tierAt) {
+                    const tier = (src as any).tierAt(tx, ty);
+                    if (tier > 0) { const [tc, tk] = TIER_TINT[Math.min(tier, TIER_TINT.length - 1)]; color = mixColor(color, tc, tk); }
+                }
                 const base = shade(color, light);
                 ground.beginFill(base);
                 ground.drawRect(px, py, T + 1, T + 1);

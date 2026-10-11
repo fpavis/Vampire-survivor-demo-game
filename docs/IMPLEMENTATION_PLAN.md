@@ -6,6 +6,24 @@
 > Every phase ends with a playable, deployed game. If a phase grows too big, split it; never leave the
 > game broken between phases.
 
+## Progress
+
+Work happens on the long-lived feature branch `claude/zealous-allen-iqnjhe`. **Nothing is merged to `main` until
+the whole plan is implemented and tested.** A private hosted test page is republished at each milestone
+(`npm run build:artifact`); it includes a test-tools panel (backquote key, or the flask button).
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0 Tooling and TypeScript | **Done** | Vite, strict TS for the deterministic core, Vitest (55 tests), Playwright e2e, CI. Legacy runtime files carry `@ts-nocheck` until they are rewritten (it already hid one undefined-name bug, so retire it as modules are replaced) |
+| 1 Simulation, persistence, difficulty, perception | **Done, with two deferrals** | Fixed 60 Hz step, event bus, RNG streams, saves (IndexedDB, versioned, compressed, migrations), per-tile persisted fog of war, zone levels by distance, tier-tinted land and dead trees, resident camps and warlord lairs, sight / leash / return AI, respawn at nearest visited town. **Deferred:** full headless `Simulation` split from the Pixi renderer (the game still runs in `game.ts`; deterministic sim tests will come with the spell runtime in Phase 2), and tiered *species* per biome (tiers currently change stats, names and terrain; new species are content work) |
+| 2 Spell runtime, stats, mana | Not started | |
+| 3 Items, loot, wallet, board UI | Not started | |
+| 4 Party and death | Not started | |
+| 5 Surfaces, zones, resources, towns | Not started | |
+| 6 Towers, docks, boats | Not started | |
+| 7 Quests, story, dungeons | Not started | |
+| 8 Audio and polish | Not started | |
+
 ## 1. Goals and hard constraints
 
 - Browser game, desktop first, touch playable later. Deployed to GitHub Pages.

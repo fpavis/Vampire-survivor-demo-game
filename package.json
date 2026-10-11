@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "test:e2e": "node tests/e2e/smoke.mjs"
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/phase1.mjs",
+    "build:artifact": "npm run build:single && node scripts/make-artifact.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3",
