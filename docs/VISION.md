@@ -1,8 +1,8 @@
 # Vision: a survivors-like Final Fantasy world
 
 > **Status: living document, nothing here is implemented yet.**
-> Revision 2. Captures the creative direction as a stream of thought, now including the first round of
-> decisions. The goal is to find out what is possible, what is expensive, and what to cut or reshape before
+> Revision 3. Captures the creative direction as a stream of thought, now including two rounds of
+> decisions. The technical plan lives in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). The goal is to find out what is possible, what is expensive, and what to cut or reshape before
 > code is written.
 > Feasibility ratings are rough: **Easy** (days), **Medium** (a week or two), **Hard** (weeks, needs new
 > architecture), **Risky** (could eat the project or may not fit a browser game).
@@ -56,6 +56,18 @@ These are the answers from the first review round. They can still be revised.
 | Compatibility | Runes are **auto-checked**: incompatible runes **cannot be socketed**. |
 | Level-up popups | **Out of the way, never interrupting gameplay flow.** |
 | New feature | **Towers**: placeable structures that autofire with spells, create wards, and modify the world (for example making a mountain climbable). |
+| **Round 3** | |
+| Towers | **Monumental achievements**: very expensive, **no limit on count (resources are the only cap)**, **permanent once built**. Includes a **dock** to build a **boat** and cross the deep sea. |
+| Resources | **Gold** (merchants), **wood, stone, iron** (building). |
+| Gems | **Runes only.** No separate gems. |
+| Spell shops | **Yes**, spells and runes can be bought. Gold and shops must exist. |
+| Drop rate | Base **0.1** for normal enemies, higher for higher-level and stronger monsters, but **not so high that the inventory floods** with items to inspect. **Skills are rare, valuable and sought after**, and getting a new one must feel rewarding. |
+| Loadouts | **The hero party acts as the loadouts**: switching heroes is fast (low cooldown). **Changing skills and runes is only possible in safe moments.** |
+| Terrain | **Surface effects**: lava, poison swamp and similar that damage over time, speed up or slow down players and/or enemies, slowly heal, boost mana regen or fire rate, trigger events when stepped on (monster wave, unlock an area), and **claimable areas** you hold for a while. |
+| Hero death | Only the **active hero can be damaged**. A dead hero **cannot be used until rested in a city**. If the whole party is down: **death screen, respawn at the nearest visited city or the start area**. |
+| Enemy level | **Depends only on the area (distance from start)**, not the player. The **distance is large** and the **increase is gradual** (slow incline outwards). **Higher-level monsters come with biome change.** |
+| Enemy perception | Enemies have a **limited, per-type view distance** and cannot see the player from far away. **Monsters from different biomes must no longer all converge on the player.** |
+| Tech | **TypeScript is allowed.** Framework recommendations welcome (see the implementation plan). |
 
 ---
 
@@ -93,9 +105,9 @@ These are the answers from the first review round. They can still be revised.
   `xp(L) = base(L)` for `L <= 99`, `xp(L) = xp(99) * g^(L - 99)` after, with `g` about 1.10 to 1.20.
   Stat cards keep being offered past 99, but the exponential cost makes each further level a rare event
   (a long-term endgame sink rather than a wall). *Easy.*
-- **Infinite world vs the difficulty gradient:** distance difficulty grows without bound, so the far reaches
-  become absurd. Decision still needed: soft-cap the zone level (recommended), or keep it open as an endless
-  late-game mode.
+- **Infinite world vs the difficulty gradient (decided in principle):** enemy level depends only on distance
+  from the start, with a large scale and a gentle incline (concrete curve in the implementation plan). The
+  level keeps growing slowly past the level-99 mark; whether to hard-soft-cap it remains a tuning choice.
 
 ### 5.2 Loot and economy
 
@@ -104,8 +116,8 @@ These are the answers from the first review round. They can still be revised.
   This ties directly into the pillar "exploration first" and makes dungeons the progression spine.
 - Item level comes from the zone / dungeon level; rarity distribution improves with depth (as in the Materia
   notes). Every dropped component starts at level 1 and levels through use.
-- Gold is needed (shops, towers, services). Towns buy and sell consumables, towers parts and basic
-  runes, but the *best* spell items remain dungeon-only. *Medium.*
+- **Gold exists and merchants sell spells and runes** (at high prices, with limited and rotating stock), as
+  well as consumables and services. Dungeons still carry the guaranteed and best finds. *Medium.*
 - Chest rewards go to the **inventory**, not a forced popup (see 5.8).
 
 ### 5.3 Party: hybrid, with a useful bench
@@ -127,13 +139,18 @@ switch. Benched heroes are not dead weight:
   aura cooldown-style cards.
 - **Recruitment:** through quests, towns and dungeons.
 - **XP sharing:** benched heroes gain a reduced share so no hero is left behind.
-- **Death rule** still open: run ends when the active hero dies, or when the whole party is down (FF-style,
-  recommended), possibly with the bench able to "revive" the active hero once.
+- **Death (decided):** only the **active hero can be damaged**; benched heroes are untouchable. When the
+  active hero dies they are **unusable until rested in a city**, and control passes to the next living hero.
+  When **every hero is down** the **death screen** appears with **respawn at the nearest visited city (or the
+  start area)**. Resting at a city inn revives and heals the party.
+- **Heroes act as loadouts:** a hero swap is fast (short cooldown) and *is* how you change spell sets in
+  combat. **Editing spells and runes is only allowed in safe moments** (no hostiles aggroed nearby and no
+  recent combat, or inside safe zones, towns and towers).
 - *Cost:* *Medium-Hard.* Per-hero state, UI, aura system, switching rules. Because benched heroes do not
   occupy the battlefield, there is no follower AI or extra collision cost. This is why option C is the
   right middle ground.
 
-### 5.4 Resources: mana as stamina, and active skills
+### 5.4 Mana as stamina, and active skills
 
 - **Autofire spells have no mana cost.** They run on cooldown only. This keeps the survivors-like core loop
   smooth even at low mana.
@@ -252,19 +269,32 @@ survivors-like core.
 | **Ward** | Area protection: a shield dome or field that repels or weakens enemies, protects a base or a town. | Warding obelisk with a barrier |
 | **Terrain / traversal** | Modifies the world. | **Climbing anchor** or lift tower placed near a mountain that opens a route to the **plateau**; bridge tower over water; path clearer |
 | **Utility** | Supports exploration and the party. | Light tower / beacon (reveals fog), waypoint for fast travel, healing totem, aura pylon (can hold a benched hero's aura?) |
+| **Harbor** | A **dock** on the shore where you build a **boat** to cross deep water. | Dock, boat, later bigger ships. Opens islands and sea content. |
 
 **Mechanics to decide**
 
-- **Cost and resources:** gold plus materials. Needs a materials concept (ore, wood, essence) from
-  harvesting or dungeons. Towers are also a **sink for spell items** (a spare spell can power a tower).
+- **Cost and resources (decided):** towers are **monumental achievements**. They cost **large amounts of
+  wood, stone and iron** (plus gold for the bigger ones). Resources are the **only** cap: **no limit on how
+  many** can be built. They are **permanent**: once built they cannot be demolished, moved or refunded.
+  Towers are also a **sink for spell items** (a spare spell can power a tower).
+- **Construction as an event:** a tower is a **construction site** you stock with resources over time and
+  that completes with a short ceremony (and possibly a defend-the-site encounter), so building one feels
+  like an achievement rather than a menu click.
 - **Placement UI:** build mode, ghost preview on the tile grid, validity colouring (terrain, distance to
   other towers, minimum distance from towns), cancel / refund.
-- **Limits:** tower cap per area or a "tower budget" tied to hero level or a town upgrade, to protect
-  balance and performance.
-- **Upkeep and threat:** towers can be attacked by enemies (siege events), can be repaired, and can be
-  upgraded (levels, extra spell slots). Optional: towers draw aggro from enemies, which creates
-  tower-defence moments.
+- **Limits:** none by count (decided). Resource cost is the balance lever, so costs must scale so that a
+  large tower network is a long-term investment. Performance is protected by sim-level culling (towers far
+  from the player update at a low rate).
+- **Threat:** since towers are permanent, they are **indestructible** in the recommended design (no loss
+  spiral). Pressure comes from events that *disable* a tower temporarily, or from enemies that ignore
+  them. Upgrades (levels, extra spell slots) are possible. Needs a decision (open question).
 - **Persistence:** tower position, level, loadout and health are part of the saved world deltas.
+
+**The dock and boat.** Deep water is currently a solid wall. With a dock, a boat becomes a vehicle that can
+traverse deep water: the player boards at the dock, the boat is a moving platform with its own collision rules
+(deep and shallow water allowed, land not), the hero can still cast from the boat, and sea chunks get their
+own content (islands, sea POIs, sea enemies such as jellies, gulls and later krakens). The dock is a world
+delta (persistent). *Medium-Hard:* movement mode switching, boat entity, water-aware navigation, sea content.
 
 **The mountain-climbing tower in detail.** Mountains are currently solid walls. A *plateau* would be an
 elevated region behind or inside a mountain range that is unreachable by default. Cheapest viable design: the
@@ -285,6 +315,77 @@ and not needed for the first version.
 - Siege / tower-defence events and enemy targeting of towers: *Hard-ish* (enemy AI work).
 - **Risks:** towers can trivialise the game (balance), tower entities cost performance, and persistent world
   edits increase save size and generator-versioning pressure.
+
+### 5.9b Terrain surfaces and claimable areas (new)
+
+A **surface layer** on top of the biome: every tile can carry a surface (lava, poison swamp, ice, quicksand,
+healing spring, mana well, haste road...) that affects entities standing on it.
+
+| Effect | Targets | Example surfaces |
+|---|---|---|
+| Damage over time | player, enemies, or both | lava, poison swamp, thorns |
+| Slow / speed up | player, enemies, or both | mud, swamp, ice, road, haste glyph |
+| Slow healing | player (maybe enemies) | healing spring |
+| Mana regen boost / fire-rate boost | player | mana well, arcane glyph |
+| **On-step trigger** | player | monster wave, unlock a gate, open a vault, start an encounter |
+| **Claimable area** | player | hold out inside the area while a bar fills (waves optional), then the area is **claimed** |
+
+- Immunities: fire enemies ignore lava, swamp creatures ignore poison. Surfaces are data (`SurfaceDef`) with
+  target filters, so adding a surface is a data change.
+- **Enemy AI awareness:** ground enemies avoid damaging surfaces in the flow field (extra path cost) unless
+  immune. Flying enemies ignore surfaces.
+- **Claimed areas** are saved as world deltas and can give lasting benefits: a safe zone, a build site for
+  towers, passive buffs, a fast-travel point, fog reveal.
+- **Biome and tier flavour:** swamp surfaces in forest, lava and ice in mountains, quicksand in desert,
+  tidal pools on the shore; harsher surfaces appear at higher zone levels.
+- *Cost:* surfaces and effects *Medium*; hazard-aware AI *Medium*; trigger and claim zones *Medium*.
+
+### 5.9c Resources and gathering (new)
+
+- **Gold:** earned from enemies, chests, quests; spent at merchants (spells, runes, consumables, services,
+  inns, maps).
+- **Wood, stone, iron:** needed for towers (and later crafting). Gathered from **resource nodes** in the
+  world: trees (wood), rocks (stone), ore deposits (iron, mountains and hills), plus occasional drops.
+  Gathering is an interaction (hold to harvest) so it fits an action game; depleted nodes are world deltas
+  (with an optional long respawn).
+- **Stackable and auto-collected:** resources and gold go straight to the wallet and never occupy
+  inventory slots. This is the key to avoiding inventory spam.
+- *Cost:* *Medium* (nodes, gathering interaction, wallet UI, deltas).
+
+### 5.9d Loot rules (new)
+
+At survivors-like kill rates (about 60 to 250 kills per minute) a flat 10 percent chance of an *item* per
+kill would produce **6 to 25 items per minute**, which is exactly the inventory flood to avoid. So the rule
+proposed is:
+
+- The **0.1 base roll** is the chance that a kill drops **something**, scaled up by monster level and
+  strength. Most of what drops is **stackable and auto-collected** (gold, wood, stone, iron, consumables).
+- **Runes and spell items are a separate, much rarer roll** (a small fraction of drops). Dungeons, chests
+  and bosses carry the guaranteed and better ones; merchants sell some at high gold prices.
+- **Skills are the rare, valuable chase.** A new spell item gets a **rewarding acquisition moment**: a
+  light-beam drop, a distinct sound, a short non-blocking reveal card, a codex entry, and a first-cast
+  showcase on equip. Duplicates and unwanted items **auto-salvage** into resources by a loot filter.
+- Loot filter and salvage rules are a QoL feature, not an afterthought.
+- *Needs confirmation:* is the 0.1 meant as "10 percent a kill drops anything" (as modelled above)?
+
+### 5.9e Enemy perception and zone ownership (new)
+
+Today monsters spawn around the player and chase from anywhere, so earlier biomes follow you into new ones.
+Revised model:
+
+- Enemies have a **`sightRange` per type** (for example bats 500, golems 260, boars 340), a lose-track range
+  and a short memory. They **idle, wander or sleep** until the player is inside their sight range, and give
+  up and return home when the player escapes.
+- Every monster has a **home position and leash radius**, so a field monster does not follow you across a
+  biome border. Groups share alerts to keep the swarm feel inside an area.
+- **Resident population:** monsters belong to their zone (seeded camps, lairs, roamers), with a danger-driven
+  density. Cleared camps stay cleared (world delta, optional long respawn). This replaces the
+  "everything chases you forever" ambient spawn.
+- **Enemy level is a pure function of the area** (distance from the start with regional variation), with a
+  large distance scale and a gentle incline. **Higher tiers change the biome and roster**: each biome has
+  tier variants (for example Verdant Fields, then Blighted Plains, then Ashen Wastes) with stronger species,
+  and harsher surfaces. See the implementation plan for the curve.
+- *Cost:* *Medium* (perception layer exists conceptually in the AI; population and leash are new).
 
 ### 5.10 Quests and story
 
@@ -377,6 +478,11 @@ and not needed for the first version.
 | Turret and ward towers | Medium | After spell runtime |
 | Climbing tower + plateaus / terrain edits | Medium-Hard | Plateau generation, tile deltas |
 | Siege events, towers as enemy targets | Hard | Enemy AI |
+| Surface effects (lava, swamp, buffs) + hazard-aware AI | Medium | Surface layer, flow-field costs |
+| On-step triggers and claimable (hold-out) areas | Medium | Trigger and zone system |
+| Resources, nodes, gathering, wallet | Medium | Nodes, deltas, UI |
+| Enemy perception, leash, resident population | Medium | AI layer, spawning rework |
+| Dock and boat (deep-sea traversal) | Medium-Hard | Movement mode, sea content |
 | Sound: SFX | Easy-Medium | Synth + manager |
 | Sound: music | Medium | Asset source |
 | Free-form spell building (depth 3) | Hard | UI + validation |
@@ -400,39 +506,25 @@ and not needed for the first version.
 Reasoning: steps 1 and 2 are painful to retrofit; party, towers and quests all depend on the spell runtime
 and the save system.
 
-## 9. Open questions (round 2)
+## 9. Open questions (round 3)
 
-**Spells and items**
-1. Gems vs runes: start with runes only (recommended) or have separate numeric gem sockets too?
-2. Autofire / active slot counts per hero. Suggestion: 3 auto + 3 active, active slots unlocked by progression.
-3. Can spell items be bought at all, or strictly dungeon-only (and tower parts bought)? How low is "low
-   probability" for overworld drops (for example 1 percent per normal kill, higher for elites)?
-4. Is quick-swapping loadouts allowed during combat (limited by cooldown) or only in safe moments?
+Most earlier questions are answered (see the decisions table). Remaining:
 
-**Party**
-5. Death rule: active hero down = game over, or whole party down (recommended, with a once-per-fight bench
-   revive)?
-6. Party size and class list. How many heroes, and are classes fixed or built from stat paths?
-7. Aura numbers: should a benched aura hero be fully immune, and do aura strengths scale with *their* level
-   (recommended) or the active hero's?
-
-**Towers**
-8. Resources for building (gold only, or materials from harvesting)? Is there harvesting at all?
-9. Tower limits (cap, budget, per-area) and whether enemies attack towers (siege events).
-10. Plateau content: what lives on plateaus (high-level loot, hidden dungeons, rare spell vendors)?
-11. Can towers be moved or sold back, and what happens to their loadout?
-
-**World and difficulty**
-12. Soft-cap the zone level, or keep the world's danger unbounded?
-13. Fixed zone levels (decided in principle) with any scaling for under-levelled players, or none?
-14. Penalty for dying: lose gold, lose XP, respawn at last inn, or just restart the encounter?
-
-**Story and presentation**
-15. How many demon lords and chapters for the framework (suggestion: 5 lords for the 5 biomes + a final
-    sovereign)?
-16. Music source: composed tracks, licensed free tracks, or generated loops?
-17. Art direction: stay procedural, or add hand-made sprites for heroes and bosses?
-18. Platforms: browser only, or mobile with touch controls too (affects UI density)?
+1. **Loot interpretation:** confirm 0.1 as "10 percent a kill drops something, mostly auto-collected
+   stackables", with runes and spells a much smaller sub-roll (5.9d).
+2. **Tower threats:** towers are permanent, so should they be fully indestructible (recommended), or can
+   events temporarily disable them?
+3. **Resource tools:** is gathering free-hand (hold to harvest) or do axes and pickaxes exist as upgradable
+   gear?
+4. **Safe moment definition:** how long without combat before editing is allowed (suggestion: 6 seconds with
+   no aggroed hostile within sight), and are towers, towns and claimed areas always safe?
+5. **Party size and class list:** how many heroes at start and in total, fixed classes or stat-path built?
+6. **Boat scope:** one boat type to start, or a progression (raft, boat, ship) tied to resources?
+7. **Dungeon spell drops:** guaranteed spell in each dungeon boss chest, or a high-chance roll?
+8. **Revive rules:** does resting at an inn cost gold, and are there consumables that revive in the field?
+9. **Music source** (composed, licensed free, generated) and **art direction** (stay procedural or add
+   hand-made sprites for heroes and bosses).
+10. **Platforms:** browser only, or mobile touch as well (affects UI density and the build mode controls).
 
 ## 10. Known design tensions
 
