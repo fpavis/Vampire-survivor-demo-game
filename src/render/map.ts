@@ -1,5 +1,6 @@
-import { WORLD_CONFIG } from './config.js';
-import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf } from './biomes.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import { WORLD_CONFIG } from '../core/config';
+import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf } from '../core/world/biomes';
 
 const CT = WORLD_CONFIG.chunkTiles;
 const T = WORLD_CONFIG.tile;

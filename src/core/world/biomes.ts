@@ -35,9 +35,9 @@ const SOLID_TABLE = new Uint8Array(32);
 [BIOME.DEEP, BIOME.MOUNTAIN, BIOME.PEAK, BIOME.CAVE_WALL, BIOME.RUIN_WALL, BIOME.CITY_WALL,
     BIOME.CITY_STONE, BIOME.VOID].forEach((b) => { SOLID_TABLE[b] = 1; });
 
-export const isSolidBiome = (b) => SOLID_TABLE[b] === 1;
-export const isWaterBiome = (b) => b === BIOME.DEEP || b === BIOME.SHALLOW;
-export const isWallBiome = (b) => WALL_BIOMES.has(b);
+export const isSolidBiome = (b: number) => SOLID_TABLE[b] === 1;
+export const isWaterBiome = (b: number) => b === BIOME.DEEP || b === BIOME.SHALLOW;
+export const isWallBiome = (b: number) => WALL_BIOMES.has(b);
 
 // Gameplay "region" a tile belongs to. Drives enemy rosters, fauna and the map.
 export const GROUP = {
@@ -45,7 +45,7 @@ export const GROUP = {
     CAVE: 'cave', RUINS: 'ruins', CITY: 'city'
 };
 
-export function groupOf(b) {
+export function groupOf(b: number): string {
     switch (b) {
         case BIOME.DEEP: case BIOME.SHALLOW: case BIOME.SAND: return GROUP.SHORE;
         case BIOME.DRY: return GROUP.DESERT;

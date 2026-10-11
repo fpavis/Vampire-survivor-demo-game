@@ -1,3 +1,4 @@
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 // Procedural decoration art. Every sprite is drawn once with PIXI.Graphics and baked into a texture.
 // Sprites are drawn with their "feet" at (0, 0) so they can be depth-sorted by y.
 
@@ -511,10 +512,11 @@ function drawPortal(g) {
 }
 
 // ---------------------------------------------------------------- REGISTRY
-const D = (w, h, pad, r, solid, variants) => ({ w, h, pad, r, solid, variants });
+export interface DecorDef { w: number; h: number; pad: number; r: number; solid: boolean; variants: ((g: any) => void)[] }
+const D = (w: number, h: number, pad: number, r: number, solid: boolean, variants: ((g: any) => void)[]): DecorDef => ({ w, h, pad, r, solid, variants });
 const flowerSets = [[0xff5a7a, 0xffe14d, 0xffffff, 0xff9ad0, 0xb48aff], [0xffffff, 0xffe14d, 0xffffff, 0xffe14d, 0xff9ad0], [0xb48aff, 0x7ab4ff, 0xffffff, 0xb48aff, 0x7ab4ff]];
 
-export const DECOR_DEFS = {
+export const DECOR_DEFS: Record<string, DecorDef> = {
     // field
     appletree: D(84, 100, 14, 13, true, [(g) => drawTree(g, 0x58b04a, { apples: true }), (g) => drawTree(g, 0x4a9a3e, { apples: true })]),
     birch: D(64, 96, 12, 8, true, [(g) => drawBirch(g, 0x9acb55), (g) => drawBirch(g, 0xc8d65a)]),
@@ -580,22 +582,3 @@ export const DECOR_DEFS = {
     well: D(56, 60, 10, 22, true, [drawWell]),
     portal: D(72, 90, 12, 0, false, [drawPortal])
 };
-
-export function bakeDecorTextures(app) {
-    const out = {};
-    for (const [type, def] of Object.entries(DECOR_DEFS)) {
-        out[type] = def.variants.map((draw) => {
-            const g = new PIXI.Graphics();
-            draw(g);
-            const holder = new PIXI.Container();
-            holder.addChild(g);
-            const region = new PIXI.Rectangle(-def.w / 2, -def.h, def.w, def.h + def.pad);
-            const texture = app.renderer.generateTexture(holder, {
-                region, resolution: 2, multisample: PIXI.MSAA_QUALITY.HIGH
-            });
-            holder.destroy({ children: true });
-            return { texture, anchorY: def.h / (def.h + def.pad) };
-        });
-    }
-    return out;
-}

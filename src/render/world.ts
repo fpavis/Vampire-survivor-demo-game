@@ -1,9 +1,12 @@
-import { WORLD_CONFIG } from './config.js';
-import { hash, fbm } from './noise.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
+import { WORLD_CONFIG } from '../core/config';
+import { hash, fbm } from '../core/world/noise';
 import {
     BIOME, BIOME_COLOR, isSolidBiome, isWaterBiome, isWallBiome, groupOf
-} from './biomes.js';
-import { bakeDecorTextures, shade } from './art.js';
+} from '../core/world/biomes';
+import { shade } from './decorArt';
+import { bakeDecorTextures } from './decorBake';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;

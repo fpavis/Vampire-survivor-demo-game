@@ -1,8 +1,10 @@
-import { RARITY, LIMITS } from './config.js';
-import { gameState } from './gameState.js';
-import { WEAPONS, PASSIVES } from './weapons.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
+import { RARITY, LIMITS } from '../core/config';
+import { gameState } from './gameState';
+import { WEAPONS, PASSIVES } from './weapons';
 
-import { WORLD_CONFIG } from './config.js';
+import { WORLD_CONFIG } from '../core/config';
 const WORLD_T = WORLD_CONFIG.tile;
 const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

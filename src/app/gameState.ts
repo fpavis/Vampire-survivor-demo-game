@@ -1,4 +1,5 @@
-import { INITIAL_STATE } from './config.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import { INITIAL_STATE } from '../core/config';
 
 class GameState {
     constructor() {

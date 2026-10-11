@@ -1,13 +1,14 @@
-import { WORLD_CONFIG } from './config.js';
-import { hash, fbm, smooth, lerp, clamp01 } from './noise.js';
-import { BIOME, isSolidBiome, isWaterBiome, groupOf, GROUP } from './biomes.js';
-import { DECOR_DEFS } from './art.js';
+import { WORLD_CONFIG } from '../config';
+import { hash, fbm, smooth, lerp, clamp01 } from './noise';
+import { BIOME, isSolidBiome, isWaterBiome, groupOf, GROUP } from './biomes';
+import { DECOR_DEFS } from '../../render/decorArt';
+import type { ChunkLike, DecorItem, Poi, PoiType, TerrainSource } from '../types';
 
 const T = WORLD_CONFIG.tile;
 export const POI_CELL = 16; // tiles per point-of-interest cell
 
 // cumulative probability tables: [maxRoll, decorType]
-const DECOR_TABLES = {
+const DECOR_TABLES: Record<number, [number, string][]> = {
     [BIOME.GRASS]: [[0.02, 'appletree'], [0.04, 'birch'], [0.075, 'flowerbed'], [0.095, 'bush'], [0.12, 'tallgrass'],
         [0.128, 'haystack'], [0.131, 'scarecrow'], [0.145, 'wheat'], [0.153, 'rock']],
     [BIOME.FOREST]: [[0.12, 'oak'], [0.2, 'pine'], [0.235, 'bigmushroom'], [0.26, 'log'], [0.28, 'stump'],
@@ -19,18 +20,18 @@ const DECOR_TABLES = {
     [BIOME.HILL]: [[0.03, 'boulder'], [0.07, 'rock'], [0.11, 'snowpine'], [0.125, 'crystal'], [0.14, 'icerock'], [0.155, 'ore']]
 };
 
-const NAME_A = {
+const NAME_A: Record<PoiType, string[]> = {
     cave: ['Gloom', 'Echo', 'Hollow', 'Deep', 'Ember', 'Frost', 'Whisper', 'Black'],
     ruins: ['Fallen', 'Sunken', 'Ashen', 'Forgotten', 'Weeping', 'Shattered', 'Old', 'Hollow'],
     city: ['Port', 'Fort', 'Oak', 'Stone', 'Willow', 'High', 'Sun', 'River']
 };
-const NAME_B = {
+const NAME_B: Record<PoiType, string[]> = {
     cave: ['Cavern', 'Grotto', 'Den', 'Burrow', 'Depths', 'Hollow'],
     ruins: ['Crypt', 'Temple', 'Citadel', 'Sanctum', 'Vault', 'Halls'],
     city: ['haven', 'mere', 'watch', 'ford', 'stead', 'gate']
 };
 
-const TYPE_WEIGHTS = {
+const TYPE_WEIGHTS: Record<string, Record<PoiType, number>> = {
     [GROUP.FIELD]: { cave: 0.3, ruins: 0.3, city: 0.4 },
     [GROUP.FOREST]: { cave: 0.4, ruins: 0.5, city: 0.1 },
     [GROUP.DESERT]: { cave: 0.25, ruins: 0.5, city: 0.25 },
@@ -38,9 +39,9 @@ const TYPE_WEIGHTS = {
     [GROUP.MOUNTAIN]: { cave: 0.7, ruins: 0.25, city: 0.05 }
 };
 
-export function addDecorItem(chunk, type, x, y, variant, extra = {}) {
+export function addDecorItem(chunk: ChunkLike, type: string, x: number, y: number, variant: number, extra: Partial<DecorItem> = {}): DecorItem {
     const def = DECOR_DEFS[type];
-    const item = {
+    const item: DecorItem = {
         type, variant: variant % def.variants.length, x, y, r: def.r, solid: def.solid,
         flip: extra.flip !== undefined ? extra.flip : false, ...extra
     };
@@ -49,18 +50,20 @@ export function addDecorItem(chunk, type, x, y, variant, extra = {}) {
     return item;
 }
 
-const ENTRANCE_OFFSET = { cave: 64, ruins: 48, city: 58 };
+const ENTRANCE_OFFSET: Record<PoiType, number> = { cave: 64, ruins: 48, city: 58 };
 
-export class OverworldSource {
-    constructor(seed) {
+export class OverworldSource implements TerrainSource {
+    seed: number;
+    bounded = false;
+    theme = null;
+    poiCache = new Map<string, Poi | null>();
+
+    constructor(seed: number) {
         this.seed = seed;
-        this.bounded = false;
-        this.theme = null;
-        this.poiCache = new Map();
     }
 
     // ---------------------------------------------------------------- terrain
-    biomeAt(tx, ty) {
+    biomeAt(tx: number, ty: number): number {
         const seed = this.seed;
         let e = fbm(tx * 0.03, ty * 0.03, seed, 5);
         let m = fbm(tx * 0.036 + 137, ty * 0.036 - 71, seed + 17, 4);
@@ -84,15 +87,16 @@ export class OverworldSource {
     }
 
     // ------------------------------------------------------------ places
-    poiForCell(cx, cy) {
+    poiForCell(cx: number, cy: number): Poi | null {
         const key = `${cx},${cy}`;
-        if (this.poiCache.has(key)) return this.poiCache.get(key);
+        const cached = this.poiCache.get(key);
+        if (cached !== undefined) return cached;
         const poi = this.makePoi(cx, cy);
         this.poiCache.set(key, poi);
         return poi;
     }
 
-    freeArea(tx, ty, rx, ry) {
+    freeArea(tx: number, ty: number, rx: number, ry: number): boolean {
         for (let y = ty - ry; y <= ty + ry; y++) {
             for (let x = tx - rx; x <= tx + rx; x++) {
                 const b = this.biomeAt(x, y);
@@ -102,7 +106,7 @@ export class OverworldSource {
         return true;
     }
 
-    makePoi(cx, cy) {
+    makePoi(cx: number, cy: number): Poi | null {
         const seed = this.seed;
         const near = Math.hypot((cx + 0.5) * POI_CELL, (cy + 0.5) * POI_CELL) < 34;
         if (hash(cx, cy, seed + 500) > (near ? 0.62 : 0.36)) return null;
@@ -117,15 +121,17 @@ export class OverworldSource {
             if (!this.freeArea(tx, ty, 2, 2)) continue;
             const group = groupOf(biome);
             const weights = TYPE_WEIGHTS[group];
+            if (!weights) continue;
             let roll = hash(cx, cy, seed + 550) * (weights.cave + weights.ruins + weights.city);
-            let type = 'cave';
+            let type: PoiType = 'cave';
             if ((roll -= weights.cave) > 0) type = (roll -= weights.ruins) > 0 ? 'city' : 'ruins';
             if (type === 'city' && !this.freeArea(tx, ty - 2, 5, 3)) type = hash(cx, cy, seed + 560) < 0.5 ? 'ruins' : 'cave';
             const a = NAME_A[type], b = NAME_B[type];
-            const name = `${a[Math.floor(hash(cx, cy, seed + 570) * a.length)]} ${type === 'city' ? '' : ''}`.trim() +
-                (type === 'city' ? b[Math.floor(hash(cx, cy, seed + 580) * b.length)] : ' ' + b[Math.floor(hash(cx, cy, seed + 580) * b.length)]);
+            const first = a[Math.floor(hash(cx, cy, seed + 570) * a.length)];
+            const second = b[Math.floor(hash(cx, cy, seed + 580) * b.length)];
+            const name = type === 'city' ? first + second : `${first} ${second}`;
             return {
-                id: key(cx, cy), type, group, tx, ty,
+                id: `${cx},${cy}`, type, group, tx, ty,
                 x: (tx + 0.5) * T, y: (ty + 0.5) * T,
                 ex: (tx + 0.5) * T, ey: (ty + 0.5) * T + ENTRANCE_OFFSET[type],
                 seed: Math.floor(hash(cx, cy, seed + 590) * 1e9), name
@@ -135,7 +141,7 @@ export class OverworldSource {
     }
 
     // POIs close to a tile (used to keep clutter away from landmarks)
-    poisNear(tx, ty, tiles) {
+    poisNear(tx: number, ty: number, tiles: number): Poi[] {
         const out = [];
         const c0x = Math.floor((tx - tiles) / POI_CELL), c1x = Math.floor((tx + tiles) / POI_CELL);
         const c0y = Math.floor((ty - tiles) / POI_CELL), c1y = Math.floor((ty + tiles) / POI_CELL);
@@ -149,11 +155,11 @@ export class OverworldSource {
     }
 
     // ------------------------------------------------------------ decoration
-    addDecor(chunk, type, x, y, variant, extra = {}) {
+    addDecor(chunk: ChunkLike, type: string, x: number, y: number, variant: number, extra: Partial<DecorItem> = {}): DecorItem {
         return addDecorItem(chunk, type, x, y, variant, extra);
     }
 
-    landmarkVariant(poi) {
+    landmarkVariant(poi: Poi): number {
         switch (poi.group) {
             case GROUP.DESERT: case GROUP.SHORE: return 1;
             case GROUP.MOUNTAIN: return 2;
@@ -161,10 +167,10 @@ export class OverworldSource {
         }
     }
 
-    placePoiLandmark(chunk, poi) {
-        const h = (n) => hash(poi.tx, poi.ty, this.seed + 600 + n);
+    placePoiLandmark(chunk: ChunkLike, poi: Poi): void {
+        const h = (n: number) => hash(poi.tx, poi.ty, this.seed + 600 + n);
         const lv = this.landmarkVariant(poi);
-        const add = (type, ox, oy, variant = 0, extra) => {
+        const add = (type: string, ox: number, oy: number, variant = 0, extra?: Partial<DecorItem>) => {
             const x = poi.x + ox, y = poi.y + oy;
             if (x < chunk.x0 || x >= chunk.x0 + chunk.size || y < chunk.y0 || y >= chunk.y0 + chunk.size) return;
             this.addDecor(chunk, type, x, y, variant, extra);
@@ -191,7 +197,7 @@ export class OverworldSource {
         }
     }
 
-    decorForChunk(chunk) {
+    decorForChunk(chunk: ChunkLike): void {
         const { cx, cy } = chunk;
         const CT = WORLD_CONFIG.chunkTiles;
         const pois = this.poisNear(cx * CT + CT / 2, cy * CT + CT / 2, CT + 12);
@@ -230,4 +236,3 @@ export class OverworldSource {
     }
 }
 
-function key(cx, cy) { return `${cx},${cy}`; }

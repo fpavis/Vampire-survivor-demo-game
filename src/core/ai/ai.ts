@@ -1,7 +1,8 @@
-import { WORLD_CONFIG, ENEMY_TYPES } from './config.js';
-import { BIOME } from './biomes.js';
-import { lineOfSight } from './nav.js';
-import { EntityManager } from './entities.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import { WORLD_CONFIG, ENEMY_TYPES } from '../config';
+import { BIOME } from '../world/biomes';
+import { lineOfSight } from '../world/nav';
+import { EntityManager } from '../../render/entities';
 
 const T = WORLD_CONFIG.tile;
 const rnd = (a, b) => a + Math.random() * (b - a);

@@ -1,4 +1,6 @@
-import { WORLD_CONFIG } from './config.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
+import { WORLD_CONFIG } from '../core/config';
 
 const TILT = WORLD_CONFIG.tilt;
 const MAX_PARTICLES = 450;

@@ -32,34 +32,29 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 
 ### Prerequisites
 
+- Node.js 20 or newer
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- Local web server (for development)
 
-### Installation
+### Run it
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/survival-game.git
+npm install
+npm run dev        # dev server with hot reload
 ```
 
-2. Navigate to the project directory:
-```bash
-cd survival-game
-```
+### Scripts
 
-3. Start a local web server. For example, using Python:
-```bash
-# Python 3
-python -m http.server 8000
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite dev server |
+| `npm run typecheck` | TypeScript strict type check |
+| `npm test` | Unit tests (Vitest): noise, terrain, interiors, navigation, config |
+| `npm run build` | Typecheck and production build into `dist/` |
+| `npm run build:single` | One self-contained HTML file in `dist-single/` (used for test pages) |
+| `npm run test:e2e` | Headless-browser smoke test of the built game (needs a Chromium; set `CHROMIUM_PATH`) |
 
-# Python 2
-python -m SimpleHTTPServer 8000
-```
-
-4. Open your browser and navigate to:
-```
-http://localhost:8000
-```
+The roadmap lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and the design notes in
+[docs/VISION.md](docs/VISION.md).
 
 ## 🎮 How to Play
 

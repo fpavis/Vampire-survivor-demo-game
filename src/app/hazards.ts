@@ -1,5 +1,7 @@
-import { WORLD_CONFIG } from './config.js';
-import { EntityManager } from './entities.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
+import { WORLD_CONFIG } from '../core/config';
+import { EntityManager } from '../render/entities';
 
 const TILT = WORLD_CONFIG.tilt;
 

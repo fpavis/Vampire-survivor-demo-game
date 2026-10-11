@@ -1,6 +1,8 @@
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
 // Procedural sprites for every enemy. Each builder draws into `body` (feet at the origin, facing right)
 // and returns { height, anim(e, t) } where `height` is used to place health bars and damage numbers.
-import { shade } from './art.js';
+import { shade } from './decorArt';
 
 const glowCircle = (radius, color, alpha) => {
     const g = new PIXI.Graphics();

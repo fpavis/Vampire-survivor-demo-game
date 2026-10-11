@@ -1,20 +1,22 @@
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
 import {
     GAME_CONFIG, ENEMY_TYPES, LEVEL_SCALING, WORLD_CONFIG, SPAWN_CONFIG, xpForLevel
-} from './config.js';
-import { gameState } from './gameState.js';
-import { EntityManager } from './entities.js';
-import { UIManager } from './ui.js';
-import { World, BIOME } from './world.js';
-import { Effects } from './effects.js';
-import { WeaponSystem, computeStats, generateChoices } from './weapons.js';
-import { OverworldSource } from './terrain.js';
-import { createInterior } from './interiors.js';
-import { Hazards } from './hazards.js';
-import { Critters } from './critters.js';
-import { MapView } from './map.js';
-import { FlowField } from './nav.js';
-import { updateEnemy, SpatialHash } from './ai.js';
-import { GROUP_INFO, POI_INFO, ROSTERS, WARLORDS } from './biomes.js';
+} from '../core/config';
+import { gameState } from './gameState';
+import { EntityManager } from '../render/entities';
+import { UIManager } from './ui';
+import { World, BIOME } from '../render/world';
+import { Effects } from '../render/effects';
+import { WeaponSystem, computeStats, generateChoices } from './weapons';
+import { OverworldSource } from '../core/world/terrain';
+import { createInterior } from '../core/world/interiors';
+import { Hazards } from './hazards';
+import { Critters } from '../render/critters';
+import { MapView } from '../render/map';
+import { FlowField } from '../core/world/nav';
+import { updateEnemy, SpatialHash } from '../core/ai/ai';
+import { GROUP_INFO, POI_INFO, ROSTERS, WARLORDS } from '../core/world/biomes';
 
 const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
@@ -1143,4 +1145,9 @@ class Game {
     }
 }
 
-window.game = new Game();
+export function startGame() {
+    const game = new Game();
+    // exposed for debugging and the in-page test tools
+    (window as any).game = game;
+    return game;
+}

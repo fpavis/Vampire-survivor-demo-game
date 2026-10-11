@@ -1,14 +1,20 @@
-import { WORLD_CONFIG } from './config.js';
-import { makeRng } from './noise.js';
-import { BIOME, INTERIOR_ROSTERS, GROUP } from './biomes.js';
-import { addDecorItem } from './terrain.js';
+import { WORLD_CONFIG } from '../config';
+import { makeRng } from './noise';
+import { BIOME, INTERIOR_ROSTERS, GROUP } from './biomes';
+import { addDecorItem } from './terrain';
+import type { ChunkLike, InteriorTheme, Poi, TerrainSource, Vec2 } from '../types';
+
+export interface InteriorSpawn { type: string; x: number; y: number; elite?: boolean }
+export interface InteriorChest { tx: number; ty: number; x: number; y: number; big?: boolean }
+export interface InteriorNpc { x: number; y: number; hue: number }
+interface DecorSpec { type: string; variant: number; x: number; y: number; flip?: boolean }
 
 const T = WORLD_CONFIG.tile;
-const WALL_FOR = { cave: BIOME.CAVE_WALL, ruins: BIOME.RUIN_WALL };
-const FLOOR_FOR = { cave: BIOME.CAVE_FLOOR, ruins: BIOME.RUIN_FLOOR, city: BIOME.CITY_FLOOR };
+const WALL_FOR: Record<string, number> = { cave: BIOME.CAVE_WALL, ruins: BIOME.RUIN_WALL };
+const FLOOR_FOR: Record<string, number> = { cave: BIOME.CAVE_FLOOR, ruins: BIOME.RUIN_FLOOR, city: BIOME.CITY_FLOOR };
 
 // colour themes by place type (+ the region the entrance was in)
-function themeFor(type, group) {
+function themeFor(type: string, group: string): InteriorTheme {
     if (type === 'cave') {
         const frost = group === GROUP.MOUNTAIN;
         const sand = group === GROUP.DESERT || group === GROUP.SHORE;
@@ -18,7 +24,7 @@ function themeFor(type, group) {
         const sand = group === GROUP.DESERT;
         return { top: sand ? 0xb09868 : 0x8a8478, front: sand ? 0x7a6840 : 0x5e594f, ambient: 0.4 };
     }
-    const palettes = {
+    const palettes: Record<string, { roofs: number[]; wall: number; floor: number }> = {
         [GROUP.DESERT]: { roofs: [0xb8742e, 0xc8943e, 0x9a5a2a], wall: 0xe0c48a, floor: 0xd2b27a },
         [GROUP.SHORE]: { roofs: [0x3f6fa8, 0x3f8fb8, 0x4a9a8a], wall: 0xeee8da, floor: 0xcfc4a4 },
         [GROUP.FOREST]: { roofs: [0x3f7a4a, 0x6a4a2a, 0x4a6a3a], wall: 0xcbb68a, floor: 0x8a8068 },
@@ -28,43 +34,52 @@ function themeFor(type, group) {
     return { top: 0xb5473b, front: p.wall, roofs: p.roofs, floor: p.floor, ambient: 0 };
 }
 
-class InteriorSource {
-    constructor(type, group, w, h, seed) {
+export class InteriorSource implements TerrainSource {
+    kind: string;
+    group: string;
+    bounded = true;
+    w: number;
+    h: number;
+    seed: number;
+    tiles: Uint8Array;
+    decor: DecorSpec[] = [];
+    spawns: InteriorSpawn[] = [];
+    chests: InteriorChest[] = [];
+    npcs: InteriorNpc[] = [];
+    theme: InteriorTheme;
+    ambient: number;
+    start: Vec2 = { x: 0, y: 0 };
+    exit: Vec2 = { x: 0, y: 0 };
+    fountain: Vec2 | null = null;
+    altar: Vec2 | null = null;
+
+    constructor(type: string, group: string, w: number, h: number, seed: number) {
         this.kind = type;
         this.group = group;
-        this.bounded = true;
         this.w = w;
         this.h = h;
         this.seed = seed;
         this.tiles = new Uint8Array(w * h);
-        this.decor = [];
-        this.spawns = [];
-        this.chests = [];
-        this.npcs = [];
         this.theme = themeFor(type, group);
         this.ambient = this.theme.ambient;
-        this.start = { x: 0, y: 0 };
-        this.exit = { x: 0, y: 0 };
-        this.fountain = null;
-        this.altar = null;
     }
 
-    inBounds(tx, ty) { return tx >= 0 && ty >= 0 && tx < this.w && ty < this.h; }
+    inBounds(tx: number, ty: number): boolean { return tx >= 0 && ty >= 0 && tx < this.w && ty < this.h; }
 
-    biomeAt(tx, ty) {
+    biomeAt(tx: number, ty: number): number {
         return this.inBounds(tx, ty) ? this.tiles[ty * this.w + tx] : BIOME.VOID;
     }
 
-    isFloor(tx, ty) {
+    isFloor(tx: number, ty: number): boolean {
         const b = this.biomeAt(tx, ty);
         return b === BIOME.CAVE_FLOOR || b === BIOME.RUIN_FLOOR || b === BIOME.CITY_FLOOR;
     }
 
-    addDecor(type, tx, ty, variant = 0, extra = {}) {
+    addDecor(type: string, tx: number, ty: number, variant = 0, extra: { flip?: boolean } = {}): void {
         this.decor.push({ type, variant, x: (tx + 0.5) * T, y: (ty + 0.5) * T, ...extra });
     }
 
-    decorForChunk(chunk) {
+    decorForChunk(chunk: ChunkLike): void {
         for (const d of this.decor) {
             if (d.x < chunk.x0 || d.x >= chunk.x0 + chunk.size || d.y < chunk.y0 || d.y >= chunk.y0 + chunk.size) continue;
             addDecorItem(chunk, d.type, d.x, d.y, d.variant, { flip: !!d.flip });
@@ -72,7 +87,7 @@ class InteriorSource {
     }
 
     // BFS distance (in tiles) from a tile across floor tiles
-    distanceMap(sx, sy) {
+    distanceMap(sx: number, sy: number): Int16Array {
         const dist = new Int16Array(this.w * this.h).fill(-1);
         const q = [sx + sy * this.w];
         dist[q[0]] = 0;
@@ -93,7 +108,7 @@ class InteriorSource {
 }
 
 // --------------------------------------------------------------------- cave
-function generateCave(poi) {
+function generateCave(poi: Poi): InteriorSource {
     const rng = makeRng(poi.seed);
     const w = 64, h = 64;
     const src = new InteriorSource('cave', poi.group, w, h, poi.seed);
@@ -155,7 +170,7 @@ function generateCave(poi) {
     src.addDecor('portal', sx, sy, 0);
 
     const dist = src.distanceMap(sx, sy);
-    const cells = [];
+    const cells: { x: number; y: number; d: number }[] = [];
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (dist[y * w + x] >= 0) cells.push({ x, y, d: dist[y * w + x] });
 
     // chests at the farthest, well separated spots
@@ -168,7 +183,7 @@ function generateCave(poi) {
     }
 
     const roster = INTERIOR_ROSTERS.cave;
-    const taken = [];
+    const taken: { x: number; y: number }[] = [];
     let tries = 0;
     while (src.spawns.length < 22 && tries++ < 400) {
         const c = cells[Math.floor(rng() * cells.length)];
@@ -177,10 +192,16 @@ function generateCave(poi) {
         taken.push(c);
         src.spawns.push({ type: roster[Math.floor(rng() * roster.length)], x: (c.x + 0.5) * T, y: (c.y + 0.5) * T });
     }
-    // guardians next to each chest
+    // guardians stand on open floor next to each chest
     src.chests.forEach((c) => {
-        for (let i = 0; i < 2; i++) {
-            src.spawns.push({ type: roster[Math.floor(rng() * roster.length)], elite: true, x: c.x + (i ? 70 : -70), y: c.y + 30 });
+        const near = cells
+            .filter((cell) => {
+                const d = Math.hypot(cell.x - c.tx, cell.y - c.ty);
+                return d >= 1.5 && d <= 4;
+            })
+            .sort(() => rng() - 0.5);
+        for (let i = 0; i < 2 && i < near.length; i++) {
+            src.spawns.push({ type: roster[Math.floor(rng() * roster.length)], elite: true, x: (near[i].x + 0.5) * T, y: (near[i].y + 0.5) * T });
         }
     });
 
@@ -199,14 +220,15 @@ function generateCave(poi) {
 }
 
 // -------------------------------------------------------------------- ruins
-function generateRuins(poi) {
+function generateRuins(poi: Poi): InteriorSource {
     const rng = makeRng(poi.seed);
     const w = 64, h = 64;
     const src = new InteriorSource('ruins', poi.group, w, h, poi.seed);
     const WALL = WALL_FOR.ruins, FLOOR = FLOOR_FOR.ruins;
     src.tiles.fill(WALL);
 
-    const rooms = [];
+    interface Room { x: number; y: number; w: number; h: number; cx: number; cy: number }
+    const rooms: Room[] = [];
     for (let tries = 0; tries < 160 && rooms.length < 9; tries++) {
         const rw = 7 + Math.floor(rng() * 6), rh = 6 + Math.floor(rng() * 5);
         const rx = 3 + Math.floor(rng() * (w - rw - 6)), ry = 3 + Math.floor(rng() * (h - rh - 6));
@@ -214,7 +236,7 @@ function generateRuins(poi) {
         rooms.push({ x: rx, y: ry, w: rw, h: rh, cx: Math.floor(rx + rw / 2), cy: Math.floor(ry + rh / 2) });
     }
     rooms.sort((a, b) => a.cx - b.cx);
-    const carve = (x0, y0, x1, y1) => {
+    const carve = (x0: number, y0: number, x1: number, y1: number) => {
         for (let y = Math.max(2, y0); y <= Math.min(h - 3, y1); y++) for (let x = Math.max(2, x0); x <= Math.min(w - 3, x1); x++) src.tiles[y * w + x] = FLOOR;
     };
     rooms.forEach((r) => carve(r.x, r.y, r.x + r.w - 1, r.y + r.h - 1));
@@ -266,7 +288,7 @@ function generateRuins(poi) {
 }
 
 // --------------------------------------------------------------------- city
-function generateCity(poi) {
+function generateCity(poi: Poi): InteriorSource {
     const rng = makeRng(poi.seed);
     const w = 60, h = 48;
     const src = new InteriorSource('city', poi.group, w, h, poi.seed);
@@ -277,7 +299,7 @@ function generateCity(poi) {
         if (x < 2 || y < 2 || x >= w - 2 || y >= h - 2) src.tiles[y * w + x] = BIOME.CITY_STONE;
     }
 
-    const building = (x0, y0, bw, bh) => {
+    const building = (x0: number, y0: number, bw: number, bh: number) => {
         for (let y = y0; y < y0 + bh; y++) for (let x = x0; x < x0 + bw; x++) src.tiles[y * w + x] = BIOME.CITY_WALL;
     };
     // side districts: two columns of houses with streets between
@@ -336,7 +358,7 @@ function generateCity(poi) {
     return src;
 }
 
-export function createInterior(poi) {
+export function createInterior(poi: Poi): InteriorSource {
     switch (poi.type) {
         case 'cave': return generateCave(poi);
         case 'ruins': return generateRuins(poi);

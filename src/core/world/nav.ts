@@ -1,11 +1,12 @@
-import { WORLD_CONFIG } from './config.js';
+import { WORLD_CONFIG } from '../config';
+import type { SolidQuery, Vec2 } from '../types';
 
 const T = WORLD_CONFIG.tile;
 const UNREACHABLE = 65535;
 
 // Cheap grid raycast (Amanatides & Woo). Returns true when nothing hard (wall, water, big landmark)
 // lies between the two points. Costs one tile lookup per tile crossed.
-export function lineOfSight(world, x0, y0, x1, y1, maxSteps = 40) {
+export function lineOfSight(world: SolidQuery, x0: number, y0: number, x1: number, y1: number, maxSteps = 40): boolean {
     let tx = Math.floor(x0 / T), ty = Math.floor(y0 / T);
     const ex = Math.floor(x1 / T), ey = Math.floor(y1 / T);
     if (tx === ex && ty === ey) return true;
@@ -26,21 +27,28 @@ export function lineOfSight(world, x0, y0, x1, y1, maxSteps = 40) {
 // A small breadth-first "flow field" around the player. Ground enemies that have lost line of
 // sight read the gradient to walk around lakes, mountains and walls instead of pushing into them.
 export class FlowField {
-    constructor(world, radius = 32) {
+    world: SolidQuery;
+    R: number;
+    N: number;
+    dist: Uint16Array;
+    blockedGrid: Uint8Array;
+    queue: Int32Array;
+    tx0 = 0;
+    ty0 = 0;
+    centerTx = NaN;
+    centerTy = NaN;
+
+    constructor(world: SolidQuery, radius = 32) {
         this.world = world;
         this.R = radius;
         this.N = radius * 2 + 1;
         this.dist = new Uint16Array(this.N * this.N);
         this.blockedGrid = new Uint8Array(this.N * this.N);
         this.queue = new Int32Array(this.N * this.N);
-        this.tx0 = 0;
-        this.ty0 = 0;
-        this.centerTx = NaN;
-        this.centerTy = NaN;
     }
 
     // Rebuild only when the target moved to a different tile
-    update(px, py, force = false) {
+    update(px: number, py: number, force = false): void {
         const ctx = Math.floor(px / T), cty = Math.floor(py / T);
         if (!force && ctx === this.centerTx && cty === this.centerTy) return;
         this.centerTx = ctx;
@@ -48,7 +56,7 @@ export class FlowField {
         this.rebuild();
     }
 
-    rebuild() {
+    rebuild(): void {
         const { N, R, dist, blockedGrid, queue, world } = this;
         this.tx0 = this.centerTx - R;
         this.ty0 = this.centerTy - R;
@@ -84,7 +92,7 @@ export class FlowField {
     }
 
     // Writes a unit direction into out; returns false if the position has no route
-    direction(x, y, out) {
+    direction(x: number, y: number, out: Vec2): boolean {
         const { N, dist, blockedGrid } = this;
         const lx = Math.floor(x / T) - this.tx0, ly = Math.floor(y / T) - this.ty0;
         if (lx < 1 || ly < 1 || lx >= N - 1 || ly >= N - 1) return false;

@@ -1,11 +1,11 @@
 export const GAME_CONFIG = {
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' ? window.innerHeight : 720,
     backgroundColor: 0x0b1118,
     antialias: true,
-    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    resolution: Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2),
     autoDensity: true,
-    resizeTo: window
+    resizeTo: (typeof window !== 'undefined' ? window : undefined) as Window | undefined
 };
 
 // Pseudo-3D projection: ground plane (x, y) is squashed vertically by `tilt`,
@@ -33,7 +33,26 @@ export const SPAWN_CONFIG = {
 
 // Enemy catalogue. `art` selects the sprite, `ai` the behaviour (see ai.js).
 // Times are in frames (60 per second), speeds in world units per frame.
-export const ENEMY_TYPES = {
+export type AiKind = 'chase' | 'swarm' | 'charger' | 'pack' | 'kiter' | 'slammer' | 'burrower' | 'diver' | 'strafer' | 'lobber' | 'floater' | 'boss';
+
+export interface EnemyTypeDef {
+    name: string;
+    art: string;
+    color: number;
+    radius: number;
+    speed: number;
+    health: number;
+    damage: number;
+    experience: number;
+    flying: boolean;
+    armor?: number;
+    phase?: boolean;
+    boss?: boolean;
+    onDeath?: { spawn: string; count: number };
+    ai: { kind: AiKind; [param: string]: any };
+}
+
+export const ENEMY_TYPES: Record<string, EnemyTypeDef> = {
     // ---- fields
     SLIME: { name: 'Slime', art: 'slime', color: 0x4cd964, radius: 15, speed: 1.7, health: 30, damage: 6, experience: 6, flying: false,
         ai: { kind: 'chase', hop: true } },
@@ -101,7 +120,7 @@ export const INITIAL_STATE = {
 };
 
 // XP needed to go from `level` to `level + 1`
-export function xpForLevel(level) {
+export function xpForLevel(level: number): number {
     return Math.floor(18 + 11 * (level - 1) + 2.6 * Math.pow(level - 1, 1.55));
 }
 

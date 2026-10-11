@@ -1,8 +1,10 @@
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
 // Harmless ambient wildlife (and town villagers). Purely cosmetic: they wander, graze and flee from the player.
-import { WORLD_CONFIG } from './config.js';
-import { EntityManager } from './entities.js';
-import { isSolidBiome, isWaterBiome, GROUP } from './biomes.js';
-import { shade } from './art.js';
+import { WORLD_CONFIG } from '../core/config';
+import { EntityManager } from './entities';
+import { isSolidBiome, isWaterBiome, GROUP } from '../core/world/biomes';
+import { shade } from './decorArt';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const ell = (g, x, y, rx, ry, c, a = 1) => { g.beginFill(c, a); g.drawEllipse(x, y, rx, ry); g.endFill(); };

@@ -1,17 +1,17 @@
 // Deterministic hash + value noise helpers shared by terrain and interior generation.
 
-export function hash(x, y, seed) {
+export function hash(x: number, y: number, seed: number): number {
     let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 1442695041);
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     h ^= h >>> 16;
     return (h >>> 0) / 4294967296;
 }
 
-export const smooth = (t) => t * t * (3 - 2 * t);
-export const lerp = (a, b, t) => a + (b - a) * t;
-export const clamp01 = (v) => Math.max(0, Math.min(1, v));
+export const smooth = (t: number) => t * t * (3 - 2 * t);
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-export function valueNoise(x, y, seed) {
+export function valueNoise(x: number, y: number, seed: number): number {
     const x0 = Math.floor(x), y0 = Math.floor(y);
     const fx = smooth(x - x0), fy = smooth(y - y0);
     const a = hash(x0, y0, seed), b = hash(x0 + 1, y0, seed);
@@ -19,7 +19,7 @@ export function valueNoise(x, y, seed) {
     return lerp(lerp(a, b, fx), lerp(c, d, fx), fy);
 }
 
-export function fbm(x, y, seed, octaves = 4) {
+export function fbm(x: number, y: number, seed: number, octaves = 4): number {
     let sum = 0, amp = 1, norm = 0, freq = 1;
     for (let i = 0; i < octaves; i++) {
         sum += valueNoise(x * freq, y * freq, seed + i * 101) * amp;
@@ -31,7 +31,7 @@ export function fbm(x, y, seed, octaves = 4) {
 }
 
 // small seeded PRNG (mulberry32) for interior generators
-export function makeRng(seed) {
+export function makeRng(seed: number): () => number {
     let a = seed | 0;
     return () => {
         a = (a + 0x6D2B79F5) | 0;

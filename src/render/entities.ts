@@ -1,5 +1,7 @@
-import { ENEMY_TYPES, WORLD_CONFIG } from './config.js';
-import { ENEMY_ART } from './enemyArt.js';
+// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
+import * as PIXI from 'pixi.js';
+import { ENEMY_TYPES, WORLD_CONFIG } from '../core/config';
+import { ENEMY_ART } from './enemyArt';
 
 const TILT = WORLD_CONFIG.tilt;
 
