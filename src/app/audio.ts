@@ -10,6 +10,7 @@ const SOUNDS: Record<string, Blip[]> = {
   pickup: [{ f: 880, f2: 1320, t: 0.08, type: 'sine', vol: 0.08 }],
   loot: [{ f: 660, t: 0.08, type: 'triangle', vol: 0.12 }, { f: 990, t: 0.08, type: 'triangle', vol: 0.12 }, { f: 1320, t: 0.2, type: 'sine', vol: 0.1 }],
   hurt: [{ f: 140, f2: 70, t: 0.16, type: 'sawtooth', vol: 0.12 }],
+  switch: [{ f: 400, f2: 800, t: 0.08, type: 'triangle', vol: 0.1 }, { f: 800, f2: 600, t: 0.08, type: 'sine', vol: 0.08 }],
   equip: [{ f: 440, f2: 660, t: 0.07, type: 'square', vol: 0.06 }]
 };
 

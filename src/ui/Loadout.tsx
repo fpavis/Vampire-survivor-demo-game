@@ -35,7 +35,9 @@ function useDndWiring() {
       const it: SpellItem | undefined = sp().item(p.uid);
       if (!it) return { ok: false };
       const mode = TEMPLATES[it.tpl].mode;
+      const held = sp().heldBy(it.uid);
       if (t.type === 'equip') {
+        if (held) return { ok: false, reason: `${held} already has this spell equipped` };
         if (t.slot === undefined) {
           if (mode !== 'auto') return { ok: false, reason: 'Active skills go into the Space / Q / R slots' };
           if (sp().auto.includes(it.uid)) return { ok: false };
@@ -46,6 +48,7 @@ function useDndWiring() {
       if (t.type === 'unequip') return sp().equipped(it.uid) ? { ok: true } : { ok: false };
       if (t.type === 'salvage') {
         if (sp().equipped(it.uid)) return { ok: false, reason: 'Unequip it before salvaging' };
+        if (held) return { ok: false, reason: `${held} has it equipped` };
         return it.locked ? { ok: false, reason: 'Locked 🔒 — unlock it first' } : { ok: true };
       }
       return { ok: false };
@@ -84,6 +87,7 @@ function SpellRow({ it, sel, onSel }: { it: SpellItem; sel: boolean; onSel: () =
   const t = TEMPLATES[it.tpl];
   const core = CORE_INFO[t.core];
   const game = ui.game;
+  const held = game.spells.heldBy(it.uid);
   return (
     <div class={`vs-item${sel ? ' sel' : ''}`} tabIndex={0} style={{ touchAction: 'none' }}
       onKeyDown={(e) => { if (e.key === 'Enter') onSel(); }}
@@ -91,7 +95,7 @@ function SpellRow({ it, sel, onSel }: { it: SpellItem; sel: boolean; onSel: () =
       <span class="ic">{t.icon}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <b>{t.name}</b> <span style={{ color: hex(core.color) }}>· {core.name}</span>
-        <small>Lv {it.level}{it.level < t.max ? ` · ${it.xp}/${spellXpFor(it.level)} xp` : ' · MAX'} · {t.mode === 'auto' ? 'auto' : 'active'}</small>
+        <small>{held && <span class="vs-tag">on {held}</span>} Lv {it.level}{it.level < t.max ? ` · ${it.xp}/${spellXpFor(it.level)} xp` : ' · MAX'} · {t.mode === 'auto' ? 'auto' : 'active'}</small>
       </span>
       <span>{it.runes.map((r) => (r ? RUNES[r].icon : '◦')).join(' ')}</span>
       <button class="vs-lockb" title={it.locked ? 'Locked: cannot be salvaged' : 'Lock to protect from salvage'}
@@ -149,8 +153,8 @@ export function Loadout() {
   return (
     <div class="vs-panel vs-load hit">
       <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}>✕ (I)</button>
-      <h2>Spells &amp; Runes</h2>
-      <div class="sub">Drag spells and runes (or click, then click a target). Greyed runes don’t fit — hover for why. Changes apply instantly.</div>
+      <h2>Spells &amp; Runes — {ui.party.value.heroes[ui.party.value.active]?.name}</h2>
+      <div class="sub">Drag spells and runes (or click, then click a target). Greyed runes don’t fit — hover for why. Each hero has their own loadout; a spell can be equipped by one hero at a time.</div>
       <div class="vs-tools">
         <input class="vs-in" placeholder="Search…" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
         <label>Spells <select class="vs-in" value={spellSort} onChange={(e) => setSpellSort((e.target as HTMLSelectElement).value as SpellSort)}><option value="level">by level</option><option value="name">by name</option><option value="type">by type</option></select></label>

@@ -51,6 +51,28 @@ export const CSS = `
 .vs-lock{background:#3a2222;border:1px solid #a04848;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:8px}
 
 .vs-x{position:absolute;right:10px;top:8px}
+.vs-party{position:absolute;left:12px;top:214px;display:flex;flex-direction:column;gap:6px;width:178px}
+@media(max-width:700px){.vs-party{top:auto;bottom:150px;width:150px}}
+.vs-hero{position:relative;display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 7px;border-radius:10px;background:rgba(10,14,26,.8);border:2px solid #34426c;color:inherit;font:inherit;cursor:pointer;text-align:left;overflow:hidden}
+.vs-hero.act{border-color:var(--hc);box-shadow:0 0 12px var(--hc)}
+.vs-hero.dead{filter:grayscale(1);opacity:.55;cursor:not-allowed}
+.vs-hero .pi{font-size:24px;text-align:center}
+.vs-hero .nm{font-size:12px;font-weight:700;display:flex;justify-content:space-between;gap:4px}
+.vs-hero .nm i{font-style:normal;color:#9aa6c8;font-weight:400}
+.vs-hero .b{display:block;height:6px;border-radius:3px;background:#0a0f1c;margin-top:3px;overflow:hidden}
+.vs-hero .b>u{display:block;height:100%;text-decoration:none}
+.vs-hero .hp{background:linear-gradient(#ff7a8a,#d6334f)}
+.vs-hero .mp{background:linear-gradient(#6ab8ff,#2f77d6);height:4px}
+.vs-hero .kb{position:absolute;right:5px;top:2px;font-size:10px;color:#77809a}
+.vs-hero .pend{position:absolute;right:5px;bottom:3px;font-size:10px;font-weight:700;background:#ffd84a;color:#2a1a00;border-radius:8px;padding:0 5px}
+.vs-hero .cdv{position:absolute;inset:0;background:rgba(0,0,0,.5);pointer-events:none;transform-origin:left}
+.vs-heal{left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,calc(100vw - 24px))}
+.vs-hrow{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:8px;border:2px solid #2e3a62;border-radius:10px;margin-bottom:8px;background:#151c33}
+.vs-hrow .pi{font-size:26px;text-align:center}
+.vs-hrow .st{font-size:12px;color:#9aa6c8}
+.vs-hrow .st.dead{color:#ff9a9a}
+.vs-btn:disabled{opacity:.4;cursor:not-allowed}
+.vs-tag{font-size:10px;background:#34426c;border-radius:6px;padding:1px 5px;margin-left:4px;color:#cdd7f5}
 .vs-wallet{display:flex;gap:10px;font-size:13px;font-weight:700;background:rgba(8,12,24,.7);border-radius:8px;padding:3px 9px;text-shadow:0 1px 2px #000}
 .vs-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa6c8}
 .vs-in{background:#0e1426;color:#e9eefc;border:1px solid #3a4a78;border-radius:6px;padding:4px 6px;font:inherit;font-size:12px}

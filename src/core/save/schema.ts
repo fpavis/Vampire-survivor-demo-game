@@ -1,26 +1,31 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
 
 export interface SpellSave { uid: string; tpl: string; level: number; xp: number; runes: (string | null)[]; locked?: boolean }
 
 export interface HeroSave {
+  id: string;
   level: number;
   experience: number;
   nextLevel: number;
   health: number;
   mana: number;
-  pendingPicks: number;
-  wallet: { gold: number; wood: number; stone: number; iron: number };
-  lootFilter: 'off' | 'basic' | 'advanced';
+  pending: number;
   picks: Record<string, number>;   // stat card id -> level
-  spells: SpellSave[];             // every spell item owned
-  runes: string[];                 // loose runes in the inventory
   auto: string[];                  // uids of equipped auto-cast spells
   active: (string | null)[];       // uids bound to the active skill slots
+  dead: boolean;
+}
+
+export interface InventorySave {
+  spells: SpellSave[];             // every spell item the party owns (a spell is equipped by at most one hero)
+  runes: string[];
+  wallet: { gold: number; wood: number; stone: number; iron: number };
+  lootFilter: 'off' | 'basic' | 'advanced';
 }
 
 export interface PlaceState {
@@ -40,7 +45,8 @@ export interface SaveData {
   savedAt: number;
   playSeconds: number;
   player: { x: number; y: number };
-  hero: HeroSave;
+  party: { active: number; heroes: HeroSave[] };
+  inventory: InventorySave;
   stats: { kills: number; score: number; bossesDefeated: number };
   world: {
     clearedCamps: Record<string, number>;   // camp id -> play seconds when cleared
@@ -48,6 +54,7 @@ export interface SaveData {
     places: Record<string, PlaceState>;     // POI id -> state
     fog: Record<string, string>;            // chunk key -> base64 bitmask
     cities: CityRef[];                      // visited cities (respawn points)
+    lastCity: string | null;                // id of the last town the party entered (death respawn)
   };
 }
 
@@ -71,15 +78,22 @@ export function validateSave(data: unknown): string[] {
   }
   const player = data.player;
   if (!isObj(player) || !isNum(player.x) || !isNum(player.y)) errs.push('player position missing');
-  const hero = data.hero;
-  if (!isObj(hero)) errs.push('hero missing');
+  const party = data.party;
+  if (!isObj(party) || !isNum(party.active) || !Array.isArray(party.heroes) || party.heroes.length < 1) errs.push('party missing');
   else {
-    for (const k of ['level', 'experience', 'nextLevel', 'health']) if (!isNum(hero[k])) errs.push(`hero.${k} must be a number`);
-    if (!isObj(hero.wallet)) errs.push('hero.wallet missing');
-    if (!isObj(hero.picks)) errs.push('hero.picks missing');
-    if (!Array.isArray(hero.spells)) errs.push('hero.spells missing');
-    if (!Array.isArray(hero.runes)) errs.push('hero.runes missing');
-    if (!Array.isArray(hero.auto) || !Array.isArray(hero.active)) errs.push('hero loadout missing');
+    for (const h of party.heroes as unknown[]) {
+      if (!isObj(h)) { errs.push('party hero invalid'); continue; }
+      for (const k of ['level', 'experience', 'nextLevel', 'health']) if (!isNum(h[k])) errs.push(`hero.${k} must be a number`);
+      if (!isObj(h.picks)) errs.push('hero.picks missing');
+      if (!Array.isArray(h.auto) || !Array.isArray(h.active)) errs.push('hero loadout missing');
+    }
+  }
+  const inv = data.inventory;
+  if (!isObj(inv)) errs.push('inventory missing');
+  else {
+    if (!Array.isArray(inv.spells)) errs.push('inventory.spells missing');
+    if (!Array.isArray(inv.runes)) errs.push('inventory.runes missing');
+    if (!isObj(inv.wallet)) errs.push('inventory.wallet missing');
   }
   const stats = data.stats;
   if (!isObj(stats) || !isNum(stats.kills) || !isNum(stats.score)) errs.push('stats missing');
@@ -93,5 +107,5 @@ export function validateSave(data: unknown): string[] {
 }
 
 export function summarize(slot: string, data: SaveData): SaveSummary {
-  return { slot, savedAt: data.savedAt, playSeconds: data.playSeconds, level: data.hero.level, seed: data.seed };
+  return { slot, savedAt: data.savedAt, playSeconds: data.playSeconds, level: data.party.heroes[data.party.active]?.level ?? 1, seed: data.seed };
 }

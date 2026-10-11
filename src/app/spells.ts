@@ -56,27 +56,35 @@ export class SpellSystem {
         this.dashing = null;
     }
 
-    loadStarter() {
-        const l = starterLoadout();
-        this.spells = l.spells; this.auto = l.auto; this.active = l.active;
-        this.mana.value = this.game.stats.maxMana;
+    setInventory(spells, runes) {
+        this.spells = spells.map((x) => ({ ...x, runes: [...x.runes] }));
+        this.runes = [...runes];
         this.touch();
     }
 
-    load(hero) {
-        this.spells = hero.spells.map((s) => ({ ...s, runes: [...s.runes] }));
-        this.runes = [...hero.runes];
-        this.auto = hero.auto.filter((u) => this.item(u));
-        this.active = [0, 1, 2].map((i) => (hero.active[i] && this.item(hero.active[i]) ? hero.active[i] : null));
-        this.mana.value = Math.min(hero.mana ?? 60, this.game.stats.maxMana);
+    setLoadout(auto, active) {
+        this.auto = auto.filter((u) => this.item(u));
+        this.active = [0, 1, 2].map((i) => (active[i] && this.item(active[i]) ? active[i] : null));
         this.touch();
+    }
+
+    /** Name of another hero who has this spell equipped (a spell can only be used by one hero at a time). */
+    heldBy(uid) {
+        const party = this.game.party;
+        if (!party) return null;
+        party.commit();
+        for (let i = 0; i < party.heroes.length; i++) {
+            if (i === party.active) continue;
+            const h = party.heroes[i];
+            if (h.auto.includes(uid) || h.active.includes(uid)) return party.def(i).name;
+        }
+        return null;
     }
 
     serialize() {
         return {
-            mana: Math.round(this.mana.value),
             spells: this.spells.map((s) => ({ uid: s.uid, tpl: s.tpl, level: s.level, xp: s.xp, runes: [...s.runes], locked: !!s.locked })),
-            runes: [...this.runes], auto: [...this.auto], active: [...this.active]
+            runes: [...this.runes]
         };
     }
 
@@ -91,15 +99,10 @@ export class SpellSystem {
     }
 
     // ---------------------------------------------------------- inventory
+    // New finds go to the shared bag; the player decides which hero equips them.
     addSpell(tplId, level = 1) {
         const s = makeSpell(tplId, level);
         this.spells.push(s);
-        // auto-equip into a free slot so a new find is immediately useful
-        if (TEMPLATES[tplId].mode === 'auto' && this.auto.length < MAX_AUTO) this.auto.push(s.uid);
-        else if (TEMPLATES[tplId].mode === 'active') {
-            const i = this.active.indexOf(null);
-            if (i >= 0) this.active[i] = s.uid;
-        }
         this.touch();
         return s;
     }
@@ -108,7 +111,7 @@ export class SpellSystem {
 
     equip(uid, slot = -1) {
         const it = this.item(uid);
-        if (!it) return false;
+        if (!it || this.heldBy(uid)) return false;
         const mode = TEMPLATES[it.tpl].mode;
         if (mode === 'auto') {
             if (this.auto.includes(uid)) return true;

@@ -9,6 +9,7 @@ import { UIManager } from './ui';
 import { World, BIOME } from '../render/world';
 import { Effects } from '../render/effects';
 import { SpellSystem } from './spells';
+import { PartyRuntime } from './party';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
 import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet } from '../core/loot/loot';
@@ -68,6 +69,7 @@ class Game {
         this.world = new World(this.app, this.groundLayer, this.objectLayer);
         this.fx = new Effects(this);
         this.spells = new SpellSystem(this);
+        this.party = new PartyRuntime(this);
         this.audio = new AudioManager();
         this.lastMove = { x: 0, y: 0 };
         this.safeFor = 0;
@@ -320,7 +322,7 @@ class Game {
                 if (data && !started) {
                     save = data;
                     const mins = Math.floor(data.playSeconds / 60);
-                    summary.text = `Level ${data.hero.level}  ·  ${mins} min played  ·  ${Object.keys(data.world.clearedCamps).length} camps cleared  ·  ${data.world.cities.length} towns visited`;
+                    summary.text = `Level ${data.party.heroes[data.party.active].level}  ·  ${mins} min played  ·  ${Object.keys(data.world.clearedCamps).length} camps cleared  ·  ${data.world.cities.length} towns visited`;
                     continueBtn.visible = true;
                     summary.visible = true;
                     layout();
@@ -417,7 +419,7 @@ class Game {
         this.overworld = new OverworldSource(save ? save.seed : randomSeed());
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [] };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null };
         this.visited = {};
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
@@ -448,29 +450,15 @@ class Game {
         gameState.player = player;
         this.playerVel = { x: 0, y: 0 };
 
+        gameState.maxHealth = 100;
+        this.stats = computeStats({});
+        this.party.init(save);
         if (save) {
-            const hero = save.hero;
-            gameState.picks = { ...hero.picks };
-            this.stats = computeStats(gameState.picks);
-            gameState.maxHealth = this.stats.maxHealth;
-            this.spells.load(hero);
-            gameState.pending = hero.pendingPicks || 0;
-            gameState.wallet = { ...emptyWallet(), ...hero.wallet };
-            gameState.lootFilter = hero.lootFilter || 'off';
-            gameState.level = hero.level;
-            gameState.experience = hero.experience;
-            gameState.nextLevel = hero.nextLevel;
-            gameState.health = clamp(hero.health, 1, gameState.maxHealth);
             gameState.kills = save.stats.kills;
             gameState.score = save.stats.score;
             gameState.bossesDefeated = save.stats.bossesDefeated;
             gameState.time = save.playSeconds;
-        } else {
-            this.stats = computeStats({});
-            gameState.maxHealth = this.stats.maxHealth;
-            this.spells.loadStarter();
-            gameState.health = gameState.maxHealth;
-            gameState.nextLevel = xpForLevel(1);
+            this.session.lastCity = save.world.lastCity || null;
         }
         EntityManager.heroLevel = gameState.level;
 
@@ -488,6 +476,8 @@ class Game {
         uiBridge.cards.value = [];
         uiBridge.cardsOpen.value = false;
         uiBridge.pending.value = gameState.pending;
+        this.party.publish();
+        uiBridge.healerOpen.value = false;
         uiBridge.wallet.value = { ...gameState.wallet };
         uiBridge.filter.value = gameState.lootFilter;
         this.cardsKey = '';
@@ -580,6 +570,7 @@ class Game {
         this.movePlayer(delta);
         this.updateFog();
         this.spells.update(delta);
+        this.party.update(delta);
         this.updateSafety(delta);
         this.syncUi();
         this.updateEnemies(delta);
@@ -604,7 +595,7 @@ class Game {
             if (this.mode === 'overworld') this.requestSave('auto');
         }
 
-        if (s.health <= 0) this.showGameOver();
+        if (s.health <= 0) this.party.onDown();
     }
 
     // -------------------------------------------------------------- player
@@ -911,6 +902,7 @@ class Game {
             };
             for (const it of this.interactables) {
                 if (it.kind === 'chest' && !it.opened) consider({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64);
+                if (it.kind === 'healer') consider({ kind: 'healer', text: '[E]  Talk to the Healer' }, it.x, it.y, 90);
             }
             const src = this.interior;
             if (src.fountain) consider({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96);
@@ -918,6 +910,7 @@ class Game {
             consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
         }
         this.target = target;
+        if (uiBridge.healerOpen.value && (!target || target.kind !== 'healer')) uiBridge.healerOpen.value = false;
         this.ui.setPrompt(target ? target.text : null);
     }
 
@@ -933,6 +926,7 @@ class Game {
             case 'enter': this.enterPlace(t.poi); break;
             case 'exit': this.exitPlace(); break;
             case 'chest': this.openChest(t.it); break;
+            case 'healer': this.party.commit(); uiBridge.healerOpen.value = !uiBridge.healerOpen.value; this.audio.play('equip'); break;
             case 'fountain':
                 if (this.fountainReady()) {
                     this.interiorState.fountainAt = this.frame;
@@ -965,7 +959,7 @@ class Game {
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
             this.clearWorldEntities();
             this.popRuntime.clearActive();
-            s.experience += banked * this.stats.growth;
+            this.addXp(banked);
 
             const src = createInterior(poi);
             this.interior = src;
@@ -977,6 +971,7 @@ class Game {
             if (poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id)) {
                 this.session.cities.push({ id: poi.id, name: poi.name, ex: poi.ex, ey: poi.ey });
             }
+            if (poi.type === 'city') this.session.lastCity = poi.id;
             this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type });
 
             this.world.setSource(src);
@@ -1025,8 +1020,37 @@ class Game {
             this.interactables.push({ kind: 'chest', x: c.x, y: c.y, idx: i, big: !!c.big, opened, sprite });
             if (!opened) this.map.markers.push({ tx: c.x / T, ty: c.y / T, icon: '🎁' });
         });
+        if (poi.type === 'city' && src.fountain) this.spawnHealer(src.fountain.x + 120, src.fountain.y + 10);
         this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: '🚪' });
         src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
+    }
+
+    // The town healer: restores and revives heroes for gold.
+    spawnHealer(x, y) {
+        const spot = this.world.findFree(x, y, 14);
+        const c = new PIXI.Container();
+        const shadow = new PIXI.Graphics();
+        shadow.beginFill(0x000000, 0.35); shadow.drawEllipse(0, 0, 14, 5); shadow.endFill();
+        const body = new PIXI.Graphics();
+        body.beginFill(0xf2f2ea); body.drawPolygon([-12, 0, 12, 0, 8, -28, -8, -28]); body.endFill();
+        body.beginFill(0x3fbf6a); body.drawRect(-9, -16, 18, 3); body.endFill();
+        body.beginFill(0xffd7b0); body.drawCircle(0, -34, 8); body.endFill();
+        body.beginFill(0xf2f2ea); body.drawPolygon([-9, -32, 9, -32, 6, -46, -6, -46]); body.endFill();
+        body.beginFill(0x3fbf6a); body.drawRect(-2, -43, 4, 10); body.drawRect(-5, -40, 10, 4); body.endFill();
+        const staff = new PIXI.Graphics();
+        staff.lineStyle(3, 0x8a6a3a); staff.moveTo(16, 0); staff.lineTo(16, -46);
+        staff.beginFill(0x9bffb0, 0.9); staff.drawCircle(16, -50, 5); staff.endFill();
+        const glow = new PIXI.Graphics();
+        glow.beginFill(0x7bff9a, 0.25); glow.drawCircle(16, -50, 14); glow.endFill();
+        glow.blendMode = PIXI.BLEND_MODES.ADD;
+        const label = new PIXI.Text('Healer', { fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xbfffd0, stroke: 0x000000, strokeThickness: 3 });
+        label.anchor.set(0.5, 1); label.position.set(0, -62);
+        c.addChild(shadow, glow, staff, body, label);
+        c.position.set(spot.x, spot.y * TILT);
+        c.zIndex = spot.y;
+        this.objectLayer.addChild(c);
+        this.interactables.push({ kind: 'healer', x: spot.x, y: spot.y, sprite: c });
+        this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon: '✚' });
     }
 
     openChest(it) {
@@ -1112,7 +1136,7 @@ class Game {
 
     salvageSpell(uid) {
         const it = this.spells.item(uid);
-        if (!it || it.locked || this.spells.equipped(uid)) return 0;
+        if (!it || it.locked || this.spells.equipped(uid) || this.spells.heldBy(uid)) return 0;
         const g = spellValue(it);
         this.spells.runes.push(...it.runes.filter(Boolean));
         this.spells.spells = this.spells.spells.filter((x) => x.uid !== uid);
@@ -1155,7 +1179,7 @@ class Game {
             const s = this.state;
             let banked = 0;
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
-            s.experience += banked * this.stats.growth;
+            this.addXp(banked);
             const poi = this.interiorPoi;
             this.events.emit('PlaceLeft', { id: poi.id });
             this.applyOverworld(poi.ex, poi.ey + 34);
@@ -1205,9 +1229,14 @@ class Game {
     }
 
     gainExp(value) {
-        const s = this.state;
-        s.experience += value * this.stats.growth;
+        this.addXp(value);
         this.checkLevelUp();
+    }
+
+    // the active hero earns full XP, living bench heroes earn half
+    addXp(value) {
+        this.state.experience += value * this.stats.growth;
+        this.party.addBenchXp(value);
     }
 
     // ---------------------------------------------------- levelling & upgrades
@@ -1277,13 +1306,7 @@ class Game {
     }
 
     recalcStats() {
-        const s = this.state;
-        const old = this.stats;
-        this.stats = computeStats(s.picks);
-        s.maxHealth = this.stats.maxHealth;
-        if (this.stats.maxHealth > old.maxHealth) s.health += this.stats.maxHealth - old.maxHealth;
-        s.health = Math.min(s.health, s.maxHealth);
-        this.spells.mana.value = Math.min(this.spells.mana.value, this.stats.maxMana);
+        this.party.refreshStats();
     }
 
     // threat awareness: spell/rune editing is only allowed in a quiet moment
@@ -1336,22 +1359,17 @@ class Game {
 
     // ------------------------------------------------------------ game over
     // The whole party is down. The world persists: respawn at the nearest visited town, or the start.
+    // The party wakes up in the last town it entered, or at the start.
     respawnTarget() {
-        const p = this.state.player;
-        const from = this.mode === 'interior' && this.interiorPoi ? { x: this.interiorPoi.ex, y: this.interiorPoi.ey } : { x: p.wx, y: p.wy };
-        let best = null, bd = Infinity;
-        for (const c of this.session.cities) {
-            const d = Math.hypot(c.ex - from.x, c.ey - from.y);
-            if (d < bd) { bd = d; best = c; }
-        }
-        return best ? { x: best.ex, y: best.ey + 40, label: best.name } : { x: 0, y: 0, label: 'the starting area' };
+        const c = this.session.cities.find((x) => x.id === this.session.lastCity);
+        return c ? { x: c.ex, y: c.ey + 40, label: c.name } : { x: 0, y: 0, label: 'the starting area' };
     }
 
     respawn(target) {
         const s = this.state;
         this.ui.fade(1, 0.1, () => {
             s.gameOver = false;
-            s.health = s.maxHealth;
+            this.party.wipeRevive();
             s.player.visible = true;
             s.pointerDown = false;
             this.applyOverworld(target.x, target.y);

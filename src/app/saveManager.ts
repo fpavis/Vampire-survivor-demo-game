@@ -13,17 +13,11 @@ export function buildSave(game: any): SaveData {
     savedAt: Date.now(),
     playSeconds: s.time,
     player: pos,
-    hero: {
-      level: s.level,
-      experience: s.experience,
-      nextLevel: s.nextLevel,
-      health: Math.max(1, s.health),
-      mana: Math.round(game.spells.mana.value),
-      pendingPicks: s.pending,
+    party: game.party.serialize(),
+    inventory: {
+      ...game.spells.serialize(),
       wallet: { ...s.wallet },
-      lootFilter: s.lootFilter,
-      picks: { ...s.picks },
-      ...(({ spells, runes, auto, active }) => ({ spells, runes, auto, active }))(game.spells.serialize())
+      lootFilter: s.lootFilter
     },
     stats: { kills: s.kills, score: s.score, bossesDefeated: s.bossesDefeated },
     world: {
@@ -31,7 +25,8 @@ export function buildSave(game: any): SaveData {
       defeatedLairs: { ...game.session.defeatedLairs },
       places: JSON.parse(JSON.stringify(game.visited)),
       fog: game.fog.toJSON(),
-      cities: game.session.cities.map((c: any) => ({ ...c }))
+      cities: game.session.cities.map((c: any) => ({ ...c })),
+      lastCity: game.session.lastCity ?? null
     }
   };
 }

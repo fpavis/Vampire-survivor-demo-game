@@ -84,7 +84,7 @@ check('pending picks drain to zero', (await page.evaluate(() => window.game.stat
 await page.evaluate(() => { const g = window.game; g.godMode = true; g.spells.addSpell('nova'); g.spells.addRune('piercing'); g.spells.addRune('wide'); g.spells.addRune('ignite'); });
 await page.keyboard.press('i');
 await page.waitForSelector('.vs-load');
-await page.locator('.vs-item', { hasText: 'Frost Nova' }).click();
+await page.locator('.vs-item', { hasText: 'Frost Nova' }).first().click();
 const runeState = await page.evaluate(() => [...document.querySelectorAll('.vs-rune')].map((r) => [r.textContent.trim(), r.classList.contains('bad')]));
 const bad = {}; for (const [t, b] of runeState) bad[t.replace(/^\P{L}+/u, '')] = b;
 check('incompatible runes are greyed out', bad['Piercing'] === true && bad['Ignite'] === true && bad['Wide'] === false, JSON.stringify(runeState));

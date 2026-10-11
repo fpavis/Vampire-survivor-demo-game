@@ -1,4 +1,5 @@
 import { SAVE_VERSION, validateSave, type SaveData } from './schema';
+import { xpForLevel } from '../config';
 
 type Migration = (raw: Record<string, any>) => Record<string, any>;
 
@@ -33,7 +34,33 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...raw,
     version: 3,
     hero: { ...raw.hero, wallet: { gold: 0, wood: 0, stone: 0, iron: 0 }, lootFilter: 'off' }
-  })
+  }),
+  // v3 -> v4: a single hero becomes a party of three sharing one inventory
+  3: (raw) => {
+    const old = raw.hero ?? {};
+    const spells: any[] = [...(old.spells ?? [])];
+    const mk = (tpl: string, sockets: number, n: string) => { const s = { uid: `p4${n}${tpl}`, tpl, level: 1, xp: 0, runes: Array(sockets).fill(null) }; spells.push(s); return s.uid; };
+    const bench = [
+      { id: 'brann', auto: [mk('orbit', 2, 'b')], active: [mk('barrier', 1, 'b'), null, null] },
+      { id: 'cyra', auto: [mk('nova', 2, 'c')], active: [mk('blink', 1, 'c'), null, null] }
+    ].map((b) => ({ ...b, level: 1, experience: 0, nextLevel: xpForLevel(1), health: 100, mana: 60, pending: 0, picks: {}, dead: false }));
+    const { world } = raw;
+    const out: Record<string, any> = {
+      ...raw,
+      version: 4,
+      party: {
+        active: 0,
+        heroes: [{
+          id: 'aria', level: old.level, experience: old.experience, nextLevel: old.nextLevel, health: old.health, mana: old.mana ?? 60,
+          pending: old.pendingPicks ?? 0, picks: { ...(old.picks ?? {}) }, auto: [...(old.auto ?? [])], active: [...(old.active ?? [null, null, null])], dead: false
+        }, ...bench]
+      },
+      inventory: { spells, runes: [...(old.runes ?? [])], wallet: { ...(old.wallet ?? { gold: 0, wood: 0, stone: 0, iron: 0 }) }, lootFilter: old.lootFilter ?? 'off' },
+      world: { ...world, lastCity: world?.cities?.length ? world.cities[world.cities.length - 1].id : null }
+    };
+    delete out.hero;
+    return out;
+  }
 };
 
 export class SaveError extends Error {

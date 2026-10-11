@@ -144,8 +144,10 @@ check('position restored near where we saved', Math.abs(after.x - before.px) < 1
 // ---- 5. death and respawn keep the world
 const respawn = await page.evaluate(async () => {
   const g = window.game;
+  g.session.cities.push({ id: 'far', name: 'Fartown', ex: 90000, ey: 90000 });
   g.session.cities.push({ id: 't', name: 'Testtown', ex: 400, ey: 400 });
-  g.state.health = 0; g.step(1);
+  g.session.lastCity = 't';
+  for (let i = 0; i < 3; i++) { g.state.health = 0; g.step(1); }
   const died = g.state.gameOver;
   const target = g.respawnTarget();
   g.respawn(target);
@@ -154,7 +156,7 @@ const respawn = await page.evaluate(async () => {
   return { died, label: target.label, alive: g.state.health > 0 && !g.state.gameOver, near: Math.hypot(g.state.player.wx - 400, g.state.player.wy - 440) < 200 };
 });
 check('party death shows the death flow', respawn.died);
-check('respawns at the nearest visited town with full health', respawn.alive && respawn.near && respawn.label === 'Testtown', JSON.stringify(respawn));
+check('respawns at the last visited town with the party revived', respawn.alive && respawn.near && respawn.label === 'Testtown', JSON.stringify(respawn));
 
 check('no console or page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();

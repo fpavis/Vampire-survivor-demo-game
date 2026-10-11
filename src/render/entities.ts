@@ -148,7 +148,7 @@ export class EntityManager {
         body.addChild(staff, robe, head, hat);
         container.addChild(makeShadow(15, 5.5, 0.4), aura, body);
 
-        Object.assign(container, { body, aura, orbGlow, phase: 0, moving: false });
+        Object.assign(container, { body, aura, robe, hat, orbGlow, phase: 0, moving: false });
         return container;
     }
 
