@@ -8,6 +8,8 @@ import { EntityManager } from '../render/entities';
 import { UIManager } from './ui';
 import { World, BIOME } from '../render/world';
 import { Effects } from '../render/effects';
+import { Lighting } from '../render/lighting';
+import { Ambience } from '../render/ambience';
 import { SpellSystem } from './spells';
 import { PartyRuntime } from './party';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
@@ -146,21 +148,8 @@ class Game {
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
         });
-        // cave / ruin darkness: only a pool of light around the player
-        const dark = mk(256, 256, (ctx, w, h) => {
-            const gr = ctx.createRadialGradient(w / 2, h / 2, w * 0.1, w / 2, h / 2, w * 0.5);
-            gr.addColorStop(0, 'rgba(2,2,8,0)');
-            gr.addColorStop(0.55, 'rgba(2,2,8,0.7)');
-            gr.addColorStop(1, 'rgba(2,2,8,1)');
-            ctx.fillStyle = gr;
-            ctx.fillRect(0, 0, w, h);
-        });
-        this.darkSprite = new PIXI.Sprite(dark);
-        this.darkSprite.eventMode = 'none';
-        this.darkSprite.zIndex = 9;
-        this.darkSprite.anchor.set(0.5);
-        this.darkSprite.visible = false;
-        this.app.stage.addChild(this.darkSprite);
+        this.lighting = new Lighting(this.app, this.app.stage);
+        this.ambience = new Ambience(this.app, this.app.stage);
         this.vignetteSprite = new PIXI.Sprite(vig);
         this.hazeSprite = new PIXI.Sprite(haze);
         [this.hazeSprite, this.vignetteSprite].forEach((s) => {
@@ -177,10 +166,7 @@ class Game {
         this.vignetteSprite.height = height;
         this.hazeSprite.width = width;
         this.hazeSprite.height = height * 0.7;
-        this.darkSprite.position.set(width / 2, height / 2);
-        const dk = Math.max(width, height) * 1.5;
-        this.darkSprite.width = dk;
-        this.darkSprite.height = dk;
+        this.lighting.resize();
     }
 
     handleResize() {
@@ -212,18 +198,30 @@ class Game {
         button.eventMode = 'static';
         button.cursor = 'pointer';
         const bg = new PIXI.Graphics();
+        // a dark plate with a gold frame and a coloured inlay
         const draw = (hover) => {
             bg.clear();
-            bg.beginFill(hover ? fill.hover : fill.base);
-            bg.lineStyle(3, 0xffffff, 0.8);
-            bg.drawRoundedRect(-width / 2, -28, width, 56, 16);
+            bg.beginFill(0x000000, 0.35); bg.drawRoundedRect(-width / 2 + 3, -25, width, 56, 12); bg.endFill();
+            bg.beginFill(0x0e1220, 0.95);
+            bg.lineStyle(2, hover ? 0xffe08a : 0xd9a440, 1);
+            bg.drawRoundedRect(-width / 2, -28, width, 56, 12);
             bg.endFill();
-            bg.beginFill(0xffffff, 0.2);
-            bg.drawRoundedRect(-width / 2 + 6, -24, width - 12, 20, 10);
+            bg.lineStyle(0);
+            bg.beginFill(hover ? fill.hover : fill.base, hover ? 0.95 : 0.78);
+            bg.drawRoundedRect(-width / 2 + 5, -23, width - 10, 46, 9);
+            bg.endFill();
+            bg.beginFill(0xffffff, 0.18); bg.drawRoundedRect(-width / 2 + 8, -21, width - 16, 16, 7); bg.endFill();
+            bg.beginFill(0x000000, 0.18); bg.drawRoundedRect(-width / 2 + 8, 6, width - 16, 14, 7); bg.endFill();
+            bg.beginFill(0xf3c75a);
+            bg.drawPolygon([-width / 2, -6, -width / 2 + 6, 0, -width / 2, 6, -width / 2 - 6, 0]);
+            bg.drawPolygon([width / 2, -6, width / 2 + 6, 0, width / 2, 6, width / 2 - 6, 0]);
             bg.endFill();
         };
         draw(false);
-        const label = new PIXI.Text(text, { fontFamily: FONT, fontSize: 26, fontWeight: 'bold', fill: fill.text, letterSpacing: 2 });
+        const label = new PIXI.Text(text, {
+            fontFamily: 'Georgia, "Palatino Linotype", "Book Antiqua", Palatino, serif', fontSize: 25, fontWeight: 'bold', fill: 0xffffff,
+            letterSpacing: 3, stroke: 0x000000, strokeThickness: 3, dropShadow: true, dropShadowDistance: 2, dropShadowAlpha: 0.6
+        });
         label.anchor.set(0.5);
         button.addChild(bg, label);
         button.on('pointerover', () => { draw(true); button.scale.set(1.05); });
@@ -239,16 +237,39 @@ class Game {
         screen.eventMode = 'static';
         app.stage.addChild(screen);
 
-        const dim = new PIXI.Graphics();
+        // dark at the top and bottom, the world still visible through the middle
+        const gc = document.createElement('canvas');
+        gc.width = 2; gc.height = 256;
+        const gctx = gc.getContext('2d');
+        const grad = gctx.createLinearGradient(0, 0, 0, 256);
+        grad.addColorStop(0, 'rgba(4,6,12,0.88)');
+        grad.addColorStop(0.45, 'rgba(4,6,12,0.55)');
+        grad.addColorStop(0.62, 'rgba(4,6,12,0.4)');
+        grad.addColorStop(1, 'rgba(4,6,12,0.85)');
+        gctx.fillStyle = grad;
+        gctx.fillRect(0, 0, 2, 256);
+        const dim = new PIXI.Sprite(PIXI.Texture.from(gc));
+        const SERIF = 'Georgia, "Palatino Linotype", "Book Antiqua", Palatino, serif';
         const title = new PIXI.Text('SURVIVAL', {
-            fontFamily: FONT, fontSize: 84, fontWeight: 'bold', fill: ['#ffffff', '#8fb6ff'],
-            stroke: 0x0a1230, strokeThickness: 9, dropShadow: true, dropShadowDistance: 6, dropShadowAlpha: 0.6, letterSpacing: 6
+            fontFamily: SERIF, fontSize: 92, fontWeight: 'bold', fill: ['#fff8dc', '#f3c75a', '#b0731c'], fillGradientStops: [0, 0.55, 1],
+            stroke: 0x2a1604, strokeThickness: 8, dropShadow: true, dropShadowColor: 0xffb44a, dropShadowBlur: 18,
+            dropShadowDistance: 0, dropShadowAlpha: 0.55, letterSpacing: 10
         });
         title.anchor.set(0.5);
-        const subtitle = new PIXI.Text('An endless world awaits', { fontFamily: FONT, fontSize: 22, fill: 0xcfd8f0, letterSpacing: 3 });
+        const subtitle = new PIXI.Text('THREE HEROES  ·  ONE ENDLESS, DEMON-HAUNTED WORLD', {
+            fontFamily: SERIF, fontSize: 17, fill: 0xf0e2b8, letterSpacing: 4, dropShadow: true, dropShadowDistance: 2, dropShadowAlpha: 0.8
+        });
         subtitle.anchor.set(0.5);
+        // ornamental divider
+        const orn = new PIXI.Graphics();
+        orn.lineStyle(2, 0xd9a440, 0.9);
+        orn.moveTo(-190, 0); orn.lineTo(-14, 0); orn.moveTo(14, 0); orn.lineTo(190, 0);
+        orn.lineStyle(0);
+        orn.beginFill(0xf3c75a); orn.drawPolygon([0, -8, 9, 0, 0, 8, -9, 0]); orn.endFill();
+        orn.beginFill(0xd9a440); orn.drawCircle(-196, 0, 3); orn.drawCircle(196, 0, 3); orn.endFill();
+        const infoBox = new PIXI.Graphics();
         const info = new PIXI.Text(
-            'WASD / arrows / mouse / touch to move  ·  E to interact  ·  M for the map\nYour spells fire automatically  ·  The farther you travel, the deadlier it gets\nProgress is saved automatically', {
+            'WASD / arrows / mouse / touch to move  ·  E to interact  ·  M for the map\nSpells fire on their own  ·  Space / Q / R for skills  ·  1 2 3 switch heroes  ·  I spells\nThe farther you travel, the deadlier it gets  ·  Progress is saved automatically', {
             fontFamily: FONT, fontSize: 18, fill: 0xd8deef, align: 'center', lineHeight: 28
         });
         info.anchor.set(0.5);
@@ -263,20 +284,25 @@ class Game {
         summary.anchor.set(0.5);
         continueBtn.visible = false;
         summary.visible = false;
-        screen.addChild(dim, title, subtitle, info, continueBtn, summary, newBtn, note);
+        screen.addChild(dim, title, orn, subtitle, infoBox, info, continueBtn, summary, newBtn, note);
 
         const layout = () => {
             const w = app.screen.width, h = app.screen.height;
-            dim.clear();
-            dim.beginFill(0x04060c, 0.62);
-            dim.drawRect(0, 0, w, h);
-            dim.endFill();
+            dim.width = w; dim.height = h;
             const s = clamp(w / 900, 0.55, 1);
             title.scale.set(s);
             title.position.set(w / 2, h * 0.2);
-            subtitle.position.set(w / 2, h * 0.2 + 70 * s);
+            orn.scale.set(s);
+            orn.position.set(w / 2, h * 0.2 + 64 * s);
+            subtitle.scale.set(clamp(w / 820, 0.6, 1));
+            subtitle.position.set(w / 2, h * 0.2 + 92 * s);
             info.scale.set(clamp(w / 760, 0.62, 1));
             info.position.set(w / 2, h * 0.43);
+            infoBox.clear();
+            infoBox.beginFill(0x0a0e18, 0.55);
+            infoBox.lineStyle(1, 0xd9a440, 0.35);
+            infoBox.drawRoundedRect(w / 2 - info.width / 2 - 26, h * 0.43 - info.height / 2 - 16, info.width + 52, info.height + 32, 14);
+            infoBox.endFill();
             continueBtn.position.set(w / 2, h * 0.62);
             summary.position.set(w / 2, h * 0.62 + 40);
             newBtn.position.set(w / 2, continueBtn.visible ? h * 0.62 + 90 : h * 0.66);
@@ -385,6 +411,7 @@ class Game {
         this.hazards.reset();
         this.spells.clearProjectiles();
         this.fx.clear();
+        if (this.ambience) this.ambience.clear();
     }
 
     clearEntities() {
@@ -528,10 +555,49 @@ class Game {
         this.map.sync(fog, this.world, this.mode === 'overworld' ? this.popRuntime.population : null, this.session);
     }
 
+    // amount 0 = daylight, ~0.5 = a dim cave. Darkness is a light map: ambient colour plus glowing sources.
     setAmbient(amount) {
         this.ambient = amount;
-        this.darkSprite.visible = amount > 0.01;
-        this.darkSprite.alpha = Math.min(0.95, amount);
+        if (amount <= 0.01) { this.lighting.setAmbient(this.regionAmbient(), true); return; }
+        const k = Math.max(0.12, 1 - amount * 1.45);
+        const c = (f) => Math.round(255 * Math.min(1, k * f));
+        this.lighting.setAmbient((c(0.82) << 16) | (c(0.88) << 8) | c(1.08));
+    }
+
+    // darker, tinted daylight in the dangerous far regions (by difficulty tier)
+    regionAmbient() {
+        if (this.mode !== 'overworld' || !this.state.player || !this.overworld) return 0xffffff;
+        const p = this.state.player;
+        const tier = tierOf(this.overworld.levelAt(Math.floor(p.wx / T), Math.floor(p.wy / T)));
+        return [0xffffff, 0xf0e6f4, 0xdcd4cc, 0xb0bcdc, 0xd4a8a8, 0xb0a0c8][Math.min(tier, 5)];
+    }
+
+    // gather light sources near the camera and render the light map (called once per rendered frame)
+    renderLights() {
+        const L = this.lighting;
+        L.fade(1);
+        if (!L.enabled || !this.state.player) { L.render(this.worldContainer); return; }
+        const p = this.state.player;
+        const t = this.frame;
+        const def = this.party?.def ? this.party.def() : null;
+        L.add({ x: p.wx, y: p.wy, z: 30, r: 330, color: 0xfff0d8, i: 1 });
+        L.add({ x: p.wx, y: p.wy, z: 50, r: 120, color: def ? def.color : 0x9fd8ff, i: 0.55 });
+        const vw = this.app.screen.width, vh = this.app.screen.height / TILT;
+        this.world.views.forEach((v) => {
+            for (const l of v.lights) {
+                if (Math.abs(l.x - this.cam.x) > vw * 0.75 + l.r || Math.abs(l.y - this.cam.y) > vh * 0.75 + l.r) continue;
+                const flick = l.flicker ? 0.9 + 0.1 * Math.sin(t * 0.31 + l.phase) * Math.sin(t * 0.17 + l.phase * 2) : 1;
+                L.add({ x: l.x, y: l.y, z: l.z, r: l.r * flick, color: l.color, i: l.i });
+            }
+        });
+        this.spells.emitLights(L);
+        for (const g of this.state.gems) if (g.kind === 'gem') L.add({ x: g.wx, y: g.wy, z: 12, r: 46, color: EntityManager.gemTier(g.value).color, i: 0.6 });
+        for (const it of this.interactables) {
+            if (it.kind === 'chest' && !it.opened) L.add({ x: it.x, y: it.y, z: 16, r: 90, color: 0xffd060, i: 0.55 });
+            if (it.kind === 'healer') L.add({ x: it.x + 16, y: it.y, z: 50, r: 150, color: 0x9bffb0, i: 0.8 });
+        }
+        this.fx.emitLights(L);
+        L.render(this.worldContainer);
     }
 
     toggleMap() {
@@ -547,6 +613,8 @@ class Game {
             this.accum -= 1;
             this.step(1);
         }
+        if (this.state.player && !this.state.paused) this.ambience.update(Math.min(rawDelta, 2.5), this.cam, this.worldContainer);
+        this.renderLights();
     }
 
     step(rawDelta) {
@@ -878,6 +946,8 @@ class Game {
         const info = GROUP_INFO[group];
         this.zoneLevelNow = level;
         this.zoneThreat = threatBand(level, this.state.level);
+        this.lighting.setAmbient(this.regionAmbient(), false);
+        this.ambience.setRegion(group, tier >= 2);
         this.zoneLabel = `${info.icon} ${info.name} · Lv ${level}`;
         if (group !== this.zoneGroup) {
             this.zoneGroup = group;
@@ -981,6 +1051,8 @@ class Game {
             this.mode = 'interior';
             this.flow.centerTx = NaN;
             this.setAmbient(src.ambient);
+            this.ambience.clear();
+            this.ambience.setRegion(poi.type);
 
             const spot = this.world.findFree(src.start.x, src.start.y, p.radius + 2);
             p.wx = spot.x; p.wy = spot.y;

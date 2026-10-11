@@ -330,7 +330,7 @@ export class SpellSystem {
                 }
             }
             if (remove) {
-                this.game.fx.hit(sp.wx, sp.wy);
+                this.game.fx.hit(sp.wx, sp.wy, b.r.color);
                 EntityManager.cleanup(sp);
                 this.bullets.splice(i, 1);
             }
@@ -423,7 +423,7 @@ export class SpellSystem {
         this.polyline(g, jag, 8, r.color, 0.35);
         this.polyline(g, jag, 3, 0xffffff, 0.95);
         game.objectLayer.addChild(g);
-        this.bolts.push({ g, life: 12, max: 12 });
+        this.bolts.push({ g, life: 12, max: 12, pts: points });
         points.forEach((pt) => game.fx.burst(pt.x, pt.y, 18, 0xd6c8ff, 5, 2.6, { size: 0.6, life: 18 }));
         game.fx.addShake(2);
     }
@@ -551,6 +551,7 @@ export class SpellSystem {
                 game.fx.burst(m.x, m.y, 6, 0xffe08a, 16, 3, { size: 0.8, life: 24, up: 3 });
                 game.fx.burst(m.x, m.y, 6, 0x333333, 12, 2.5, { size: 1.4, life: 44, up: 2, gravity: 0.05 });
                 game.fx.addShake(8);
+                game.fx.flash(m.x, m.y, m.radius * 4, 0xffa040, 26);
                 if (this.decals.length < CAP.decals) {
                     const scorch = new PIXI.Graphics();
                     scorch.beginFill(0x1a0f08, 0.55);
@@ -580,6 +581,16 @@ export class SpellSystem {
             d.g.alpha = Math.max(0, d.life / d.max);
             if (d.life <= 0) { d.g.destroy(); this.decals.splice(i, 1); }
         }
+    }
+
+    // light emitted by spells for the light map (caves, ruins, dark regions)
+    emitLights(L) {
+        for (const b of this.bullets) L.add({ x: b.sprite.wx, y: b.sprite.wy, z: 18, r: 90, color: b.r.color, i: 0.9 });
+        for (const o of Object.values(this.orbits)) for (const b of o.blades) L.add({ x: b.wx, y: b.wy, z: 16, r: 60, color: 0x9ff2ff, i: 0.6 });
+        for (const ring of this.rings) L.add({ x: ring.x, y: ring.y, z: 0, r: ring.r * 1.4 + 30, color: ring.rs.color, i: Math.max(0, 1 - ring.fade / 14) * 0.8 });
+        for (const m of this.meteors) if (m.t >= 0) L.add({ x: m.x, y: m.y, z: 0, r: m.radius * (0.8 + m.t / m.delay), color: 0xff7a2a, i: 0.4 + 0.6 * (m.t / m.delay) });
+        for (const b of this.bolts) if (b.pts) for (const p of b.pts) L.add({ x: p.x, y: p.y, z: 20, r: 150, color: 0xc8b8ff, i: b.life / b.max });
+        if (this.barrierActive) { const p = this.game.state.player; L.add({ x: p.wx, y: p.wy, z: 20, r: this.barrierRadius * 3, color: this.barrierColor, i: 0.7 }); }
     }
 
     // ================================================================ ACTIVE

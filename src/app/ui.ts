@@ -286,6 +286,7 @@ export class UIManager {
         });
 
         const st = game.stats;
+        this.elements.statsText.visible = false;   // detailed numbers live in the spell panel / tooltips
         this.elements.statsText.position.set(12, 98 + (Object.keys(s.picks).length ? 92 : 48));
         this.elements.statsText.text =
             `Damage ×${st.might.toFixed(2)}   Speed ×${st.speed.toFixed(2)}\n` +

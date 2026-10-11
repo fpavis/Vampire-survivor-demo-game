@@ -22,7 +22,7 @@ function themeFor(type: string, group: string): InteriorTheme {
     }
     if (type === 'ruins') {
         const sand = group === GROUP.DESERT;
-        return { top: sand ? 0xb09868 : 0x8a8478, front: sand ? 0x7a6840 : 0x5e594f, ambient: 0.4 };
+        return { top: sand ? 0xb09868 : 0x8a8478, front: sand ? 0x7a6840 : 0x5e594f, ambient: 0.32 };
     }
     const palettes: Record<string, { roofs: number[]; wall: number; floor: number }> = {
         [GROUP.DESERT]: { roofs: [0xb8742e, 0xc8943e, 0x9a5a2a], wall: 0xe0c48a, floor: 0xd2b27a },

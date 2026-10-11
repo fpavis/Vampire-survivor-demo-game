@@ -21,13 +21,35 @@ export class Effects {
         g.endFill();
         this.dot = game.app.renderer.generateTexture(g, { resolution: 2 });
         g.destroy();
+        // soft additive spark for magical particles
+        const c = document.createElement('canvas');
+        c.width = c.height = 32;
+        const ctx = c.getContext('2d');
+        const gr = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gr.addColorStop(0, 'rgba(255,255,255,1)');
+        gr.addColorStop(0.35, 'rgba(255,255,255,0.8)');
+        gr.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gr;
+        ctx.fillRect(0, 0, 32, 32);
+        this.spark = PIXI.Texture.from(c);
+        this.flashes = [];
+    }
+
+    /** a short burst of light (only visible where the light map is active) */
+    flash(x, y, r, color, life = 14, z = 20) {
+        if (this.flashes.length < 40) this.flashes.push({ x, y, z, r, color, life, max: life });
+    }
+
+    emitLights(L) {
+        for (const f of this.flashes) L.add({ x: f.x, y: f.y, z: f.z, r: f.r * (0.6 + 0.4 * f.life / f.max), color: f.color, i: f.life / f.max });
     }
 
     burst(x, y, z, color, count, speed, opts = {}) {
-        const { size = 1, life = 30, gravity = 0.22, up = 2.5 } = opts;
+        const { size = 1, life = 30, gravity = 0.22, up = 2.5, glow = false } = opts;
         for (let i = 0; i < count; i++) {
             if (this.particles.length >= MAX_PARTICLES) return;
-            const s = new PIXI.Sprite(this.dot);
+            const s = new PIXI.Sprite(glow ? this.spark : this.dot);
+            if (glow) s.blendMode = PIXI.BLEND_MODES.ADD;
             s.anchor.set(0.5);
             s.tint = color;
             const a = Math.random() * Math.PI * 2;
@@ -36,7 +58,7 @@ export class Effects {
                 s, wx: x, wy: y, z,
                 vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.8, vz: up * (0.5 + Math.random()),
                 life, max: life * (0.7 + Math.random() * 0.6), gravity,
-                scale: size * (0.5 + Math.random() * 0.8)
+                scale: size * (0.5 + Math.random() * 0.8) * (glow ? 0.75 : 1)
             };
             p.life = p.max;
             s.scale.set(p.scale);
@@ -45,13 +67,17 @@ export class Effects {
         }
     }
 
-    hit(x, y) {
-        this.burst(x, y, 20, 0xffee88, 6, 2.4, { size: 0.55, life: 18, gravity: 0.15, up: 1.2 });
+    hit(x, y, color = 0xffee88) {
+        this.burst(x, y, 20, color, 6, 2.4, { size: 0.7, life: 18, gravity: 0.15, up: 1.2, glow: true });
+        this.flash(x, y, 70, color, 8);
     }
 
     death(x, y, color = 0xff5a5a, big = false) {
         this.burst(x, y, 12, color, big ? 40 : 14, big ? 5 : 3.2, { size: big ? 1.1 : 0.85, life: 34, up: 3 });
-        this.burst(x, y, 12, 0xffffff, big ? 12 : 4, 2, { size: 0.5, life: 20, up: 2 });
+        this.burst(x, y, 12, 0xffffff, big ? 14 : 5, 2.2, { size: 0.7, life: 20, up: 2, glow: true });
+        // a dark puff of smoke and a scorch of light
+        this.burst(x, y, 8, 0x2a2430, big ? 10 : 4, 1, { size: big ? 1.6 : 1.1, life: 40, up: 1.4, gravity: -0.02 });
+        this.flash(x, y, big ? 240 : 110, color, big ? 30 : 14);
     }
 
     popup(x, y, text, color = 0xffffff, size = 16, z = 34) {
@@ -118,6 +144,12 @@ export class Effects {
             }
         }
 
+        for (let i = this.flashes.length - 1; i >= 0; i--) {
+            const f = this.flashes[i];
+            f.life -= delta;
+            if (f.life <= 0) this.flashes.splice(i, 1);
+        }
+
         this.shake *= Math.pow(0.86, delta);
         if (this.shake < 0.2) this.shake = 0;
     }
@@ -131,6 +163,7 @@ export class Effects {
             this.popupPool.push(p.t);
         });
         this.popups.length = 0;
+        this.flashes.length = 0;
         this.shake = 0;
     }
 }

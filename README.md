@@ -25,6 +25,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - A party of three heroes (switch with 1/2/3 or Tab; bench heroes lend auras; a town Healer revives the fallen for gold). 12 stat cards per hero in four paths (Arcane, Vigor, Wayfarer, Spirit). Level-ups never pause the game: press `U` to pick when convenient
   - Rarity-tiered upgrade cards that show exactly what changes (e.g. `Damage: 22 → 28`)
   - Enemies scale with your level; elites appear and a regional warlord shows up every few levels
+- **Graphics**: baked ground textures with organic biome borders, shore foam, earthen banks and water depth; textured cliffs with moss, snow and glowing crystal veins; a light map for caves, ruins and the dark far regions (torches, crystals, spells and explosions glow); region ambience (leaves, pollen, blowing sand, snow, cave motes, ash); `npm run gallery` saves screenshots of every scene
 - **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, spell and stat slots, mana bar and active skill bar, floating damage numbers with crits, damage vignette
 - **Responsive Controls**: keyboard (WASD / arrows), mouse (click and hold), touch and virtual joystick
 

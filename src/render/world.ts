@@ -1,12 +1,14 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
-import { hash, fbm } from '../core/world/noise';
+import { hash, valueNoise } from '../core/world/noise';
 import {
     BIOME, BIOME_COLOR, isSolidBiome, isWaterBiome, isWallBiome, groupOf
 } from '../core/world/biomes';
 import { shade } from './decorArt';
 import { bakeDecorTextures } from './decorBake';
+import { bakeGround, GROUND_RES } from './groundBake';
+import { DECOR_LIGHTS } from './lighting';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -218,7 +220,7 @@ export class World {
             }
         }
         wanted.sort((a, b) => a.d - b.d);
-        const budget = immediate ? wanted.length : 2;
+        const budget = immediate ? wanted.length : 1;
         for (let i = 0; i < Math.min(budget, wanted.length); i++) {
             const w = wanted[i];
             this.views.set(w.key, this.buildView(w.cx, w.cy));
@@ -233,8 +235,10 @@ export class World {
     }
 
     destroyView(view) {
+        if (view.base) { const tex = view.base.texture; view.base.destroy(); tex.destroy(true); }
         view.ground.destroy();
         view.sheen.destroy();
+        view.sheen2.destroy();
         view.objects.forEach((o) => o.destroy());
     }
 
@@ -247,9 +251,13 @@ export class World {
 
         const ground = new PIXI.Graphics();
         const sheen = new PIXI.Graphics();
+        const sheen2 = new PIXI.Graphics();
+        this._sheen2 = sheen2;
         const objects = [];
         const rows = [];
         const animated = [];
+        const lights = [];
+        this._lights = lights;
 
         for (let j = 0; j < CT; j++) {
             let row = null;
@@ -268,33 +276,10 @@ export class World {
                 if (biome === BIOME.VOID) continue;
                 const px = tx * T, py = ty * T;
 
-                const macro = fbm(tx * 0.11, ty * 0.11, seed + 900, 2);
-                let light = 0.9 + 0.16 * hash(tx, ty, seed + 5) + (macro - 0.5) * 0.3;
-                if (src.bounded) light = 1 + (light - 1) * 0.45;
-                let color = BIOME_COLOR[biome];
-                if (biome === BIOME.CITY_FLOOR && theme && theme.floor) color = theme.floor;
-                if (!src.bounded && !isWaterBiome(biome) && (src as any).tierAt) {
-                    const tier = (src as any).tierAt(tx, ty);
-                    if (tier > 0) { const [tc, tk] = TIER_TINT[Math.min(tier, TIER_TINT.length - 1)]; color = mixColor(color, tc, tk); }
-                }
-                const base = shade(color, light);
-                ground.beginFill(base);
-                ground.drawRect(px, py, T + 1, T + 1);
-                ground.endFill();
-
+                const base = shade(this.groundColor(biome, tx, ty), 0.95 + 0.1 * hash(tx, ty, seed + 5));
                 this.drawTileDetail(ground, sheen, biome, tx, ty, px, py, base, seed);
 
-                if (isWallBiome(biome)) {
-                    this.drawWall(getRow(), biome, tx, ty, px, py, seed, theme);
-                } else if (!src.bounded && !isWaterBiome(biome)) {
-                    const south = this.biomeAt(tx, ty + 1);
-                    if (isWaterBiome(south)) {
-                        const g = getRow();
-                        const by = (ty + 1) * T * TILT;
-                        g.beginFill(shade(0x6b4a2b, light)); g.drawRect(px, by - 1, T + 1, 12); g.endFill();
-                        g.beginFill(0x000000, 0.25); g.drawRect(px, by + 6, T + 1, 6); g.endFill();
-                    }
-                }
+                if (isWallBiome(biome)) this.drawWall(getRow(), biome, tx, ty, px, py, seed, theme);
             }
         }
 
@@ -306,16 +291,42 @@ export class World {
             s.zIndex = d.y;
             if (d.flip) s.scale.x = -1;
             if (d.type === 'portal' || d.type === 'torch') animated.push({ s, kind: d.type, phase: d.x * 0.01 });
+            const ld = DECOR_LIGHTS[d.type];
+            if (ld) {
+                const color = Array.isArray(ld.color) ? ld.color[d.variant % ld.color.length] : ld.color;
+                lights.push({ x: d.x, y: d.y, z: ld.z, r: ld.r, color, i: ld.i ?? 1, flicker: d.type === 'torch' || d.type === 'lamp', phase: hash(d.x | 0, d.y | 0, 7) * 6.28 });
+            }
             objects.push(s);
         });
 
-        this.groundLayer.addChildAt(ground, 0);
+        const tex = bakeGround(cx, cy, (tx, ty) => this.biomeAt(tx, ty), (b, tx, ty) => this.groundColor(b, tx, ty), seed, !!src.bounded);
+        const base = new PIXI.Sprite(tex);
+        base.position.set(cx * CHUNK_SIZE, cy * CHUNK_SIZE);
+        base.scale.set(GROUND_RES);
+        this.groundLayer.addChildAt(base, 0);
+        this.groundLayer.addChildAt(ground, 1);
         sheen.blendMode = PIXI.BLEND_MODES.ADD;
-        this.groundLayer.addChild(sheen);
+        sheen2.blendMode = PIXI.BLEND_MODES.ADD;
+        this.groundLayer.addChild(sheen, sheen2);
         rows.forEach((r) => objects.push(r));
         objects.forEach((o) => this.objectLayer.addChild(o));
 
-        return { cx, cy, ground, sheen, objects, animated, phase: hash(cx, cy, seed) * 6.28 };
+        return { cx, cy, base, ground, sheen, sheen2, objects, animated, lights, phase: hash(cx, cy, seed) * 6.28 };
+    }
+
+    // base colour of a tile before lighting: biome colour, interior theme, darker land in high-tier regions
+    groundColor(biome, tx, ty) {
+        const src = this.source;
+        const theme = src.theme;
+        let color = BIOME_COLOR[biome];
+        if (biome === BIOME.CITY_FLOOR && theme && theme.floor) color = theme.floor;
+        else if (biome === BIOME.CAVE_FLOOR && theme && theme.top) color = mixColor(color, theme.top, 0.3);
+        else if (biome === BIOME.RUIN_FLOOR && theme && theme.top) color = mixColor(color, theme.top, 0.25);
+        if (!src.bounded && !isWaterBiome(biome) && src.tierAt) {
+            const tier = src.tierAt(tx, ty);
+            if (tier > 0) { const [tc, tk] = TIER_TINT[Math.min(tier, TIER_TINT.length - 1)]; color = mixColor(color, tc, tk); }
+        }
+        return color;
     }
 
     drawTileDetail(ground, sheen, biome, tx, ty, px, py, base, seed) {
@@ -361,9 +372,13 @@ export class World {
                 ground.beginFill(shade(base, 1.2));
                 ground.drawCircle(px + h3 * 40 + 4, py + h1 * 40 + 4, 2);
                 ground.endFill();
-                if (h2 > 0.85) {
-                    ground.beginFill(0xffffff, 0.55);
-                    ground.drawEllipse(px + 24, py + 24, 14, 8);
+                if (h2 > 0.8) {
+                    ground.beginFill(shade(base, 0.6));
+                    ground.drawEllipse(px + 10 + h3 * 24, py + 22, 5, 3.5);
+                    ground.drawEllipse(px + 18 + h3 * 24, py + 26, 3.5, 2.5);
+                    ground.endFill();
+                    ground.beginFill(shade(base, 1.3));
+                    ground.drawEllipse(px + 9 + h3 * 24, py + 20.5, 3.5, 2);
                     ground.endFill();
                 }
                 break;
@@ -395,18 +410,19 @@ export class World {
             case BIOME.SHALLOW:
             case BIOME.DEEP: {
                 const foam = biome === BIOME.SHALLOW;
-                if (foam) {
-                    ground.beginFill(0xffffff, 0.35);
-                    if (!isWaterBiome(this.biomeAt(tx, ty - 1))) ground.drawRect(px, py, T + 1, 3);
-                    if (!isWaterBiome(this.biomeAt(tx - 1, ty))) ground.drawRect(px, py, 3, T + 1);
-                    if (!isWaterBiome(this.biomeAt(tx + 1, ty))) ground.drawRect(px + T - 2, py, 3, T + 1);
-                    if (!isWaterBiome(this.biomeAt(tx, ty + 1))) ground.drawRect(px, py + T - 2, T + 1, 3);
-                    ground.endFill();
-                }
                 if (h1 > 0.55) {
                     sheen.beginFill(0xbfe6ff, foam ? 0.35 : 0.22);
                     sheen.drawRect(px + h2 * 30, py + h3 * 40, 10 + h1 * 8, 2);
                     sheen.endFill();
+                }
+                // a second set of glints that twinkles out of phase with the first
+                const g2 = this._sheen2;
+                if (g2 && h3 > 0.35) {
+                    const h4 = hash(tx, ty, seed + 204);
+                    g2.beginFill(0xdff4ff, foam ? 0.3 : 0.2);
+                    g2.drawRect(px + h4 * 32, py + h1 * 40, 7 + h4 * 9, 2);
+                    g2.drawRect(px + 4 + h4 * 32, py + h1 * 40 + 3, 4 + h2 * 4, 1.5);
+                    g2.endFill();
                 }
                 break;
             }
@@ -438,50 +454,42 @@ export class World {
             case BIOME.MOUNTAIN:
             case BIOME.PEAK: {
                 const peak = biome === BIOME.PEAK;
-                const top = peak ? shade(0xeef3f8, 0.92 + hh * 0.1) : shade(0x8e929d, 0.85 + hh * 0.25);
-                g.beginFill(top); g.drawRect(px, topY, W, TH); g.endFill();
-                g.beginFill(peak ? 0xffffff : shade(top, 1.18), 0.7); g.drawRect(px + 4 + hh * 20, topY + 3, 14, 5); g.endFill();
-                if (showFront) {
-                    g.beginFill(peak ? 0x9fb0c4 : 0x565a66); g.drawRect(px, fy, W, h + 1); g.endFill();
-                    g.beginFill(0x000000, 0.18);
-                    g.drawRect(px, fy, W, 6); g.drawRect(px + 8 + hh * 14, fy + 6, 4, h - 6); g.drawRect(px + 30 + hh * 8, fy + 12, 3, h - 12);
-                    g.endFill();
-                    g.beginFill(0x000000, 0.28); g.drawRect(px, fy + h - 8, W, 9); g.endFill();
-                    if (peak) {
-                        g.beginFill(0xffffff, 0.85);
-                        g.drawPolygon([px, fy, px + W, fy, px + T * 0.75, fy + 12, px + T * 0.5, fy + 6, px + T * 0.25, fy + 13]);
-                        g.endFill();
-                    }
-                }
+                this.drawRockTop(g, tx, ty, px, topY, peak ? 0xe8eef6 : 0x8e929d, seed, peak ? 0.12 : 0.34, peak ? null : 0x6a7a52);
+                if (showFront) this.drawRockFront(g, tx, px, fy, h, peak ? 0x8a9ab0 : 0x5e626e, seed, peak);
                 break;
             }
             case BIOME.CAVE_WALL: {
-                const top = shade(theme.top, 0.55 + hh * 0.3);
-                g.beginFill(top); g.drawRect(px, topY, W, TH); g.endFill();
-                g.beginFill(shade(top, 1.6), 0.5); g.drawRect(px, topY, W, 2); g.endFill();
-                g.beginFill(shade(top, 1.2), 0.5); g.drawRect(px + hh * 24, topY + 4, 12, 4); g.endFill();
+                this.drawRockTop(g, tx, ty, px, topY, theme.top, seed, 0.4, null, 0.7);
                 if (showFront) {
-                    g.beginFill(theme.front); g.drawRect(px, fy, W, h + 1); g.endFill();
-                    g.beginFill(0x000000, 0.25);
-                    g.drawRect(px + 6 + hh * 12, fy, 5, h); g.drawRect(px + 28 + hh * 10, fy + 8, 4, h - 8);
-                    g.endFill();
-                    g.beginFill(shade(theme.front, 0.6));
-                    for (let k = 0; k < 3; k++) {
-                        const sx = px + 4 + k * 15 + hh * 6;
-                        g.drawPolygon([sx, fy + h - 14, sx + 9, fy + h - 14, sx + 4.5, fy + h - 2 + (k % 2) * 3]);
+                    this.drawRockFront(g, tx, px, fy, h, theme.front, seed, false, true);
+                    // the odd glowing crystal vein in the rock face
+                    if (hash(tx, ty, seed + 341) > 0.9) {
+                        const cols = [0x5ad0ff, 0xc07aff, 0x7affc0];
+                        const col = cols[Math.floor(hash(tx, ty, seed + 342) * cols.length)];
+                        const cx0 = px + 10 + hh * 26, cy0 = fy + h * 0.45;
+                        g.beginFill(shade(col, 0.6)); g.drawPolygon([cx0 - 5, cy0 + 10, cx0, cy0 - 12, cx0 + 5, cy0 + 10]); g.endFill();
+                        g.beginFill(col); g.drawPolygon([cx0 - 2, cy0 + 8, cx0 + 1, cy0 - 9, cx0 + 3, cy0 + 8]); g.endFill();
+                        g.beginFill(shade(col, 0.7)); g.drawPolygon([cx0 + 4, cy0 + 10, cx0 + 9, cy0 - 4, cx0 + 11, cy0 + 10]); g.endFill();
+                        if (this._lights) this._lights.push({ x: cx0, y: (ty + 1) * T + 4, z: h * 0.5, r: 120, color: col, i: 0.85, flicker: false, phase: 0 });
                     }
-                    g.endFill();
-                    g.beginFill(0x000000, 0.35); g.drawRect(px, fy + h - 10, W, 11); g.endFill();
-                    g.beginFill(0x000000, 0.3); g.drawRect(px, fy + h, W, 9); g.endFill();
                 }
                 break;
             }
             case BIOME.RUIN_WALL: {
-                const top = shade(theme.top, 0.62 + hh * 0.2);
+                // weathered flagstone tops, brick faces with moss
+                const n = valueNoise(px / 60, py / 60, seed + 520);
+                const top = shade(theme.top, 0.6 + n * 0.25);
                 g.beginFill(top); g.drawRect(px, topY, W, TH); g.endFill();
-                g.beginFill(0x000000, 0.14); g.drawRect(px, topY, W, 1); g.drawRect(px, topY, 1, TH); g.endFill();
+                g.beginFill(0x000000, 0.16);
+                g.drawRect(px, topY + TH * 0.5, W, 1); g.drawRect(px + ((ty % 2) ? T * 0.3 : T * 0.65), topY, 1, TH);
+                g.endFill();
+                if (!isWallBiome(this.biomeAt(tx, ty - 1))) { g.beginFill(shade(top, 1.3)); g.drawRect(px, topY, W, 2); g.endFill(); }
+                if (!isWallBiome(this.biomeAt(tx - 1, ty))) { g.beginFill(0x000000, 0.2); g.drawRect(px, topY, 2, TH); g.endFill(); }
                 if (showFront) {
-                    g.beginFill(theme.front); g.drawRect(px, fy, W, h + 1); g.endFill();
+                    const bands = 5;
+                    for (let r = 0; r < bands; r++) {
+                        g.beginFill(shade(theme.front, 1.06 - r * 0.09)); g.drawRect(px, fy + r * (h / bands), W, h / bands + 0.5); g.endFill();
+                    }
                     g.beginFill(0x000000, 0.22);
                     for (let r = 0; r < 5; r++) {
                         const ry = fy + r * (h / 5);
@@ -489,7 +497,12 @@ export class World {
                         g.drawRect(px + ((r + tx) % 2 ? 12 : 30), ry, 1.5, h / 5);
                     }
                     g.endFill();
-                    if (hh > 0.7) { g.beginFill(0x4a8a3a, 0.8); g.drawEllipse(px + 12 + hh * 20, fy + h - 8, 11, 6); g.endFill(); }
+                    g.beginFill(shade(top, 1.2)); g.drawRect(px, fy, W, 2); g.endFill();
+                    if (hh > 0.62) {
+                        g.beginFill(0x4a7a3a, 0.85); g.drawEllipse(px + 12 + hh * 20, fy + h - 8, 12, 6); g.endFill();
+                        g.beginFill(0x5a9a46, 0.8); g.drawEllipse(px + 8 + hh * 20, fy + h - 11, 6, 4); g.endFill();
+                    }
+                    if (hh < 0.12) { g.beginFill(0x3a6a2e, 0.8); g.drawRect(px + 20, fy + 2, 2, h * 0.6); g.drawRect(px + 26, fy + 2, 2, h * 0.4); g.endFill(); }
                     g.beginFill(0x000000, 0.3); g.drawRect(px, fy + h - 8, W, 9); g.endFill();
                     g.beginFill(0x000000, 0.28); g.drawRect(px, fy + h, W, 9); g.endFill();
                 }
@@ -543,10 +556,109 @@ export class World {
         }
     }
 
+    // Rock top surface: colour from world-space noise in 3x3 cells so neighbouring tiles blend (no tile grid)
+    drawRockTop(g, tx, ty, px, topY, base, seed, variance, moss = null, dim = 1) {
+        const py = ty * T;
+        const S = T / 4;
+        for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+            const wx = px + i * S + S / 2, wy = py + j * S + S / 2;
+            const n1 = valueNoise(wx / 110, wy / 110, seed + 510), n2 = valueNoise(wx / 34, wy / 34, seed + 511);
+            const c = shade(base, (0.8 + n1 * variance + (n2 - 0.5) * 0.07) * dim);
+            g.beginFill(c);
+            g.drawRect(px + i * S, topY + j * S * TILT, S + 0.6, S * TILT + 0.6);
+            g.endFill();
+        }
+        const W = T + 1, TH = T * TILT + 1;
+        const n = !isWallBiome(this.biomeAt(tx, ty - 1)), w = !isWallBiome(this.biomeAt(tx - 1, ty)), e = !isWallBiome(this.biomeAt(tx + 1, ty));
+        if (n) {
+            // sunlit rim along the northern edge, a little ragged
+            g.beginFill(shade(base, 1.32 * dim), 0.9);
+            for (let k = 0; k < 4; k++) g.drawRect(px + k * 12, topY, 12.5, 2 + hash(tx * 4 + k, ty, seed + 512) * 3);
+            g.endFill();
+        }
+        if (w) { g.beginFill(0x000000, 0.18); g.drawRect(px, topY, 3, TH); g.endFill(); }
+        if (e) { g.beginFill(0x000000, 0.24); g.drawRect(px + W - 3, topY, 3, TH); g.endFill(); }
+        // moss and lichen in soft patches, pebbles, cracks
+        if (moss && valueNoise(px / 80, py / 80, seed + 514) > 0.6) {
+            for (let k = 0; k < 3; k++) {
+                const hx = hash(tx * 3 + k, ty, seed + 515), hy = hash(tx, ty * 3 + k, seed + 516);
+                g.beginFill(shade(moss, 0.85 + hx * 0.3), 0.75);
+                g.drawEllipse(px + 8 + hx * 32, topY + (6 + hy * 30) * TILT, 6 + hy * 6, (4 + hx * 3) * TILT);
+                g.endFill();
+            }
+        }
+        for (let k = 0; k < 2; k++) {
+            const hx = hash(tx * 2 + k, ty, seed + 517), hy = hash(tx, ty * 2 + k, seed + 518);
+            if (hx < 0.55) continue;
+            g.beginFill(shade(base, 0.62 * dim)); g.drawEllipse(px + 6 + hy * 36, topY + (8 + hx * 30) * TILT + 1, 3.5, 2); g.endFill();
+            g.beginFill(shade(base, 1.15 * dim)); g.drawEllipse(px + 6 + hy * 36, topY + (8 + hx * 30) * TILT, 3, 1.6); g.endFill();
+        }
+        const h1 = hash(tx, ty, seed + 513);
+        if (h1 > 0.6) {
+            g.lineStyle(1, shade(base, 0.55 * dim), 0.6);
+            const sx = px + 8 + h1 * 26, sy = topY + 6;
+            g.moveTo(sx, sy); g.lineTo(sx + 6, sy + 8); g.lineTo(sx + 2, sy + 15); g.lineTo(sx + 9, sy + 22);
+            g.lineStyle(0);
+        }
+        if (h1 < 0.3) { g.beginFill(shade(base, 1.18 * dim)); g.drawEllipse(px + 10 + h1 * 80, topY + 14, 4, 2.5); g.endFill(); }
+    }
+
+    // Rock cliff face: vertical light falloff, strata, cracks, ragged foot and contact shadow
+    drawRockFront(g, tx, px, fy, h, base, seed, snowy = false, drips = false) {
+        const W = T + 1;
+        const bands = 6;
+        for (let r = 0; r < bands; r++) {
+            const n = valueNoise((px + 24) / 70, r * 0.7 + fy / 120, seed + 530);
+            g.beginFill(shade(base, 1.08 - r * 0.075 + (n - 0.5) * 0.1));
+            g.drawRect(px, fy + r * (h / bands), W, h / bands + 0.6);
+            g.endFill();
+        }
+        // strata
+        g.beginFill(0x000000, 0.16);
+        const off = valueNoise(px / 50, 0, seed + 531) * 6;
+        g.drawRect(px, fy + h * 0.34 + off, W, 2);
+        g.drawRect(px, fy + h * 0.66 - off, W, 1.5);
+        g.endFill();
+        // vertical cracks from world noise (continuous across tiles)
+        g.beginFill(0x000000, 0.22);
+        for (let k = 0; k < 3; k++) {
+            const hx = hash(tx * 3 + k, 0, seed + 532);
+            if (hx > 0.55) g.drawRect(px + 4 + k * 15 + hx * 6, fy + 4 + hx * 8, 2, h * (0.4 + hx * 0.4));
+        }
+        g.endFill();
+        // highlight lip where top meets face
+        g.beginFill(0xffffff, snowy ? 0.5 : 0.16); g.drawRect(px, fy, W, 2); g.endFill();
+        if (snowy) {
+            g.beginFill(0xf4f8ff, 0.95);
+            g.drawPolygon([px, fy, px + W, fy, px + W, fy + 6, px + T * 0.78, fy + 13 + hash(tx, 1, seed) * 6, px + T * 0.55, fy + 7,
+                px + T * 0.3, fy + 15 + hash(tx, 2, seed) * 6, px + T * 0.1, fy + 6, px, fy + 8]);
+            g.endFill();
+        }
+        if (drips) {
+            g.beginFill(shade(base, 0.62));
+            for (let k = 0; k < 3; k++) {
+                const sx = px + 4 + k * 15 + hash(tx, k, seed + 533) * 6;
+                g.drawPolygon([sx, fy + h - 14, sx + 9, fy + h - 14, sx + 4.5, fy + h - 2 + (k % 2) * 3]);
+            }
+            g.endFill();
+        }
+        // ragged foot and ambient occlusion where the cliff meets the ground
+        g.beginFill(shade(base, 0.45));
+        for (let k = 0; k < 4; k++) {
+            const sx = px + k * 12, hk = hash(tx * 4 + k, 3, seed + 534);
+            g.drawPolygon([sx, fy + h, sx + 12.5, fy + h, sx + 12.5, fy + h - 4 - hk * 5, sx + 6, fy + h - 2 - hk * 9, sx, fy + h - 5 - hk * 4]);
+        }
+        g.endFill();
+        g.beginFill(0x000000, 0.3); g.drawRect(px, fy + h, W, 5); g.endFill();
+        g.beginFill(0x000000, 0.15); g.drawRect(px, fy + h + 5, W, 7); g.endFill();
+    }
+
     animate(dt) {
         this.time += dt;
         this.views.forEach((v) => {
             v.sheen.alpha = 0.55 + 0.45 * Math.sin(this.time * 0.035 + v.phase);
+            v.sheen2.alpha = 0.5 - 0.45 * Math.sin(this.time * 0.035 + v.phase + 0.6);
+            v.sheen2.y = Math.sin(this.time * 0.02 + v.phase) * 2;
             for (const a of v.animated) {
                 if (a.kind === 'portal') a.s.alpha = 0.78 + 0.22 * Math.sin(this.time * 0.08 + a.phase);
                 else a.s.scale.y = 1 + 0.03 * Math.sin(this.time * 0.2 + a.phase);
