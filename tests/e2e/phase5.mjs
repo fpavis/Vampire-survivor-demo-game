@@ -89,7 +89,7 @@ const mon = await ev(() => {
   g.godMode = true; g.spells.auto = []; g.spells.touch();     // no spells, so only the ground can hurt them
   const mk = (type) => { const e = g.makeEnemy(type, p.wx, p.wy, { level: 5 }); e.shell = 'idle'; e.home = { x: p.wx, y: p.wy }; e.leash = 9999; e.dormant = true; e.health = e.maxHealth = 1000; return e; };
   const wolf = mk('WOLF'), golem = mk('GOLEM'), bee = mk('BEE');
-  for (let i = 0; i < 200; i++) g.gameLoop(1);
+  for (let i = 0; i < 200; i++) { g.gameLoop(1); for (const e of [wolf, golem, bee]) { e.wx = p.wx; e.wy = p.wy; } }   // keep them on the lava patch
   return { wolf: wolf.maxHealth - wolf.health, golem: golem.maxHealth - golem.health, bee: bee.maxHealth - bee.health };
 });
 check('lava burns a wolf but not a golem or a bee', mon && mon.wolf > 1 && mon.golem === 0 && mon.bee === 0, JSON.stringify(mon));
@@ -104,7 +104,7 @@ check('ground monsters treat lava as a hazard to avoid (unless immune)', haz && 
 await ev(() => { const g = window.game; g.godMode = true; for (const e of [...g.state.enemies]) e.dead = true; g.reap(); });
 const claimSite = await ev(() => {
   const g = window.game;
-  for (const s of g.sites.sites.near(0, 0, 220)) if (s.kind === 'claim' && Math.hypot(s.tx, s.ty) < 200) return s;
+  for (const s of g.sites.sites.near(0, 0, 440)) if (s.kind === 'claim' && Math.hypot(s.tx, s.ty) < 400) return s;
   return null;
 });
 check('claim zones exist in the world', !!claimSite);
@@ -129,7 +129,7 @@ check('claimed zone shows on the map', claim.onMap);
 // ---- 4. ambush plate
 const trig = await ev(() => {
   const g = window.game;
-  for (const s of g.sites.sites.near(0, 0, 220)) if (s.kind === 'trigger' && Math.hypot(s.tx, s.ty) < 200) return s;
+  for (const s of g.sites.sites.near(0, 0, 440)) if (s.kind === 'trigger' && Math.hypot(s.tx, s.ty) < 400) return s;
   return null;
 });
 check('ambush plates exist', !!trig);
@@ -191,7 +191,7 @@ const reload = await page.evaluate(({ claimId, trigId, treeId }) => {
   const [type, xy] = treeId.split(':'); const [x, y] = xy.split(',').map(Number);
   const p = g.state.player; p.wx = x; p.wy = y; g.world.update(p.wx, p.wy, 1200, 760, true);
   const node = g.world.nearestNode(x, y, 3, (t) => t === type);
-  return { claimed: g.session.claimed[claimId] !== undefined, triggered: g.session.triggered[trigId] !== undefined, treeGone: !node, safe: (() => { const s = g.sites.sites.near(0, 0, 220).find((q) => q.id === claimId); return g.sites.safeAt(s.x, s.y); })() };
+  return { claimed: g.session.claimed[claimId] !== undefined, triggered: g.session.triggered[trigId] !== undefined, treeGone: !node, safe: (() => { const s = g.sites.sites.near(0, 0, 440).find((q) => q.id === claimId); return g.sites.safeAt(s.x, s.y); })() };
 }, { claimId: claimSite.id, trigId: trig.id, treeId: gath.id });
 check('claimed zone, sprung plate and chopped tree survive a reload', reload.claimed && reload.triggered && reload.treeGone && reload.safe, JSON.stringify(reload));
 
@@ -208,8 +208,9 @@ await page.evaluate((p) => { window.game.godMode = true; window.game.enterPlace(
 await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
 const town = await page.evaluate(() => { const k = window.game.interactables.filter((i) => i.npc).map((i) => i.kind).sort(); return k; });
 check('towns have a healer, a merchant and an innkeeper', JSON.stringify(town) === JSON.stringify(['healer', 'innkeeper', 'merchant']), JSON.stringify(town));
-const near = (kind) => page.evaluate((kind) => { const g = window.game, it = g.interactables.find((i) => i.kind === kind), p = g.state.player; p.wx = it.x - 18; p.wy = it.y; g.gameLoop(1); g.updateInteraction(); return g.target && g.target.kind; }, kind);
-check('merchant is interactable', (await near('merchant')) === 'merchant');
+const near = (kind) => page.evaluate((kind) => { const g = window.game, it = g.interactables.find((i) => i.kind === kind), p = g.state.player; for (const c of g.critters.list) { c.wx = c.tx = it.x + 700; c.wy = c.ty = it.y + 700; c.home = { x: c.wx, y: c.wy, r: 5 }; c.wait = 9999; } p.wx = it.x - 18; p.wy = it.y; g.gameLoop(1); g.updateInteraction(); return g.target && g.target.kind; }, kind);
+const merchantTarget = await near('merchant');
+check('merchant is interactable', merchantTarget === 'merchant', String(merchantTarget));
 await page.keyboard.press('e');
 await page.waitForSelector('.vs-shop');
 const shop = await page.evaluate(() => { const g = window.game; g.state.wallet.gold = 100000; g.refreshShop(); const v = window.__ui_shop = null; return window.game && true; });

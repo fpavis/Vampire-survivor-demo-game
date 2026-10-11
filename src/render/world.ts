@@ -103,8 +103,15 @@ export class World {
         if (this.edits.size && !src.bounded) {
             // trees and rocks do not survive on tiles a tower rebuilt
             const edited = (d) => this.edits.has(`${Math.floor(d.x / T)},${Math.floor(d.y / T)}`);
-            chunk.decor = chunk.decor.filter((d) => !edited(d));
-            chunk.solids = chunk.solids.filter((d) => !edited(d));
+            // a solid that reaches into a rebuilt tile would block the new bridge or stair, so it goes too
+            const reaches = (d) => {
+                const r = (d.r || 0) + 12;
+                for (let ty = Math.floor((d.y - r) / T); ty <= Math.floor((d.y + r) / T); ty++) for (let tx = Math.floor((d.x - r) / T); tx <= Math.floor((d.x + r) / T); tx++) if (this.edits.has(`${tx},${ty}`)) return true;
+                return false;
+            };
+            const dropped = new Set(chunk.solids.filter(reaches));
+            chunk.decor = chunk.decor.filter((d) => !edited(d) && !dropped.has(d));
+            chunk.solids = chunk.solids.filter((d) => !dropped.has(d) && !edited(d));
         }
         if (this.towerDecor.size && !src.bounded) {
             for (const items of this.towerDecor.values()) {

@@ -56,8 +56,7 @@ export class TowerSystem {
         for (const r of this.recs) {
             const c = centreOf(r);
             const items = [];
-            const along = r.kind === 'bridge' || r.kind === 'dock' ? 0 : 0;
-            const base = { x: c.x, y: c.y + T * 0.38 + along };
+            const base = this.baseOf(r.kind, r.tx, r.ty, r.dir);
             if (r.built) {
                 items.push({ type: `tower_${r.kind}`, x: base.x, y: base.y, variant: 0 });
                 if (r.kind === 'climb') items.push(...plateauDecor(r, this.game.overworld.seed));
@@ -76,6 +75,14 @@ export class TowerSystem {
         w.update(g.cam.x, g.cam.y, g.app.screen.width, g.app.screen.height, true);
         g.flow.centerTx = NaN;
         void p;
+    }
+
+    /** where the sprite stands; spans and piers pull it back so the first plank is never under the gatehouse */
+    baseOf(kind, tx, ty, dir) {
+        const x = (tx + 0.5) * T, y = (ty + 0.5) * T + T * 0.38;
+        if (kind !== 'bridge' && kind !== 'dock') return { x, y };
+        const [dx, dy] = DIRS[dir];
+        return { x: x - dx * T * 0.3, y: y - dy * T * 0.3 };
     }
 
     // --------------------------------------------------------------- placement
@@ -165,7 +172,8 @@ export class TowerSystem {
             const tex = g.world.decorTextures[`tower_${b.kind}`][0];
             b.sprite.texture = tex.texture;
             b.sprite.anchor.set(0.5, tex.anchorY);
-            b.sprite.position.set((tx + 0.5) * T, (ty + 0.5 + 0.38) * T * TILT);
+            const base = this.baseOf(b.kind, tx, ty, b.plan ? b.plan.dir : 0);
+            b.sprite.position.set(base.x, base.y * TILT);
             b.sprite.tint = col;
             uiBridge.build.value = { kind: b.kind, name: def.name, icon: def.icon, valid: b.valid, reason: b.reason, cost: { ...def.cost } };
         }

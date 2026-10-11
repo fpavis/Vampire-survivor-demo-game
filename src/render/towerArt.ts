@@ -226,8 +226,8 @@ export const TOWER_DECOR = {
     tower_beacon: { w: 100, h: 168, pad: 14, r: 26, solid: true, variants: [beacon] },
     tower_waypoint: { w: 120, h: 134, pad: 14, r: 28, solid: true, variants: [waypoint] },
     tower_climb: { w: 120, h: 210, pad: 16, r: 30, solid: true, variants: [climb] },
-    tower_bridge: { w: 120, h: 130, pad: 14, r: 34, solid: true, variants: [bridgeTower] },
-    tower_dock: { w: 120, h: 92, pad: 12, r: 28, solid: true, variants: [dock] },
+    tower_bridge: { w: 120, h: 130, pad: 14, r: 30, solid: true, variants: [bridgeTower] },
+    tower_dock: { w: 120, h: 92, pad: 12, r: 26, solid: true, variants: [dock] },
     scaffold: { w: 120, h: 170, pad: 14, r: 30, solid: true, variants: [scaffold(0), scaffold(1), scaffold(2), scaffold(3)] }
 };
 Object.assign(DECOR_DEFS, TOWER_DECOR);
