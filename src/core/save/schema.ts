@@ -1,7 +1,7 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
 
@@ -28,6 +28,16 @@ export interface InventorySave {
   lootFilter: 'off' | 'basic' | 'advanced';
 }
 
+export interface TowerSave {
+  id: string;
+  kind: string;
+  tx: number; ty: number;
+  dir: number; len: number;
+  delivered: { gold: number; wood: number; stone: number; iron: number };
+  built: boolean;
+  spell: string | null;
+}
+
 export interface PlaceState {
   opened: number[];
   cleared: boolean;
@@ -44,7 +54,7 @@ export interface SaveData {
   createdAt: number;
   savedAt: number;
   playSeconds: number;
-  player: { x: number; y: number };
+  player: { x: number; y: number; boat?: string | null };
   party: { active: number; heroes: HeroSave[] };
   inventory: InventorySave;
   stats: { kills: number; score: number; bossesDefeated: number };
@@ -59,6 +69,9 @@ export interface SaveData {
     triggered: Record<string, number>;      // ambush plate id -> play seconds when sprung
     gathered: string[];                     // harvested resource nodes (trees, rocks, ore)
     shopSold: Record<string, number[]>;     // `${townId}:${epoch}` -> stock slots already bought
+    towers: TowerSave[];                    // placed towers, construction sites and docks
+    boats: Record<string, { x: number; y: number }>;  // dock id -> where its boat is moored
+    caches: string[];                       // island treasure already opened
   };
 }
 
@@ -104,8 +117,10 @@ export function validateSave(data: unknown): string[] {
   const world = data.world;
   if (!isObj(world)) errs.push('world missing');
   else {
-    for (const k of ['clearedCamps', 'defeatedLairs', 'places', 'fog', 'claimed', 'triggered', 'shopSold']) if (!isObj(world[k])) errs.push(`world.${k} missing`);
+    for (const k of ['clearedCamps', 'defeatedLairs', 'places', 'fog', 'claimed', 'triggered', 'shopSold', 'boats']) if (!isObj(world[k])) errs.push(`world.${k} missing`);
     if (!Array.isArray(world.gathered)) errs.push('world.gathered missing');
+    if (!Array.isArray(world.towers)) errs.push('world.towers missing');
+    if (!Array.isArray(world.caches)) errs.push('world.caches missing');
     if (!Array.isArray(world.cities)) errs.push('world.cities missing');
   }
   return errs;

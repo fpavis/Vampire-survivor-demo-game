@@ -14,6 +14,9 @@ import { SpellSystem } from './spells';
 import { PartyRuntime } from './party';
 import { SurfaceSystem } from './surfaces';
 import { SitesRuntime } from './sites';
+import { TowerSystem } from './towers';
+import { SeaSystem } from './sea';
+import { BOAT_SPEED } from '../core/world/towers';
 import { NODES, isNode, nodeId, rollYield } from '../core/economy/gather';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
@@ -79,6 +82,10 @@ class Game {
         this.party = new PartyRuntime(this);
         this.surfaces = new SurfaceSystem(this);
         this.sites = new SitesRuntime(this);
+        this.towers = new TowerSystem(this);
+        this.sea = new SeaSystem(this);
+        this.boat = null;           // { dockId } while sailing
+        this.pointerKind = 'mouse';
         this.audio = new AudioManager();
         this.lastMove = { x: 0, y: 0 };
         this.safeFor = 0;
@@ -99,7 +106,7 @@ class Game {
 
         // persistent-world plumbing
         this.events = new EventBus();
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {} };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
         this.popRuntime = new PopulationRuntime(this);
@@ -393,10 +400,14 @@ class Game {
         this.app.stage.eventMode = 'static';
         this.app.stage.hitArea = this.app.screen;
         this.app.stage.on('pointermove', (e) => {
+            this.pointerKind = e.pointerType || 'mouse';
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
         });
         this.app.stage.on('pointerdown', (e) => {
             this.audio.unlock();
+            this.pointerKind = e.pointerType || 'mouse';
+            gameState.pointerPosition = { x: e.global.x, y: e.global.y };
+            if (this.towers.build && !gameState.gameOver && !gameState.paused) { if (this.pointerKind === 'mouse') { this.towers.updateBuild(); this.towers.confirmBuild(); } return; }
             if (gameState.levelUp || gameState.gameOver || gameState.paused) return;
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
             gameState.pointerDown = true;
@@ -419,6 +430,19 @@ class Game {
         this.spells.clearProjectiles();
         this.fx.clear();
         if (this.ambience) this.ambience.clear();
+    }
+
+    // everything drawn on top of the overworld that must go when the world is swapped (towns, caves) or rebuilt
+    clearOverworldDisplays() {
+        this.sites.clearDisplays();
+        this.surfaces.reset();
+        this.towers.cancelBuild();
+        this.towers.clearDisplays();
+        this.sea.reset();
+        this.closeNpcPanels();
+        uiBridge.towerPanel.value = null;
+        uiBridge.waypointOpen.value = null;
+        uiBridge.buildMenuOpen.value = false;
     }
 
     clearEntities() {
@@ -453,7 +477,7 @@ class Game {
         this.overworld = new OverworldSource(save ? save.seed : (window.__forceSeed ?? randomSeed()));
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {} };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.visited = {};
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
@@ -471,6 +495,12 @@ class Game {
         this.map.reset();
         this.map.setMode('overworld');
         this.map.lairDefeated = (id) => this.session.defeatedLairs[id] !== undefined;
+        this.map.extras = () => {
+            const out = [];
+            for (const r of this.towers.recs) out.push({ tx: r.tx, ty: r.ty, icon: r.built ? { spire: '🗼', ward: '🔰', beacon: '🔥', waypoint: '🌀', climb: '⛰️', bridge: '🌉', dock: '⚓' }[r.kind] : '🚧', label: r.built ? '' : 'Site', color: '#ffd070' });
+            for (const c of this.sea.known.values()) if (!this.sea.isOpened(c.id) && this.fog.isRevealed(c.tx, c.ty)) out.push({ tx: c.tx, ty: c.ty, icon: '✖', label: 'Treasure', color: '#ffd84a' });
+            return out;
+        };
         this.map.siteState = (id) => (this.session.claimed[id] !== undefined || this.session.triggered[id] !== undefined ? 'done' : 'open');
         this.map.sitesFor = (cx, cy) => this.sites.sites ? this.sites.sites.near(cx * 12 + 6, cy * 12 + 6, 10) : [];
         this.setAmbient(0);
@@ -504,7 +534,13 @@ class Game {
             this.world.removed = new Set(this.session.gathered);
             this.world.setSource(this.overworld);   // chunks regenerate without the harvested nodes
             this.session.shopSold = JSON.parse(JSON.stringify(save.world.shopSold));
+            this.session.boats = JSON.parse(JSON.stringify(save.world.boats));
+            this.session.caches = [...save.world.caches];
         }
+        this.towers.load(save ? save.world.towers : []);     // tower sites, edits and sprites reach the world before any chunk is built
+        this.sea.reset();
+        this.boat = null;
+        uiBridge.sailing.value = false;
         EntityManager.heroLevel = gameState.level;
 
         this.cam.x = player.wx;
@@ -514,6 +550,7 @@ class Game {
         this.updateFog();
         this.syncMap();
 
+        if (save && save.player.boat && this.session.boats[save.player.boat]) { this.sea.refresh(); this.sea.board(save.player.boat); }
         this.ui.game = this;
         mountUi(this);
         uiBridge.visible.value = true;
@@ -657,6 +694,8 @@ class Game {
         this.updateFog();
         this.surfaces.update(delta);
         this.sites.update(delta);
+        this.towers.update(delta);
+        this.sea.update(delta);
         this.updateShakers(delta);
         this.spells.update(delta);
         this.party.update(delta);
@@ -716,12 +755,12 @@ class Game {
         if (dx !== 0 || dy !== 0) {
             const len = Math.hypot(dx, dy);
             if (!analog || len > 1) { dx /= len; dy /= len; }
-            const inShallows = this.world.biomeAtPos(player.wx, player.wy) === BIOME.SHALLOW;
-            let mul = inShallows ? 0.72 : 1;
+            const inShallows = !this.boat && this.world.biomeAtPos(player.wx, player.wy) === BIOME.SHALLOW;
+            let mul = inShallows ? 0.72 : this.boat ? BOAT_SPEED : 1;
             if (this.frame < player.slowUntil) mul *= 1 - player.slowAmt;
             mul *= this.surfaces.fx.speed;
             const speed = this.state.playerSpeed * this.stats.speed * delta * mul;
-            this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius);
+            this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius, !!this.boat);
             moving = true;
             this.lastMove = { x: dx / (Math.hypot(dx, dy) || 1), y: dy / (Math.hypot(dx, dy) || 1) };
             if (Math.abs(dx) > 0.15) player.facing = dx > 0 ? 1 : -1;
@@ -995,9 +1034,17 @@ class Game {
         const p = this.state.player;
         let target = null;
 
-        if (this.mode === 'overworld') {
+        if (this.mode === 'overworld' && this.boat) {
+            if (this.sea.landNear(p.wx, p.wy)) target = { kind: 'ashore', text: '[E]  Step ashore' };
+        } else if (this.mode === 'overworld') {
             const poi = this.world.nearestPoi(p.wx, p.wy, 72);
+            const tower = this.towers.targetFor(p);
+            const boat = this.sea.boatNear(p.wx, p.wy);
+            const cache = this.sea.cacheTarget(p.wx, p.wy);
             if (poi) target = { kind: 'enter', poi, text: `[E]  Enter ${poi.name}` };
+            else if (tower) target = tower;
+            else if (boat) target = { kind: 'boat', id: boat.id, text: '[E]  Board the boat' };
+            else if (cache) target = { kind: 'cache', cache, text: '[E]  Dig up the buried treasure' };
             else {
                 const node = this.world.nearestNode(p.wx, p.wy, 64, isNode);
                 if (node) {
@@ -1025,6 +1072,7 @@ class Game {
             consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
         }
         this.target = target;
+        if ((uiBridge.towerPanel.value || uiBridge.waypointOpen.value) && (!target || target.kind !== 'tower')) { uiBridge.towerPanel.value = null; uiBridge.waypointOpen.value = null; }
         const open = uiBridge.healerOpen.value ? 'healer' : uiBridge.shopOpen.value ? 'merchant' : uiBridge.innOpen.value ? 'innkeeper' : uiBridge.dialog.value ? 'npc' : null;
         if (open && (!target || target.kind !== open)) this.closeNpcPanels();
         this.ui.setPrompt(target ? target.text : null);
@@ -1043,6 +1091,10 @@ class Game {
             case 'exit': this.exitPlace(); break;
             case 'chest': this.openChest(t.it); break;
             case 'gather': this.gatherHit(t.node); break;
+            case 'site': case 'tower': this.towers.interact(t); break;
+            case 'boat': this.sea.board(t.id); break;
+            case 'ashore': this.sea.disembark(); break;
+            case 'cache': this.sea.open(t.cache); break;
             case 'healer': case 'merchant': case 'innkeeper': this.openNpc(t.kind); break;
             case 'npc': if (uiBridge.dialog.value) uiBridge.dialog.value = null; else this.talkToVillager(t.c); break;
             case 'fountain':
@@ -1077,8 +1129,7 @@ class Game {
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
             this.clearWorldEntities();
             this.popRuntime.clearActive();
-            this.sites.clearDisplays();
-            this.surfaces.reset();
+            this.clearOverworldDisplays();
             this.addXp(banked);
 
             const src = createInterior(poi);
@@ -1392,8 +1443,7 @@ class Game {
         const p = s.player;
         this.clearWorldEntities();
         this.popRuntime.clearActive();
-        this.sites.clearDisplays();
-        this.surfaces.reset();
+        this.clearOverworldDisplays();
         this.world.setSource(this.overworld);
         this.map.setMode('overworld');
         this.mode = 'overworld';
@@ -1613,6 +1663,7 @@ class Game {
         const s = this.state;
         this.ui.fade(1, 0.1, () => {
             s.gameOver = false;
+            this.sea.abandon();
             this.party.wipeRevive();
             s.player.visible = true;
             s.pointerDown = false;

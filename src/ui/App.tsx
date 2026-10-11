@@ -2,6 +2,7 @@ import { useEffect } from 'preact/hooks';
 import { Loadout } from './Loadout';
 import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
+import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './Build';
 import { ui, PICK_KEYS } from './bridge';
 import { CARDS, PATHS } from '../core/hero/stats';
 import { RARITY } from '../core/config';
@@ -104,6 +105,8 @@ export function App() {
       else if (k === 'i') ui.loadoutOpen.value = !ui.loadoutOpen.value;
       else if (ui.cardsOpen.value && ui.pending.value && PICK_KEYS.includes(k)) ui.game?.pickCard(Number(k) - 1);
       else if (PICK_KEYS.includes(k)) ui.game?.party.switchTo(Number(k) - 1);
+      else if (k === 'b') { const g = ui.game; if (g && g.mode === 'overworld' && !g.boat) { if (g.towers.build) g.towers.cancelBuild(); else ui.buildMenuOpen.value = !ui.buildMenuOpen.value; } }
+      else if (k === 'enter' && ui.game?.towers.build) { e.preventDefault(); ui.game.towers.confirmBuild(); }
       else if (k === 'tab') { e.preventDefault(); ui.game?.party.cycle(e.shiftKey ? -1 : 1); }
     };
     window.addEventListener('keydown', onKey);
@@ -120,6 +123,11 @@ export function App() {
       <Shop />
       <Inn />
       <Dialog />
+      <BuildMenu />
+      <BuildHud />
+      <TowerPanel />
+      <WaypointPanel />
+      <SailingHint />
       <PartyBar />
       <ActiveBar />
     </>

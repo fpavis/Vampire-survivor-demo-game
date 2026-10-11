@@ -12,7 +12,7 @@ export function buildSave(game: any): SaveData {
     createdAt: game.createdAt,
     savedAt: Date.now(),
     playSeconds: s.time,
-    player: pos,
+    player: { ...pos, boat: game.boat ? game.boat.dockId : null },
     party: game.party.serialize(),
     inventory: {
       ...game.spells.serialize(),
@@ -30,7 +30,10 @@ export function buildSave(game: any): SaveData {
       claimed: { ...game.session.claimed },
       triggered: { ...game.session.triggered },
       gathered: [...game.session.gathered],
-      shopSold: JSON.parse(JSON.stringify(game.session.shopSold))
+      shopSold: JSON.parse(JSON.stringify(game.session.shopSold)),
+      towers: game.towers.serialize(),
+      boats: JSON.parse(JSON.stringify(game.session.boats)),
+      caches: [...game.session.caches]
     }
   };
 }

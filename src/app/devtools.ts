@@ -5,6 +5,9 @@ import { RUNES, TEMPLATES } from '../core/spells/spells';
 import * as PIXI from 'pixi.js';
 import { EntityManager } from '../render/entities';
 import { ENEMY_TYPES } from '../core/config';
+import * as towersApi from '../core/world/towers';
+import { engage } from '../core/ai/ai';
+import { BIOME } from '../core/world/biomes';
 
 declare const __BUILD_INFO__: string;
 declare const __DEVTOOLS_BUTTON__: boolean;
@@ -22,7 +25,7 @@ const css = `
 
 export function installDevTools(game: any): void {
   // handles for scripted visual checks (scripts/artsheet.mjs)
-  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game };
+  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game, towersApi, engage, BIOME };
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);

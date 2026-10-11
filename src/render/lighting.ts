@@ -18,7 +18,12 @@ export const DECOR_LIGHTS: Record<string, { r: number; color: number | number[];
     glowshroom: { r: 95, color: 0x5affc8, z: 10, i: 0.7 },
     portal: { r: 260, color: 0x7ad8ff, z: 40, i: 1 },
     altar: { r: 170, color: 0xc8a0ff, z: 30, i: 0.8 },
-    fountain: { r: 150, color: 0x9adfff, z: 20, i: 0.6 }
+    fountain: { r: 150, color: 0x9adfff, z: 20, i: 0.6 },
+    tower_spire: { r: 230, color: 0x7ab4ff, z: 160, i: 0.8 },
+    tower_ward: { r: 240, color: 0xffe27a, z: 160, i: 0.8 },
+    tower_beacon: { r: 400, color: 0xffa24a, z: 120, i: 1 },
+    tower_waypoint: { r: 240, color: 0xb06af0, z: 60, i: 0.9 },
+    tower_dock: { r: 200, color: 0xffd38a, z: 76, i: 0.8 }
 };
 
 function glowTexture(): PIXI.Texture {

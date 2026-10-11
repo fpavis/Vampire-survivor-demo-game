@@ -76,6 +76,7 @@ export class SpellSystem {
     heldBy(uid) {
         const party = this.game.party;
         if (!party) return null;
+        if (this.game.towers && this.game.towers.holderOf(uid)) return 'A tower';
         party.commit();
         for (let i = 0; i < party.heroes.length; i++) {
             if (i === party.active) continue;
@@ -192,7 +193,7 @@ export class SpellSystem {
     }
 
     // ------------------------------------------------------- damage + hooks
-    dmg(r) { return r.p.damage * this.game.stats.might; }
+    dmg(r) { return r.p.damage * (this.srcMult ?? this.game.stats.might); }
 
     hit(e, amount, r, opts = {}) {
         const g = this.game;
@@ -291,9 +292,9 @@ export class SpellSystem {
     }
 
     // ------------------------------------------------------------ arcane bolt
-    fireBolt(r) {
+    fireBolt(r, src) {
         const s = r.p;
-        const p = this.game.state.player;
+        const p = src || this.game.state.player;
         const targets = this.nearestEnemies(p.wx, p.wy, 680, s.count);
         if (!targets.length) return false;
         for (let i = 0; i < s.count && this.bullets.length < CAP.bullets; i++) {
@@ -396,8 +397,8 @@ export class SpellSystem {
     }
 
     // -------------------------------------------------------- chain lightning
-    fireLightning(r) {
-        const p = this.game.state.player;
+    fireLightning(r, src) {
+        const p = src || this.game.state.player;
         const candidates = this.nearestEnemies(p.wx, p.wy, 560, 40);
         if (!candidates.length || this.bolts.length >= CAP.bolts) return false;
         for (let i = 0; i < r.p.count; i++) {
@@ -480,9 +481,9 @@ export class SpellSystem {
     }
 
     // -------------------------------------------------------------- frost nova
-    fireNova(r) {
+    fireNova(r, src) {
         const game = this.game;
-        const p = game.state.player;
+        const p = src || game.state.player;
         const s = r.p;
         if (!this.nearestEnemies(p.wx, p.wy, s.radius * 1.35, 1).length || this.rings.length >= CAP.rings) return false;
         const g = new PIXI.Graphics();
@@ -549,9 +550,9 @@ export class SpellSystem {
     }
 
     // ------------------------------------------------------------------ meteor
-    fireMeteor(r) {
+    fireMeteor(r, src) {
         const game = this.game;
-        const p = game.state.player;
+        const p = src || game.state.player;
         const candidates = this.nearestEnemies(p.wx, p.wy, 620, 30);
         if (!candidates.length) return false;
         for (let i = 0; i < r.p.count && this.meteors.length < CAP.meteors; i++) {
@@ -645,6 +646,24 @@ export class SpellSystem {
             d.g.alpha = Math.max(0, d.life / d.max);
             if (d.life <= 0) { d.g.destroy(); this.decals.splice(i, 1); }
         }
+    }
+
+    /** a tower casts a spell from its own position, on its own cooldown, with no hero bonuses */
+    towerFire(rec, item, origin, delta) {
+        const key = 'tw' + rec.id;
+        this.timers[key] = (this.timers[key] ?? 30) - delta;
+        if (this.timers[key] > 0) return;
+        const r = this.resolved(item);
+        this.srcMult = 1;
+        let fired = false;
+        switch (r.tpl.expr) {
+            case 'bolt': fired = this.fireBolt(r, origin); break;
+            case 'chain': fired = this.fireLightning(r, origin); break;
+            case 'nova': fired = this.fireNova(r, origin); break;
+            case 'meteor': fired = this.fireMeteor(r, origin); break;
+        }
+        this.srcMult = null;
+        this.timers[key] = fired ? msToFrames(r.p.cooldown) : 0;
     }
 
     // light emitted by spells for the light map (caves, ruins, dark regions)
@@ -745,7 +764,7 @@ export class SpellSystem {
         const p = g.state.player;
         const step = Math.min(delta, d.left);
         if ((d.n++ % 3) === 0) this.afterimage(d.color);
-        g.world.tryMove(p, d.dx * d.speed * step, d.dy * d.speed * step * 1.2, p.radius);
+        g.world.tryMove(p, d.dx * d.speed * step, d.dy * d.speed * step * 1.2, p.radius, !!g.boat);
         d.left -= delta;
         // wind streaks
         g.fx.burst(p.wx - d.dx * 10, p.wy - d.dy * 10, 14 + Math.random() * 30, 0xe8f4ff, 1, 0.5, { size: 0.6, life: 12, gravity: 0, up: 0, glow: true });
@@ -761,7 +780,7 @@ export class SpellSystem {
         g.fx.shockwave(p.wx, p.wy, 60, r.color, 16, 5);
         let dist = 0;
         for (let t = 16; t <= r.p.range; t += 16) {
-            if (g.world.blocked(p.wx + d.x * t, p.wy + d.y * t, p.radius)) break;
+            if (g.world.blocked(p.wx + d.x * t, p.wy + d.y * t, p.radius, !!g.boat)) break;
             dist = t;
         }
         p.wx += d.x * dist;

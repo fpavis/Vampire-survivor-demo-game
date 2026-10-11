@@ -19,12 +19,12 @@ const LT = CT + 2;                           // local tile grid incl. a one-tile
 
 // Hard-edged man-made floors never get wobbly borders
 const GEO = new Uint8Array(32);
-[BIOME.CITY_FLOOR, BIOME.RUIN_FLOOR, BIOME.CITY_STONE, BIOME.CITY_WALL, BIOME.RUIN_WALL, BIOME.VOID].forEach((b) => { GEO[b] = 1; });
+[BIOME.CITY_FLOOR, BIOME.RUIN_FLOOR, BIOME.CITY_STONE, BIOME.CITY_WALL, BIOME.RUIN_WALL, BIOME.VOID, BIOME.BRIDGE].forEach((b) => { GEO[b] = 1; });
 const WAT = new Uint8Array(32);
 WAT[BIOME.DEEP] = 1; WAT[BIOME.SHALLOW] = 1;
 // draw order for rims: higher layers get a darker edge where they meet lower ones
 const LAYER = new Uint8Array(32);
-[[BIOME.DEEP, 0], [BIOME.SHALLOW, 0], [BIOME.SAND, 1], [BIOME.DRY, 1], [BIOME.CAVE_FLOOR, 1], [BIOME.HILL, 2],
+[[BIOME.DEEP, 0], [BIOME.SHALLOW, 0], [BIOME.PLATEAU, 2], [BIOME.SAND, 1], [BIOME.DRY, 1], [BIOME.CAVE_FLOOR, 1], [BIOME.HILL, 2],
     [BIOME.GRASS, 3], [BIOME.FOREST, 4], [BIOME.MOUNTAIN, 5], [BIOME.PEAK, 5], [BIOME.CAVE_WALL, 5]].forEach(([b, l]) => { LAYER[b] = l; });
 
 const BANK = [0x7a5634, 0x6b4a2b, 0x5a3c22, 0x4a3019, 0x3a2412];
@@ -136,6 +136,26 @@ export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: num
                 case BIOME.CAVE_FLOOR: light += (dt - 0.5) * 0.24 + (gr - 0.5) * 0.14; break;
                 case BIOME.CITY_FLOOR: case BIOME.RUIN_FLOOR: light += (gr - 0.5) * 0.08 + (dt - 0.5) * 0.08; break;
                 case BIOME.MOUNTAIN: case BIOME.PEAK: case BIOME.CAVE_WALL: light *= 0.8; break;
+                case BIOME.PLATEAU: {
+                    // dressed stone slabs with a little moss
+                    const sx = (gx0 + u) % 24, sy = (gy0 + v) % 24;
+                    light += (dt - 0.5) * 0.16 + (gr - 0.5) * 0.08;
+                    if (sx < 1 || sy < 1) light *= 0.82; else if (sx < 2 || sy < 2) light *= 1.08;
+                    if (dt > 0.7) { mixC = 0x6a8a4a; mixK = (dt - 0.7) * 1.3; }
+                    break;
+                }
+                case BIOME.BRIDGE: {
+                    // planks across the direction of travel, dark rails where the bridge meets water
+                    const ew = bio[o + 12] === BIOME.BRIDGE || bio[o - 12] === BIOME.BRIDGE;
+                    const coord = ew ? gx0 + u : gy0 + v;
+                    const plank = Math.floor(coord / 5);
+                    const edge = ew ? coord % 5 : coord % 5;
+                    light += ((plank * 2654435761 >>> 24) / 255 - 0.5) * 0.22 + (gr - 0.5) * 0.06;
+                    if (edge === 0) light *= 0.7;
+                    const rail = ew ? (WAT[bio[o + M * 4]] || WAT[bio[o - M * 4]]) : (WAT[bio[o + 4]] || WAT[bio[o - 4]]);
+                    if (rail) { r = 74; g = 48; bl = 24; light = 0.9 + (gr - 0.5) * 0.15; }
+                    break;
+                }
             }
 
             if (WAT[bm]) {

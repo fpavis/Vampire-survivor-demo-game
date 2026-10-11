@@ -33,6 +33,7 @@ export class UIManager {
         this.createJoystick();
 
         window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.game && this.game.towers && this.game.towers.cancelBuild()) return;
             if (e.key === 'Escape') { if (this.mapOverlay) this.toggleMap(this.game); else this.toggleSettings(); }
         });
         window.addEventListener('resize', () => this.layoutHUD());

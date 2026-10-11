@@ -51,6 +51,18 @@ export const CSS = `
 .vs-lock{background:#3a2222;border:1px solid #a04848;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:8px}
 
 .vs-x{position:absolute;right:10px;top:8px}
+.vs-build{left:50%;top:50%;transform:translate(-50%,-50%);width:min(600px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-good .cost{font-weight:700;color:#ff9a8a}
+.vs-good .cost .ok{color:#9be09b}
+.vs-tpanel{left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-buildhud{position:absolute;top:104px;left:50%;transform:translateX(-50%);width:min(420px,calc(100vw - 32px));text-align:center;padding:8px 12px;border-radius:12px;background:rgba(10,14,26,.9);border:2px solid #5aff8a;text-shadow:0 1px 3px #000}
+.vs-buildhud.bad{border-color:#ff5a4a}
+.vs-buildhud .t{font-weight:700;font-size:15px}
+.vs-buildhud .r{font-size:12.5px;margin:3px 0 6px;color:#cfe}
+.vs-buildhud.bad .r{color:#ffb0a0}
+.vs-buildhud .b{display:flex;gap:8px;justify-content:center;pointer-events:auto}
+.vs-sailing{position:absolute;top:112px;left:50%;transform:translateX(-50%);font-size:13px;font-weight:700;background:rgba(10,30,50,.82);border:2px solid #6ab8d8;border-radius:10px;padding:5px 12px;text-shadow:0 1px 3px #000;white-space:nowrap}
+@media(max-width:700px){.vs-sailing{white-space:normal;width:calc(100vw - 32px);text-align:center}}
 .vs-shop{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
 .vs-goods{display:flex;flex-direction:column;gap:7px}
 .vs-good{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;padding:7px 9px;border:2px solid var(--gc);border-radius:10px;background:#151c33}

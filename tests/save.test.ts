@@ -28,7 +28,8 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
     world: {
       clearedCamps: { '3,4,0': 120 }, defeatedLairs: { '1,1': 300 },
       places: { '5,5': { opened: [0, 2], cleared: true, altarUsed: false } },
-      fog: fog.toJSON(), cities: [{ id: '5,5', name: 'Oakhaven', ex: 10, ey: 20 }], lastCity: '5,5', claimed: { 's1,1': 400 }, triggered: { 's2,2': 80 }, gathered: ['oak:100,56'], shopSold: { '5,5:3': [1, 4] }
+      fog: fog.toJSON(), cities: [{ id: '5,5', name: 'Oakhaven', ex: 10, ey: 20 }], lastCity: '5,5', claimed: { 's1,1': 400 }, triggered: { 's2,2': 80 }, gathered: ['oak:100,56'], shopSold: { '5,5:3': [1, 4] },
+      towers: [{ id: 't60,70', kind: 'spire', tx: 60, ty: 70, dir: 0, len: 0, delivered: { gold: 10, wood: 3, stone: 2, iron: 0 }, built: false, spell: null }], boats: { 't9,9': { x: 5, y: 6 } }, caches: ['c1,1']
     },
     ...over
   };
@@ -86,16 +87,16 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[5] = (raw) => ({ ...raw, version: 6, party: { ...raw.party, extra: 5 } });
-    MIGRATIONS[6] = (raw) => ({ ...raw, version: 7, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[6] = (raw) => ({ ...raw, version: 7, party: { ...raw.party, extra: 5 } });
+    MIGRATIONS[7] = (raw) => ({ ...raw, version: 8, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 7);
-      expect(out.version).toBe(7);
+      const out: any = migrate(sampleSave(), 8);
+      expect(out.version).toBe(8);
       expect(out.party.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[5];
       delete MIGRATIONS[6];
+      delete MIGRATIONS[7];
     }
   });
 
@@ -126,7 +127,7 @@ describe('save validation and migration', () => {
     const v3: any = sampleSave();
     v3.version = 3;
     v3.hero = { level: 12, experience: 5, nextLevel: 200, health: 55, mana: 33, pendingPicks: 2, picks: { might: 3 }, spells: [{ uid: 'a', tpl: 'bolt', level: 4, xp: 0, runes: ['swift', null] }], runes: ['echo'], auto: ['a'], active: [null, null, null], wallet: { gold: 9, wood: 0, stone: 0, iron: 1 }, lootFilter: 'basic' };
-    delete v3.party; delete v3.inventory; delete v3.world.lastCity; delete v3.world.claimed; delete v3.world.triggered; delete v3.world.gathered; delete v3.world.shopSold;
+    delete v3.party; delete v3.inventory; delete v3.world.lastCity; delete v3.world.claimed; delete v3.world.triggered; delete v3.world.gathered; delete v3.world.shopSold; delete v3.world.towers; delete v3.world.boats; delete v3.world.caches;
     const out = migrate(v3);
     expect(out.version).toBe(SAVE_VERSION);
     expect((out as any).hero).toBeUndefined();
@@ -139,6 +140,8 @@ describe('save validation and migration', () => {
     expect(out.world.lastCity).toBe('5,5');
     expect(out.world.claimed).toEqual({});
     expect(out.world.gathered).toEqual([]);
+    expect(out.world.towers).toEqual([]);
+    expect(out.world.boats).toEqual({});
     expect(validateSave(out)).toEqual([]);
   });
 });

@@ -772,11 +772,18 @@ function canSee(game, e, perc) {
     return e.los;
 }
 
+function initSteering(game, e) {
+    e.avoidSign = Math.random() < 0.5 ? 1 : -1;
+    e.losAt = 0; e.los = true; e.nudge = 0; e.nudgeA = 0;
+    e.stuckAt = game.frame + 20; e.sx = e.wx; e.sy = e.wy; e.wantsMove = false;
+}
+
 export function engage(game, e, alertAllies = true) {
     if (e.shell === 'engaged') return;
     e.shell = 'engaged';
     e.lostFor = 0;
     e.ai = initAI(e);
+    if (e.avoidSign === undefined) initSteering(game, e);   // engaged before its first update (sea monsters, scripted spawns)
     if (alertAllies) {
         const buf = [];
         game.hash.near(e.wx, e.wy, e.perc.alert, buf);
@@ -862,12 +869,8 @@ function perceptionShell(game, e, delta) {
 // ---------------------------------------------------------------------------
 export function updateEnemy(game, e, delta) {
     const p = game.state.player;
-    if (!e.ai) {
-        e.ai = initAI(e);
-        e.avoidSign = Math.random() < 0.5 ? 1 : -1;
-        e.losAt = 0; e.los = true; e.nudge = 0; e.nudgeA = 0;
-        e.stuckAt = game.frame + 20; e.sx = e.wx; e.sy = e.wy; e.wantsMove = false;
-    }
+    if (!e.ai) e.ai = initAI(e);
+    if (e.avoidSign === undefined) initSteering(game, e);
     const dx = p.wx - e.wx, dy = p.wy - e.wy;
     e.pd = Math.hypot(dx, dy) || 0.001;
 

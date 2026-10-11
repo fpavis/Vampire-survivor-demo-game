@@ -9,6 +9,8 @@ import { shade } from './decorArt';
 import { bakeDecorTextures } from './decorBake';
 import { bakeGround, GROUND_RES } from './groundBake';
 import { nodeId } from '../core/economy/gather';
+import { addDecorItem } from '../core/world/terrain';
+import { boatBlocked } from '../core/world/towers';
 import { DECOR_LIGHTS } from './lighting';
 import { SURFACES, SURFACE_IDS, surfaceByNum } from '../core/world/surfaces';
 
@@ -65,6 +67,8 @@ export class World {
         this.focusChunk = { x: 0, y: 0 };
         this.onChunk = null; // callback(chunkData) when a chunk is first drawn (used by the map)
         this.removed = new Set(); // harvested resource nodes (ids from core/economy/gather)
+        this.edits = new Map();   // tile edits made by built towers: 'tx,ty' -> biome
+        this.towerDecor = new Map(); // tower id -> decor items it adds (the tower itself, plateau ore ...)
     }
 
     setSource(source) {
@@ -89,7 +93,28 @@ export class World {
                 chunk.biomes[j * CT + i] = src.biomeAt(cx * CT + i, cy * CT + j);
             }
         }
+        if (this.edits.size && !src.bounded) {
+            for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) {
+                const e = this.edits.get(`${cx * CT + i},${cy * CT + j}`);
+                if (e !== undefined) chunk.biomes[j * CT + i] = e;
+            }
+        }
         src.decorForChunk(chunk);
+        if (this.edits.size && !src.bounded) {
+            // trees and rocks do not survive on tiles a tower rebuilt
+            const edited = (d) => this.edits.has(`${Math.floor(d.x / T)},${Math.floor(d.y / T)}`);
+            chunk.decor = chunk.decor.filter((d) => !edited(d));
+            chunk.solids = chunk.solids.filter((d) => !edited(d));
+        }
+        if (this.towerDecor.size && !src.bounded) {
+            for (const items of this.towerDecor.values()) {
+                for (const d of items) {
+                    if (Math.floor(d.x / CHUNK_SIZE) !== cx || Math.floor(d.y / CHUNK_SIZE) !== cy) continue;
+                    if (this.removed.has(nodeId(d.type, d.x, d.y))) continue;
+                    addDecorItem(chunk, d.type, d.x, d.y, d.variant);
+                }
+            }
+        }
         if (src.surfaceNumAt) {
             for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) chunk.surf[j * CT + i] = src.surfaceNumAt(cx * CT + i, cy * CT + j, chunk.biomes[j * CT + i]);
         }
@@ -139,6 +164,23 @@ export class World {
 
     groupAtPos(x, y) { return groupOf(this.biomeAtPos(x, y)); }
 
+    /** replace every tower-made change at once (load, build). Chunks regenerate lazily. */
+    setTowerWorld(edits, towerDecor) {
+        this.edits = edits;
+        this.towerDecor = towerDecor;
+    }
+
+    /** throw away generated chunks (and their views) in a tile box so edits and new decor show up */
+    invalidateTiles(tx0, ty0, tx1, ty1) {
+        const c0x = Math.floor(tx0 / CT), c1x = Math.floor(tx1 / CT), c0y = Math.floor(ty0 / CT), c1y = Math.floor(ty1 / CT);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            const key = chunkKey(cx, cy);
+            const v = this.views.get(key);
+            if (v) { this.destroyView(v); this.views.delete(key); }
+            this.data.delete(key);
+        }
+    }
+
     // surface under a world position: a SurfaceDef or null
     surfaceAtPos(x, y) {
         const tx = Math.floor(x / T), ty = Math.floor(y / T);
@@ -187,12 +229,14 @@ export class World {
         return this.getChunk(cx, cy).hard[(ty - cy * CT) * CT + (tx - cx * CT)] === 1;
     }
 
-    blocked(x, y, r) {
+    // sea = true: the mover is a boat, so open water is free and everything else is closed
+    blocked(x, y, r, sea = false) {
         const minTx = Math.floor((x - r) / T), maxTx = Math.floor((x + r) / T);
         const minTy = Math.floor((y - r) / T), maxTy = Math.floor((y + r) / T);
         for (let ty = minTy; ty <= maxTy; ty++) {
             for (let tx = minTx; tx <= maxTx; tx++) {
-                if (!isSolidBiome(this.biomeAt(tx, ty))) continue;
+                const tb = this.biomeAt(tx, ty);
+                if (sea ? !boatBlocked(tb) : !isSolidBiome(tb)) continue;
                 const nx = Math.max(tx * T, Math.min(x, (tx + 1) * T));
                 const ny = Math.max(ty * T, Math.min(y, (ty + 1) * T));
                 const dx = x - nx, dy = y - ny;
@@ -217,9 +261,9 @@ export class World {
     }
 
     // Move an entity (with wx / wy) sliding along obstacles
-    tryMove(ent, dx, dy, r) {
-        if (dx !== 0 && !this.blocked(ent.wx + dx, ent.wy, r)) ent.wx += dx;
-        if (dy !== 0 && !this.blocked(ent.wx, ent.wy + dy, r)) ent.wy += dy;
+    tryMove(ent, dx, dy, r, sea = false) {
+        if (dx !== 0 && !this.blocked(ent.wx + dx, ent.wy, r, sea)) ent.wx += dx;
+        if (dy !== 0 && !this.blocked(ent.wx, ent.wy + dy, r, sea)) ent.wy += dy;
     }
 
     findFree(x, y, r) {
@@ -348,7 +392,7 @@ export class World {
             const ld = DECOR_LIGHTS[d.type];
             if (ld) {
                 const color = Array.isArray(ld.color) ? ld.color[d.variant % ld.color.length] : ld.color;
-                lights.push({ x: d.x, y: d.y, z: ld.z, r: ld.r, color, i: ld.i ?? 1, flicker: d.type === 'torch' || d.type === 'lamp', phase: hash(d.x | 0, d.y | 0, 7) * 6.28 });
+                lights.push({ x: d.x, y: d.y, z: ld.z, r: ld.r, color, i: ld.i ?? 1, flicker: d.type === 'torch' || d.type === 'lamp' || d.type === 'tower_beacon' || d.type === 'tower_dock', phase: hash(d.x | 0, d.y | 0, 7) * 6.28 });
             }
             objects.push(s);
         });

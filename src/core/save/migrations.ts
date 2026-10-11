@@ -66,6 +66,12 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...raw,
     version: 5,
     world: { ...raw.world, claimed: {}, triggered: {}, gathered: [], shopSold: {} }
+  }),
+  // v5 -> v6: towers, docks and boats, island caches
+  5: (raw) => ({
+    ...raw,
+    version: 6,
+    world: { ...raw.world, towers: [], boats: {}, caches: [] }
   })
 };
 

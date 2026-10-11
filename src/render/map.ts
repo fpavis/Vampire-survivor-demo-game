@@ -22,6 +22,8 @@ function paintChunk(chunk, fog) {
         else if (b === BIOME.MOUNTAIN) c = 0x8b909c;
         else if (b === BIOME.CITY_WALL) c = 0xb5473b;
         else if (b === BIOME.VOID) c = 0x000000;
+        else if (b === BIOME.BRIDGE) c = 0xc89a5a;
+        else if (b === BIOME.PLATEAU) c = 0xb8c0a0;
         img.data[i * 4] = (c >> 16) & 255;
         img.data[i * 4 + 1] = (c >> 8) & 255;
         img.data[i * 4 + 2] = c & 255;
@@ -41,6 +43,7 @@ export class MapView {
         this.siteList = new Map();      // discovered claim zones / ambush plates
         this.siteState = () => 'open';   // (id) => 'open' | 'done'
         this.sitesFor = null;            // (cx, cy) => Site[] near a chunk
+        this.extras = () => [];          // () => [{ tx, ty, icon, label, color }] towers, docks, caches
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
         this.minimap = document.createElement('canvas');
@@ -170,6 +173,23 @@ export class MapView {
                     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
                     const label = st.kind === 'claim' ? (done ? 'Claimed' : 'Zone') : 'Ambush';
                     ctx.strokeText(label, x, y + r + 12); ctx.fillText(label, x, y + r + 12);
+                    ctx.font = `${iconSize}px sans-serif`;
+                }
+            }
+        }
+        if (this.mode === 'overworld') {
+            for (const ex of this.extras()) {
+                const x = ox + ex.tx * ppt, y = oy + ex.ty * ppt;
+                if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.beginPath(); ctx.arc(x, y, iconSize * 0.58, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = ex.color || '#ffd070'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#fff';
+                ctx.fillText(ex.icon, x, y + 1);
+                if (opts.big && ex.label) {
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                    ctx.strokeText(ex.label, x, y + iconSize * 0.6 + 11); ctx.fillStyle = '#ffe9a8'; ctx.fillText(ex.label, x, y + iconSize * 0.6 + 11);
                     ctx.font = `${iconSize}px sans-serif`;
                 }
             }

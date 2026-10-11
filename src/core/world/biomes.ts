@@ -3,7 +3,9 @@
 export const BIOME = {
     DEEP: 0, SHALLOW: 1, SAND: 2, DRY: 3, GRASS: 4, FOREST: 5, HILL: 6, MOUNTAIN: 7, PEAK: 8,
     CAVE_FLOOR: 9, CAVE_WALL: 10, RUIN_FLOOR: 11, RUIN_WALL: 12, CITY_FLOOR: 13, CITY_WALL: 14,
-    CITY_STONE: 15, VOID: 16
+    CITY_STONE: 15, VOID: 16,
+    PLATEAU: 17,      // carved mountain top reached by a climbing tower
+    BRIDGE: 18        // planks over water (bridge towers and docks)
 };
 
 export const BIOME_COLOR = [
@@ -23,7 +25,9 @@ export const BIOME_COLOR = [
     0x9a8f7c, // CITY_FLOOR
     0x6b5a46, // CITY_WALL
     0x5a5a62, // CITY_STONE
-    0x050507  // VOID
+    0x050507, // VOID
+    0x8a9078, // PLATEAU
+    0x9a7a4a  // BRIDGE
 ];
 
 // Walls are raised blocks drawn in pseudo-3D
@@ -47,11 +51,11 @@ export const GROUP = {
 
 export function groupOf(b: number): string {
     switch (b) {
-        case BIOME.DEEP: case BIOME.SHALLOW: case BIOME.SAND: return GROUP.SHORE;
+        case BIOME.DEEP: case BIOME.SHALLOW: case BIOME.SAND: case BIOME.BRIDGE: return GROUP.SHORE;
         case BIOME.DRY: return GROUP.DESERT;
         case BIOME.GRASS: return GROUP.FIELD;
         case BIOME.FOREST: return GROUP.FOREST;
-        case BIOME.HILL: case BIOME.MOUNTAIN: case BIOME.PEAK: return GROUP.MOUNTAIN;
+        case BIOME.HILL: case BIOME.MOUNTAIN: case BIOME.PEAK: case BIOME.PLATEAU: return GROUP.MOUNTAIN;
         case BIOME.CAVE_FLOOR: case BIOME.CAVE_WALL: return GROUP.CAVE;
         case BIOME.RUIN_FLOOR: case BIOME.RUIN_WALL: return GROUP.RUINS;
         default: return GROUP.CITY;

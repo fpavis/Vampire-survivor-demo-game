@@ -1,6 +1,7 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import * as PIXI from 'pixi.js';
 import { DECOR_DEFS } from './decorArt';
+import './towerArt';   // registers the tower sprites in DECOR_DEFS
 
 export function bakeDecorTextures(app) {
     const out = {};
