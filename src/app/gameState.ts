@@ -16,6 +16,8 @@ class GameState {
         this.kills = 0;
         this.bossesDefeated = 0;
         this.picks = {};     // stat card id -> level
+        this.wallet = { gold: 0, wood: 0, stone: 0, iron: 0 };
+        this.lootFilter = 'off';
         this.pending = 0;    // level-ups waiting for a card
 
         this.pointerPosition = null;

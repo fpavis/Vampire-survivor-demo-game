@@ -46,6 +46,7 @@ export interface SpellItem {
   level: number;
   xp: number;
   runes: (string | null)[];
+  locked?: boolean;
 }
 
 export interface RuneDef {
@@ -257,4 +258,36 @@ export function starterLoadout(): { spells: SpellItem[]; auto: string[]; active:
   const bolt = makeSpell('bolt');
   const dash = makeSpell('dash');
   return { spells: [bolt, dash], auto: [bolt.uid], active: [dash.uid, null, null] };
+}
+
+const PARAM_LABELS: Partial<Record<keyof Params, [string, (v: number) => string]>> = {
+  damage: ['Damage', (v) => `${Math.round(v)}`],
+  cooldown: ['Cooldown', (v) => `${(v / 1000).toFixed(2)}s`],
+  count: ['Count', (v) => `${v}`],
+  pierce: ['Pierce', (v) => `${v}`],
+  radius: ['Radius', (v) => `${Math.round(v)}`],
+  jumps: ['Jumps', (v) => `${v}`],
+  slow: ['Slow', (v) => `${Math.round(v * 100)}%`],
+  burn: ['Burn/s', (v) => `${Math.round(v)}`],
+  knock: ['Knock-back', (v) => `×${v.toFixed(2)}`],
+  mana: ['Mana', (v) => `${v}`],
+  duration: ['Duration', (v) => `${v.toFixed(1)}s`],
+  range: ['Range', (v) => `${Math.round(v)}`],
+  leech: ['Heal/kill', (v) => `${v}`]
+};
+
+/** What changes if `runeId` were socketed into `slot` (compare tooltip). Empty when it cannot be socketed. */
+export function previewRune(item: SpellItem, runeId: string, slot: number): string[] {
+  if (!canSocket(item, runeId, slot).ok) return [];
+  const before = resolveSpell(item);
+  const copy: SpellItem = { ...item, runes: item.runes.map((r, i) => (i === slot ? runeId : r)) };
+  const after = resolveSpell(copy);
+  const out: string[] = [];
+  for (const k of Object.keys(PARAM_LABELS) as (keyof Params)[]) {
+    const a = before.p[k], b = after.p[k];
+    if (Math.abs(a - b) > 1e-9) { const [label, f] = PARAM_LABELS[k]!; out.push(`${label}: ${f(a)} → ${f(b)}`); }
+  }
+  const t = RUNES[runeId].trigger;
+  if (t) out.push(t.on === 'hit' ? `On hit: ${Math.round(t.chance * 100)}% spark` : 'On kill: explosion');
+  return out;
 }

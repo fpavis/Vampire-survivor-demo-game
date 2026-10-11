@@ -354,6 +354,16 @@ export class EntityManager {
             g.drawCircle(-5.5, -9.5, 1.8);
             g.endFill();
             body.addChild(glowCircle(14, 0xff4a6a, 0.25));
+        } else if (kind === 'coin') {
+            g.beginFill(0xb8860b); g.drawEllipse(0, 0, 8.5, 8.5); g.endFill();
+            g.beginFill(0xffd23f); g.drawEllipse(0, -1, 7.5, 7.5); g.endFill();
+            g.beginFill(0xfff0a0, 0.85); g.drawEllipse(-1.5, -3, 3.5, 2.5); g.endFill();
+            body.addChild(glowCircle(13, 0xffd23f, 0.3));
+        } else if (kind === 'wood' || kind === 'stone' || kind === 'iron') {
+            const col = { wood: 0x9b6a3a, stone: 0x9aa3b4, iron: 0x6e8aa8 }[kind];
+            if (kind === 'wood') { g.beginFill(col); g.drawRoundedRect(-9, -5, 18, 10, 3); g.endFill(); g.beginFill(0xd8b078); g.drawEllipse(-9, 0, 3, 5); g.endFill(); }
+            else { g.beginFill(col); g.drawPolygon([-9, 5, -6, -6, 3, -9, 10, -1, 8, 6]); g.endFill(); g.beginFill(0xffffff, 0.35); g.drawPolygon([-6, -6, 3, -9, 0, -2]); g.endFill(); }
+            body.addChild(glowCircle(12, col, 0.22));
         } else {
             const tier = EntityManager.gemTier(value);
             scale = tier.scale;

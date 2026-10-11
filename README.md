@@ -21,7 +21,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - Warlords (Boar King, Ancient Treant, Sand Pharaoh, Crab King, Stone Titan) chain dashes, slams, volleys, boulders and summons, and enrage below half health
   - Navigation: tile **raycasting** for line of sight, a small **flow field** that routes around lakes, mountains and walls, **whisker probes** for local obstacle avoidance and stuck detection
 - **Everything Levels Up**:
-  - Spells (equipment that levels from its own kills): Arcane Bolt, Spirit Blades, Chain Lightning, Frost Nova, Meteor (auto-cast, free) and Dash, Blink, Aegis (active: Space / Q / R, cost mana). Socket runes into spells (`I` opens the loadout; incompatible runes are greyed out)
+  - Spells (equipment that levels from its own kills): Arcane Bolt, Spirit Blades, Chain Lightning, Frost Nova, Meteor (auto-cast, free) and Dash, Blink, Aegis (active: Space / Q / R, cost mana). Socket runes into spells (`I` opens the loadout: drag and drop, search, sort, lock, salvage; incompatible runes are greyed out). Enemies drop gold (10%), resources (1%) and rarely a spell or rune (0.1%)
   - 12 hero stat cards in four paths (Arcane, Vigor, Wayfarer, Spirit). Level-ups never pause the game: press `U` to pick when convenient
   - Rarity-tiered upgrade cards that show exactly what changes (e.g. `Damage: 22 → 28`)
   - Enemies scale with your level; elites appear and a regional warlord shows up every few levels

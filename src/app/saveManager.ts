@@ -20,6 +20,8 @@ export function buildSave(game: any): SaveData {
       health: Math.max(1, s.health),
       mana: Math.round(game.spells.mana.value),
       pendingPicks: s.pending,
+      wallet: { ...s.wallet },
+      lootFilter: s.lootFilter,
       picks: { ...s.picks },
       ...(({ spells, runes, auto, active }) => ({ spells, runes, auto, active }))(game.spells.serialize())
     },

@@ -49,5 +49,30 @@ export const CSS = `
 .vs-rune.bad{opacity:.35;cursor:not-allowed}
 .vs-tip{min-height:38px;font-size:12.5px;color:#c9d1e6;margin-top:6px}
 .vs-lock{background:#3a2222;border:1px solid #a04848;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:8px}
+
 .vs-x{position:absolute;right:10px;top:8px}
+.vs-wallet{display:flex;gap:10px;font-size:13px;font-weight:700;background:rgba(8,12,24,.7);border-radius:8px;padding:3px 9px;text-shadow:0 1px 2px #000}
+.vs-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa6c8}
+.vs-in{background:#0e1426;color:#e9eefc;border:1px solid #3a4a78;border-radius:6px;padding:4px 6px;font:inherit;font-size:12px}
+.vs-zone{border:2px dashed transparent;border-radius:10px;padding:3px;min-height:34px;transition:border-color .1s,background .1s}
+.vs-zone.can,.vs-azone.can{border-color:#4fae6a;background:rgba(79,174,106,.08)}
+.vs-zone.cant,.vs-azone.cant{border-color:#a04848;background:rgba(160,72,72,.07)}
+.vs-zone.over.can,.vs-azone.over.can,.vs-sock.over.can{background:rgba(79,174,106,.25)}
+.vs-zone.over.cant,.vs-azone.over.cant,.vs-sock.over.cant{background:rgba(160,72,72,.25)}
+.vs-sock.can{border-color:#4fae6a}.vs-sock.cant{border-color:#a04848;opacity:.6}
+.vs-azone{display:flex;align-items:center;gap:6px;border:2px dashed transparent;border-radius:10px;padding:3px;margin-bottom:4px}
+.vs-azone .vs-item{margin:0;flex:1;min-width:0}
+.vs-key{width:44px;text-align:center;font-size:11px;font-weight:700;color:#cdd7f5;background:#1d2646;border-radius:6px;padding:4px 0}
+.vs-empty{color:#6c7798;font-size:12px;padding:6px 8px}
+.vs-lockb{background:none;border:0;cursor:pointer;font-size:14px;padding:2px;color:inherit}
+.vs-ghost{position:fixed;transform:translate(-50%,-120%);pointer-events:none;background:#243266;border:2px solid #ffd84a;border-radius:10px;padding:6px 10px;font-size:14px;font-weight:700;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,.6)}
+.vs-runes{min-height:56px}
+.vs-fit{margin-left:10px;font-weight:400;letter-spacing:0;color:#9aa6c8}
+.vs-salv{margin-top:10px;text-align:center;color:#9aa6c8;font-size:13px;padding:10px;border-color:#3a4a78}
+.vs-small{font-size:11px}
+.vs-foot{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px;font-size:13px;font-weight:700}
+.vs-foot label{font-weight:400;font-size:12px;color:#9aa6c8;margin-left:auto}
+.vs-item:focus-visible,.vs-rune:focus-visible{outline:2px solid #ffd84a}
+.vs-item,.vs-rune{user-select:none;cursor:grab}
+
 `;

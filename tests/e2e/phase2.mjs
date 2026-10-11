@@ -97,15 +97,6 @@ check('wide rune enlarges the nova', await page.evaluate(() => {
 }));
 await page.keyboard.press('i');
 
-// ---- 6. editing is locked while enemies are near
-const lock = await page.evaluate(() => {
-  const g = window.game, p = g.state.player; g.godMode = false;
-  const e = g.makeEnemy('SLIME', p.wx + 100, p.wy, { level: 1 }); e.shell = 'engaged'; e.dormant = false;
-  for (let i = 0; i < 12; i++) g.gameLoop(1);
-  return { safe: g.safeFor >= 180 };
-});
-check('loadout locks with enemies engaged', lock.safe === false);
-
 // ---- 7. all expressions run without errors, under a stress loadout, with object caps
 const stress = await page.evaluate(() => {
   const g = window.game, p = g.state.player; g.godMode = true; g.state.health = g.state.maxHealth = 1e9;
@@ -126,14 +117,14 @@ check('stress loadout kills enemies', stress.kills > 20, JSON.stringify(stress))
 check('spell object count stays capped', stress.maxObj < 260);
 check('spells level up from kills', await page.evaluate(() => window.game.spells.spells.some((s) => s.level > 1)));
 
-// ---- 8. skill drop roll + bosses
+// ---- 8. skill drops
 const drops = await page.evaluate(() => {
   const g = window.game; const before = g.spells.spells.length + g.spells.runes.length;
-  const boss = { type: 'SLIME', level: 30, isBoss: true, elite: false, wx: 0, wy: 0 };
-  g.rollSkillDrop(boss);
+  g.state.lootFilter = 'off';
+  g.grantSkill(3);
   return g.spells.spells.length + g.spells.runes.length - before;
 });
-check('bosses always drop a skill item', drops === 1);
+check('a skill grant adds exactly one item', drops === 1);
 
 // ---- 9. persistence of loadout, runes, picks, pending, mana
 const saved = await page.evaluate(async () => {

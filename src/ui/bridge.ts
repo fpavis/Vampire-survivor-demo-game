@@ -21,6 +21,8 @@ export const ui = {
   version: signal(0),
   safe: signal(true),
   muted: signal(false),
+  wallet: signal({ gold: 0, wood: 0, stone: 0, iron: 0 }),
+  filter: signal<'off' | 'basic' | 'advanced'>('off'),
   game: null as any
 };
 

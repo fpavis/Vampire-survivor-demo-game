@@ -171,3 +171,14 @@ describe('hero stats', () => {
     expect(blocked.value).toBe(0);
   });
 });
+
+describe('rune preview', () => {
+  it('shows concrete before/after numbers', async () => {
+    const { previewRune } = await import('../src/core/spells/spells');
+    const bolt = makeSpell('bolt');
+    expect(previewRune(bolt, 'multishot', 0)).toEqual(['Damage: 22 → 19', 'Count: 1 → 2']);
+    expect(previewRune(bolt, 'swift', 0)).toEqual(['Cooldown: 0.70s → 0.56s']);
+    expect(previewRune(makeSpell('nova'), 'piercing', 0)).toEqual([]);
+    expect(previewRune(bolt, 'echo', 0)).toContain('On kill: explosion');
+  });
+});

@@ -75,7 +75,7 @@ export class SpellSystem {
     serialize() {
         return {
             mana: Math.round(this.mana.value),
-            spells: this.spells.map((s) => ({ uid: s.uid, tpl: s.tpl, level: s.level, xp: s.xp, runes: [...s.runes] })),
+            spells: this.spells.map((s) => ({ uid: s.uid, tpl: s.tpl, level: s.level, xp: s.xp, runes: [...s.runes], locked: !!s.locked })),
             runes: [...this.runes], auto: [...this.auto], active: [...this.active]
         };
     }

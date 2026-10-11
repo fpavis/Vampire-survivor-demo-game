@@ -13,7 +13,7 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
     version: SAVE_VERSION, generatorVersion: GENERATOR_VERSION, seed: 123456, createdAt: 1, savedAt: 2, playSeconds: 345.5,
     player: { x: 100.5, y: -20 },
     hero: {
-      level: 7, experience: 33, nextLevel: 120, health: 80, mana: 40, pendingPicks: 1, picks: { might: 2 },
+      level: 7, experience: 33, nextLevel: 120, health: 80, mana: 40, pendingPicks: 1, wallet: { gold: 5, wood: 1, stone: 2, iron: 0 }, lootFilter: 'off', picks: { might: 2 },
       spells: [{ uid: 'a', tpl: 'bolt', level: 3, xp: 5, runes: ['swift', null] }, { uid: 'b', tpl: 'dash', level: 1, xp: 0, runes: [null] }],
       runes: ['piercing'], auto: ['a'], active: ['b', null, null]
     },
@@ -79,16 +79,16 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[2] = (raw) => ({ ...raw, version: 3, hero: { ...raw.hero, extra: 5 } });
-    MIGRATIONS[3] = (raw) => ({ ...raw, version: 4, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[3] = (raw) => ({ ...raw, version: 4, hero: { ...raw.hero, extra: 5 } });
+    MIGRATIONS[4] = (raw) => ({ ...raw, version: 5, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 4);
-      expect(out.version).toBe(4);
+      const out: any = migrate(sampleSave(), 5);
+      expect(out.version).toBe(5);
       expect(out.hero.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[2];
       delete MIGRATIONS[3];
+      delete MIGRATIONS[4];
     }
   });
 
@@ -103,6 +103,16 @@ describe('save validation and migration', () => {
     expect(out.hero.auto).toHaveLength(2);
     expect(out.hero.active[0]).toBe(out.hero.spells[2].uid);
     expect(validateSave(out)).toEqual([]);
+    expect(out.hero.wallet).toEqual({ gold: 0, wood: 0, stone: 0, iron: 0 });
+  });
+
+  it('migrates a v2 save: adds an empty wallet', () => {
+    const v2: any = sampleSave();
+    v2.version = 2; delete v2.hero.wallet; delete v2.hero.lootFilter;
+    const out = migrate(v2);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.hero.lootFilter).toBe('off');
+    expect(out.hero.spells).toHaveLength(2);
   });
 });
 

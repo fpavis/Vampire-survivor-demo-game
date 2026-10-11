@@ -11,6 +11,7 @@ import { Effects } from '../render/effects';
 import { SpellSystem } from './spells';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
+import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet } from '../core/loot/loot';
 import { AudioManager } from './audio';
 import { mountUi } from '../ui/mount';
 import { ui as uiBridge } from '../ui/bridge';
@@ -454,6 +455,8 @@ class Game {
             gameState.maxHealth = this.stats.maxHealth;
             this.spells.load(hero);
             gameState.pending = hero.pendingPicks || 0;
+            gameState.wallet = { ...emptyWallet(), ...hero.wallet };
+            gameState.lootFilter = hero.lootFilter || 'off';
             gameState.level = hero.level;
             gameState.experience = hero.experience;
             gameState.nextLevel = hero.nextLevel;
@@ -485,6 +488,8 @@ class Game {
         uiBridge.cards.value = [];
         uiBridge.cardsOpen.value = false;
         uiBridge.pending.value = gameState.pending;
+        uiBridge.wallet.value = { ...gameState.wallet };
+        uiBridge.filter.value = gameState.lootFilter;
         this.cardsKey = '';
         this.safeFor = 999;
         this.ensureCards();
@@ -827,7 +832,7 @@ class Game {
         this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss });
         this.popRuntime.onKill(e);
         this.spells.onKill(e, spell);
-        this.rollSkillDrop(e);
+        this.dropLoot(e);
 
         if (e.isBoss) {
             s.bossesDefeated++;
@@ -850,6 +855,7 @@ class Game {
         if (s.gems.length > 260) {
             const old = s.gems.shift();
             if (old.kind === 'gem') this.gainExp(old.value);
+            else if (old.kind !== 'heart') this.collect(old);
             EntityManager.cleanup(old);
         }
         const gem = EntityManager.createGem(x, y, value, kind);
@@ -956,7 +962,7 @@ class Game {
             const p = s.player;
             // gems on the ground are banked so nothing is lost
             let banked = 0;
-            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; });
+            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
             this.clearWorldEntities();
             this.popRuntime.clearActive();
             s.experience += banked * this.stats.growth;
@@ -1054,25 +1060,66 @@ class Game {
         uiBridge.version.value = this.spells.version;
     }
 
-    // 0.1 % per kill, better for stronger monsters. Bosses always drop something good.
-    rollSkillDrop(e) {
-        const type = ENEMY_TYPES[e.type];
-        const strength = Math.min(3, (e.level || 1) / 25);
-        let chance = 0.001 * (1 + strength * 1.5);
-        if (e.elite) chance *= 8;
-        if (e.isBoss) chance = 1;
-        if (Math.random() >= chance) return;
-        const d = rollSkillDrop(Math.random, e.isBoss ? 3 : strength + (e.elite ? 1 : 0));
+    // Independent per-kill rolls: gold, resource, skill (XP gem is handled in killEnemy).
+    dropLoot(e) {
+        const group = this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.type : this.world.groupAtPos(e.wx, e.wy);
+        const loot = rollKillLoot(Math.random, { level: e.level || 1, elite: e.elite, boss: e.isBoss, group });
+        const jig = () => (Math.random() - 0.5) * 40;
+        if (loot.gold) this.dropGem(e.wx + jig(), e.wy + jig(), loot.gold, 'coin');
+        if (loot.resource) this.dropGem(e.wx + jig(), e.wy + jig(), loot.resource.amount, loot.resource.id);
+        if (loot.skill) this.grantSkill(loot.power, e.isBoss);
+    }
+
+    grantSkill(power, loud = true) {
+        const d = rollSkillDrop(Math.random, power);
         if (d.kind === 'spell') {
             this.spells.addSpell(d.tpl);
             this.ui.banner(`${TEMPLATES[d.tpl].icon} NEW SPELL: ${TEMPLATES[d.tpl].name.toUpperCase()}`, 0xb9a5ff);
+        } else if (filteredOut(d.id, this.state.lootFilter)) {
+            const g = Math.round(runeValue(d.id));
+            this.state.wallet.gold += g;
+            this.ui.toast(`Auto-salvaged ${RUNES[d.id].name} rune (+${g} gold)`);
+            return;
         } else {
             this.spells.addRune(d.id);
             this.ui.banner(`${RUNES[d.id].icon} RUNE: ${RUNES[d.id].name.toUpperCase()}`, 0x9ff2ff);
         }
         this.audio.play('loot');
         uiBridge.version.value = this.spells.version;
-        void type;
+    }
+
+    collect(g) {
+        const w = this.state.wallet;
+        if (g.kind === 'coin') w.gold += g.value;
+        else if (w[g.kind] !== undefined) w[g.kind] += g.value;
+        else return;
+        this.audio.play('pickup');
+        uiBridge.wallet.value = { ...w };
+    }
+
+    toastGold(g) { if (g > 0) this.ui.toast(`Salvaged for ${g} gold`); }
+
+    salvageRune(id) {
+        const i = this.spells.runes.indexOf(id);
+        if (i < 0) return 0;
+        this.spells.runes.splice(i, 1);
+        const g = Math.round(runeValue(id));
+        this.state.wallet.gold += g;
+        this.spells.touch();
+        uiBridge.wallet.value = { ...this.state.wallet };
+        return g;
+    }
+
+    salvageSpell(uid) {
+        const it = this.spells.item(uid);
+        if (!it || it.locked || this.spells.equipped(uid)) return 0;
+        const g = spellValue(it);
+        this.spells.runes.push(...it.runes.filter(Boolean));
+        this.spells.spells = this.spells.spells.filter((x) => x.uid !== uid);
+        this.state.wallet.gold += g;
+        this.spells.touch();
+        uiBridge.wallet.value = { ...this.state.wallet };
+        return g;
     }
 
     // Switch the world back to the overworld and put the hero at (x, y).
@@ -1107,7 +1154,7 @@ class Game {
         this.ui.fade(1, 0.09, () => {
             const s = this.state;
             let banked = 0;
-            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; });
+            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
             s.experience += banked * this.stats.growth;
             const poi = this.interiorPoi;
             this.events.emit('PlaceLeft', { id: poi.id });
@@ -1139,7 +1186,10 @@ class Game {
             }
 
             if (dist < 20) {
-                if (g.kind === 'heart') {
+                if (g.kind === 'coin' || g.kind === 'wood' || g.kind === 'stone' || g.kind === 'iron') {
+                    this.collect(g);
+                    this.fx.popup(p.wx, p.wy, `+${g.value} ${g.kind === 'coin' ? 'gold' : g.kind}`, g.kind === 'coin' ? 0xffd84a : 0xcfd8e8, 16, 60);
+                } else if (g.kind === 'heart') {
                     const heal = s.maxHealth * 0.25;
                     s.health = Math.min(s.maxHealth, s.health + heal);
                     this.fx.popup(p.wx, p.wy, `+${Math.round(heal)}`, 0xff7a94, 20, 60);

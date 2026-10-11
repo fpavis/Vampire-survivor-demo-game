@@ -28,6 +28,12 @@ export const MIGRATIONS: Record<number, Migration> = {
       }
     };
   },
+  // v2 -> v3: wallet (gold + resources) and the loot filter
+  2: (raw) => ({
+    ...raw,
+    version: 3,
+    hero: { ...raw.hero, wallet: { gold: 0, wood: 0, stone: 0, iron: 0 }, lootFilter: 'off' }
+  })
 };
 
 export class SaveError extends Error {
