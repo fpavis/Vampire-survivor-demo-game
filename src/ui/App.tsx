@@ -1,6 +1,7 @@
 import { useEffect } from 'preact/hooks';
 import { Loadout } from './Loadout';
 import { Healer, PartyBar } from './Party';
+import { Dialog, Inn, Shop } from './Town';
 import { ui, PICK_KEYS } from './bridge';
 import { CARDS, PATHS } from '../core/hero/stats';
 import { RARITY } from '../core/config';
@@ -20,6 +21,11 @@ function ActiveBar() {
       <div class="vs-wallet" title="Gold, wood, stone, iron">
         <span>🪙 {ui.wallet.value.gold}</span><span>🪵 {ui.wallet.value.wood}</span><span>🪨 {ui.wallet.value.stone}</span><span>⛓ {ui.wallet.value.iron}</span>
       </div>
+      {ui.surface.value && (
+        <div class={`vs-surface${ui.surface.value.bad ? ' bad' : ''}`} style={{ '--sc': `#${ui.surface.value.color.toString(16).padStart(6, '0')}` }}>
+          <b>{ui.surface.value.name}</b> · {ui.surface.value.desc}
+        </div>
+      )}
       <div class="vs-mana" title="Mana: spent by active skills only. Auto-cast spells are free.">
         <i style={{ width: `${Math.max(0, Math.min(100, (mana / max) * 100))}%` }} />
         <b>{Math.floor(mana)} / {Math.floor(max)}</b>
@@ -72,6 +78,17 @@ function CardsPanel() {
   );
 }
 
+function HoldBar() {
+  const h = ui.hold.value;
+  if (!h) return null;
+  return (
+    <div class="vs-hold">
+      <div class="t">🚩 {h.label} — wave {h.wave} / {h.waves} · {h.seconds}s</div>
+      <div class="b"><i style={{ width: `${Math.round(h.progress * 100)}%` }} /></div>
+    </div>
+  );
+}
+
 function Pill() {
   const n = ui.pending.value;
   if (!n || ui.cardsOpen.value) return null;
@@ -95,10 +112,14 @@ export function App() {
   if (!ui.visible.value) return null;
   return (
     <>
+      <HoldBar />
       <Pill />
       <CardsPanel />
       <Loadout />
       <Healer />
+      <Shop />
+      <Inn />
+      <Dialog />
       <PartyBar />
       <ActiveBar />
     </>

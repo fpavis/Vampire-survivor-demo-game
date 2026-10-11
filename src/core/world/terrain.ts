@@ -3,6 +3,7 @@ import { hash, fbm, smooth, lerp, clamp01 } from './noise';
 import { BIOME, isSolidBiome, isWaterBiome, groupOf, GROUP } from './biomes';
 import { DECOR_DEFS } from '../../render/decorArt';
 import { GROUP_LEVEL_OFFSET, tierOf, zoneLevel } from './difficulty';
+import { SURFACE_NUM, surfaceAt } from './surfaces';
 import type { ChunkLike, DecorItem, Poi, PoiType, TerrainSource } from '../types';
 
 const T = WORLD_CONFIG.tile;
@@ -95,6 +96,13 @@ export class OverworldSource implements TerrainSource {
     }
 
     tierAt(tx: number, ty: number): number { return tierOf(this.levelAt(tx, ty)); }
+
+    /** numeric surface id (0 = none) at a tile whose biome is already known */
+    surfaceNumAt(tx: number, ty: number, biome: number): number {
+        const level = zoneLevel(this.seed, tx, ty, GROUP_LEVEL_OFFSET[groupOf(biome)] ?? 0);
+        const s = surfaceAt(this.seed, tx, ty, biome, level);
+        return s ? SURFACE_NUM[s] : 0;
+    }
 
     // ------------------------------------------------------------ places
     poiForCell(cx: number, cy: number): Poi | null {

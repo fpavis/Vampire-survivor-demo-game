@@ -51,6 +51,26 @@ export const CSS = `
 .vs-lock{background:#3a2222;border:1px solid #a04848;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:8px}
 
 .vs-x{position:absolute;right:10px;top:8px}
+.vs-shop{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-goods{display:flex;flex-direction:column;gap:7px}
+.vs-good{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;padding:7px 9px;border:2px solid var(--gc);border-radius:10px;background:#151c33}
+.vs-good.sold{opacity:.4}
+.vs-good .ic{font-size:26px;text-align:center}
+.vs-good .tx{display:flex;flex-direction:column;gap:1px;min-width:0}
+.vs-good small{font-size:11.5px;color:#9aa6c8;line-height:1.25}
+.vs-inn{left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 24px))}
+.vs-hrow-mini{display:flex;flex-direction:column;gap:4px;margin:8px 0 12px;font-size:13px}
+.vs-hrow-mini .dead{color:#ff9a9a}
+.vs-btn.big{width:100%;padding:10px;font-size:15px}
+.vs-dialog{left:50%;bottom:150px;transform:translateX(-50%);width:min(520px,calc(100vw - 24px))}
+.vs-dialog .who{display:flex;align-items:center;gap:8px;font-size:15px;margin-bottom:6px}
+.vs-dialog .who .ic{font-size:26px}
+.vs-dialog .say{font-size:15px;line-height:1.45;margin-bottom:8px}
+.vs-hold{position:absolute;top:112px;left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 32px));text-align:center;font-size:13px;font-weight:700;text-shadow:0 1px 3px #000}
+.vs-hold .b{height:10px;border-radius:6px;background:rgba(8,12,24,.8);border:2px solid #d9a440;margin-top:4px;overflow:hidden}
+.vs-hold .b>i{display:block;height:100%;background:linear-gradient(#ffe27a,#e8a317)}
+.vs-surface{max-width:260px;font-size:12px;padding:3px 9px;border-radius:8px;background:rgba(8,12,24,.78);border-left:4px solid var(--sc);text-align:right;text-shadow:0 1px 2px #000}
+.vs-surface.bad{background:rgba(60,14,10,.82)}
 .vs-party{position:absolute;left:12px;top:214px;display:flex;flex-direction:column;gap:6px;width:178px}
 @media(max-width:700px){.vs-party{top:auto;bottom:150px;width:150px}}
 .vs-hero{position:relative;display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 7px;border-radius:10px;background:rgba(10,14,26,.8);border:2px solid #34426c;color:inherit;font:inherit;cursor:pointer;text-align:left;overflow:hidden}

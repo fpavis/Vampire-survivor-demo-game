@@ -60,7 +60,13 @@ export const MIGRATIONS: Record<number, Migration> = {
     };
     delete out.hero;
     return out;
-  }
+  },
+  // v4 -> v5: surfaces, claim zones, ambush plates, gathered nodes and shop purchases are world deltas
+  4: (raw) => ({
+    ...raw,
+    version: 5,
+    world: { ...raw.world, claimed: {}, triggered: {}, gathered: [], shopSold: {} }
+  })
 };
 
 export class SaveError extends Error {

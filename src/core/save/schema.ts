@@ -1,7 +1,7 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
 
@@ -55,6 +55,10 @@ export interface SaveData {
     fog: Record<string, string>;            // chunk key -> base64 bitmask
     cities: CityRef[];                      // visited cities (respawn points)
     lastCity: string | null;                // id of the last town the party entered (death respawn)
+    claimed: Record<string, number>;        // claim zone id -> play seconds when claimed
+    triggered: Record<string, number>;      // ambush plate id -> play seconds when sprung
+    gathered: string[];                     // harvested resource nodes (trees, rocks, ore)
+    shopSold: Record<string, number[]>;     // `${townId}:${epoch}` -> stock slots already bought
   };
 }
 
@@ -100,7 +104,8 @@ export function validateSave(data: unknown): string[] {
   const world = data.world;
   if (!isObj(world)) errs.push('world missing');
   else {
-    for (const k of ['clearedCamps', 'defeatedLairs', 'places', 'fog']) if (!isObj(world[k])) errs.push(`world.${k} missing`);
+    for (const k of ['clearedCamps', 'defeatedLairs', 'places', 'fog', 'claimed', 'triggered', 'shopSold']) if (!isObj(world[k])) errs.push(`world.${k} missing`);
+    if (!Array.isArray(world.gathered)) errs.push('world.gathered missing');
     if (!Array.isArray(world.cities)) errs.push('world.cities missing');
   }
   return errs;

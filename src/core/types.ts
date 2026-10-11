@@ -29,6 +29,7 @@ export interface ChunkLike {
     x0: number; y0: number;
     size: number;
     biomes: Uint8Array;
+    surf?: Uint8Array;
     hard: Uint8Array;
     decor: DecorItem[];
     solids: DecorItem[];
@@ -52,6 +53,7 @@ export interface TerrainSource {
     h?: number;
     biomeAt(tx: number, ty: number): number;
     decorForChunk(chunk: ChunkLike): void;
+    surfaceNumAt?(tx: number, ty: number, biome: number): number;
 }
 
 // Minimal world surface the navigation code needs (lets tests use a fake grid).

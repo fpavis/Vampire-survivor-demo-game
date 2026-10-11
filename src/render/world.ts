@@ -8,7 +8,9 @@ import {
 import { shade } from './decorArt';
 import { bakeDecorTextures } from './decorBake';
 import { bakeGround, GROUND_RES } from './groundBake';
+import { nodeId } from '../core/economy/gather';
 import { DECOR_LIGHTS } from './lighting';
+import { SURFACES, SURFACE_IDS, surfaceByNum } from '../core/world/surfaces';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -28,6 +30,7 @@ class ChunkData {
         this.y0 = cy * CHUNK_SIZE;
         this.size = CHUNK_SIZE;
         this.biomes = new Uint8Array(CT * CT);
+        this.surf = new Uint8Array(CT * CT);     // surface ids (lava, swamp ...), 0 = none
         this.hard = new Uint8Array(CT * CT);   // tiles that block navigation (walls, water, big landmarks)
         this.decor = [];
         this.solids = [];
@@ -61,6 +64,7 @@ export class World {
         this.source = null;
         this.focusChunk = { x: 0, y: 0 };
         this.onChunk = null; // callback(chunkData) when a chunk is first drawn (used by the map)
+        this.removed = new Set(); // harvested resource nodes (ids from core/economy/gather)
     }
 
     setSource(source) {
@@ -86,6 +90,14 @@ export class World {
             }
         }
         src.decorForChunk(chunk);
+        if (src.surfaceNumAt) {
+            for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) chunk.surf[j * CT + i] = src.surfaceNumAt(cx * CT + i, cy * CT + j, chunk.biomes[j * CT + i]);
+        }
+        if (this.removed.size && !src.bounded) {
+            const gone = (d) => this.removed.has(nodeId(d.type, d.x, d.y));
+            chunk.decor = chunk.decor.filter((d) => !gone(d));
+            chunk.solids = chunk.solids.filter((d) => !gone(d));
+        }
 
         for (let i = 0; i < chunk.biomes.length; i++) if (isSolidBiome(chunk.biomes[i])) chunk.hard[i] = 1;
         // large landmarks (houses, gates, cave mouths) block navigation tiles too
@@ -126,6 +138,46 @@ export class World {
     biomeAtPos(x, y) { return this.biomeAt(Math.floor(x / T), Math.floor(y / T)); }
 
     groupAtPos(x, y) { return groupOf(this.biomeAtPos(x, y)); }
+
+    // surface under a world position: a SurfaceDef or null
+    surfaceAtPos(x, y) {
+        const tx = Math.floor(x / T), ty = Math.floor(y / T);
+        const cx = Math.floor(tx / CT), cy = Math.floor(ty / CT);
+        return surfaceByNum(this.getChunk(cx, cy).surf[(ty - cy * CT) * CT + (tx - cx * CT)]);
+    }
+
+    // harvest a decor node: it disappears from the world for good
+    removeDecor(item) {
+        const id = nodeId(item.type, item.x, item.y);
+        this.removed.add(id);
+        const cx = Math.floor(item.x / CHUNK_SIZE), cy = Math.floor(item.y / CHUNK_SIZE);
+        const chunk = this.data.get(chunkKey(cx, cy));
+        if (chunk) {
+            chunk.decor = chunk.decor.filter((d) => d !== item);
+            chunk.solids = chunk.solids.filter((d) => d !== item);
+        }
+        const view = this.views.get(chunkKey(cx, cy));
+        if (view && item._sprite) {
+            item._sprite.destroy();
+            view.objects = view.objects.filter((o) => o !== item._sprite);
+        }
+        return id;
+    }
+
+    // nearest harvestable decor item within range
+    nearestNode(x, y, range, isNode) {
+        let best = null, bd = range * range;
+        const c0x = Math.floor((x - range) / CHUNK_SIZE), c1x = Math.floor((x + range) / CHUNK_SIZE);
+        const c0y = Math.floor((y - range) / CHUNK_SIZE), c1y = Math.floor((y + range) / CHUNK_SIZE);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            for (const d of this.getChunk(cx, cy).decor) {
+                if (!isNode(d.type)) continue;
+                const dd = (d.x - x) ** 2 + (d.y - y) ** 2;
+                if (dd < bd) { bd = dd; best = d; }
+            }
+        }
+        return best;
+    }
 
     isWaterAt(x, y) { return isWaterBiome(this.biomeAtPos(x, y)); }
 
@@ -239,6 +291,7 @@ export class World {
         view.ground.destroy();
         view.sheen.destroy();
         view.sheen2.destroy();
+        if (view.surfGlow) view.surfGlow.destroy();
         view.objects.forEach((o) => o.destroy());
     }
 
@@ -289,6 +342,7 @@ export class World {
             s.anchor.set(0.5, set.anchorY);
             s.position.set(d.x, d.y * TILT);
             s.zIndex = d.y;
+            d._sprite = s;
             if (d.flip) s.scale.x = -1;
             if (d.type === 'portal' || d.type === 'torch') animated.push({ s, kind: d.type, phase: d.x * 0.01 });
             const ld = DECOR_LIGHTS[d.type];
@@ -299,7 +353,21 @@ export class World {
             objects.push(s);
         });
 
-        const tex = bakeGround(cx, cy, (tx, ty) => this.biomeAt(tx, ty), (b, tx, ty) => this.groundColor(b, tx, ty), seed, !!src.bounded);
+        const tex = bakeGround(cx, cy, (tx, ty) => this.biomeAt(tx, ty), (b, tx, ty) => this.groundColor(b, tx, ty), seed, !!src.bounded,
+            src.surfaceNumAt ? (tx, ty, b) => src.surfaceNumAt(tx, ty, b) : null);
+        // glowing overlay + lights for luminous surfaces (lava, swamp gas, springs, wells, glyphs)
+        const surfGlow = new PIXI.Graphics();
+        surfGlow.blendMode = PIXI.BLEND_MODES.ADD;
+        for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) {
+            const sd = surfaceByNum(chunk.surf[j * CT + i]);
+            if (!sd || !sd.glow) continue;
+            const tx = cx * CT + i, ty = cy * CT + j;
+            const h = hash(tx, ty, seed + 8800);
+            const px = tx * T + T / 2, py = ty * T + T / 2;
+            if (h < 0.7) { surfGlow.beginFill(sd.glow, sd.id === 'lava' ? 0.3 : 0.2); surfGlow.drawEllipse(px + (h - 0.35) * 30, py + (hash(tx, ty, seed + 8801) - 0.5) * 30, 9 + h * 8, (6 + h * 5)); surfGlow.endFill(); }
+            if (h > 0.82) lights.push({ x: px, y: py, z: 4, r: sd.id === 'lava' ? 150 : 100, color: sd.glow, i: sd.id === 'lava' ? 0.9 : 0.6, flicker: sd.id === 'lava', phase: h * 6 });
+        }
+        this.groundLayer.addChild(surfGlow);
         const base = new PIXI.Sprite(tex);
         base.position.set(cx * CHUNK_SIZE, cy * CHUNK_SIZE);
         base.scale.set(GROUND_RES);
@@ -311,7 +379,7 @@ export class World {
         rows.forEach((r) => objects.push(r));
         objects.forEach((o) => this.objectLayer.addChild(o));
 
-        return { cx, cy, base, ground, sheen, sheen2, objects, animated, lights, phase: hash(cx, cy, seed) * 6.28 };
+        return { cx, cy, base, surfGlow, ground, sheen, sheen2, objects, animated, lights, phase: hash(cx, cy, seed) * 6.28 };
     }
 
     // base colour of a tile before lighting: biome colour, interior theme, darker land in high-tier regions
@@ -731,6 +799,7 @@ export class World {
         this.views.forEach((v) => {
             v.sheen.alpha = 0.55 + 0.45 * Math.sin(this.time * 0.035 + v.phase);
             v.sheen2.alpha = 0.5 - 0.45 * Math.sin(this.time * 0.035 + v.phase + 0.6);
+            if (v.surfGlow) v.surfGlow.alpha = 0.55 + 0.45 * Math.sin(this.time * 0.05 + v.phase * 1.7);
             v.sheen2.y = Math.sin(this.time * 0.02 + v.phase) * 2;
             for (const a of v.animated) {
                 if (a.kind === 'portal') a.s.alpha = 0.78 + 0.22 * Math.sin(this.time * 0.08 + a.phase);

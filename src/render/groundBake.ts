@@ -5,6 +5,7 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { valueNoise } from '../core/world/noise';
 import { BIOME, BIOME_COLOR } from '../core/world/biomes';
+import { SURFACES, SURFACE_IDS } from '../core/world/surfaces';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -34,14 +35,24 @@ export interface GroundColorFn { (biome: number, tx: number, ty: number): number
  * Bakes the ground of chunk (cx, cy) into an RGBA texture of N x N texels (one texel = GROUND_RES world px).
  * Everything is computed in world space so neighbouring chunks meet seamlessly.
  */
-export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: number) => number, colorOf: GroundColorFn, seed: number, bounded: boolean): PIXI.Texture {
+// surface palette: [base, light, dark] per numeric id
+const SURF_RGB = SURFACE_IDS.map((id) => {
+    const c = SURFACES[id].color;
+    const p = (v: number) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const glow = SURFACES[id].glow ?? c;
+    return { base: p(c), hot: p(glow), dark: p(((c >> 16 & 255) * 0.55 << 16) | ((c >> 8 & 255) * 0.55 << 8) | (c & 255) * 0.55) };
+});
+
+export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: number) => number, colorOf: GroundColorFn, seed: number, bounded: boolean, surfOf: ((tx: number, ty: number, biome: number) => number) | null = null): PIXI.Texture {
     const tx0 = cx * CT - 1, ty0 = cy * CT - 1;
     const tb = new Uint8Array(LT * LT);
     const tc = new Int32Array(LT * LT);
+    const ts = new Uint8Array(LT * LT);
     for (let j = 0; j < LT; j++) for (let i = 0; i < LT; i++) {
         const b = biomeAt(tx0 + i, ty0 + j);
         tb[j * LT + i] = b;
         tc[j * LT + i] = colorOf(b, tx0 + i, ty0 + j);
+        if (surfOf) ts[j * LT + i] = surfOf(tx0 + i, ty0 + j, b);
     }
 
     // coarse noise channels in world space: jitter x/y, macro light, detail
@@ -61,6 +72,7 @@ export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: num
     const amp = bounded ? 9 : 12;
     const idx = new Uint16Array(M * M);
     const bio = new Uint8Array(M * M);
+    const sfc = new Uint8Array(M * M);
     const invT = 1 / T, invS = 1 / STEP;
     for (let vv = 0; vv < M; vv++) {
         const py = (vv - PAD + 0.5) * GROUND_RES;
@@ -84,6 +96,7 @@ export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: num
             }
             idx[ob + uu] = k;
             bio[ob + uu] = tb[k];
+            sfc[ob + uu] = ts[k];
         }
     }
 
@@ -160,6 +173,26 @@ export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: num
             if (mixC >= 0) {
                 const k = mixK > 1 ? 1 : mixK;
                 r += (((mixC >> 16) & 255) - r) * k; g += (((mixC >> 8) & 255) - g) * k; bl += ((mixC & 255) - bl) * k;
+            }
+            const sf = sfc[o];
+            if (sf) {
+                // surface patch: its own colour, animated-looking detail from noise, a dark crust where it meets plain ground
+                const pal = SURF_RGB[sf - 1];
+                const edge = !sfc[o + 2] || !sfc[o - 2] || !sfc[o + M2] || !sfc[o - M2];
+                const edge2 = !sfc[o + 5] || !sfc[o - 5] || !sfc[o + M * 5] || !sfc[o - M * 5];
+                const hot = Math.max(0, Math.min(1, (dt - 0.38) * 3.2 + (gr - 0.5) * 0.3));
+                let sr = pal.base[0], sg = pal.base[1], sb = pal.base[2];
+                if (sf === 1) {          // lava: dark crust with glowing cracks
+                    const k = edge ? 0 : hot;
+                    sr = pal.dark[0] + (pal.hot[0] - pal.dark[0]) * k; sg = pal.dark[1] + (pal.hot[1] - pal.dark[1]) * k; sb = pal.dark[2] + (pal.hot[2] - pal.dark[2]) * k;
+                } else {
+                    const k = hot * 0.5;
+                    sr += (pal.hot[0] - sr) * k; sg += (pal.hot[1] - sg) * k; sb += (pal.hot[2] - sb) * k;
+                    if (edge2) { sr *= 0.78; sg *= 0.78; sb *= 0.78; }
+                    if (edge) { sr *= 0.8; sg *= 0.8; sb *= 0.8; }
+                }
+                r = sr; g = sg; bl = sb;
+                light = 0.96 + (dt - 0.5) * 0.12;
             }
             const R = r * light, Gc = g * light, B = bl * light;
             data[p] = R > 255 ? 255 : R < 0 ? 0 : R;

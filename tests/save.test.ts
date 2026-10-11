@@ -28,7 +28,7 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
     world: {
       clearedCamps: { '3,4,0': 120 }, defeatedLairs: { '1,1': 300 },
       places: { '5,5': { opened: [0, 2], cleared: true, altarUsed: false } },
-      fog: fog.toJSON(), cities: [{ id: '5,5', name: 'Oakhaven', ex: 10, ey: 20 }], lastCity: '5,5'
+      fog: fog.toJSON(), cities: [{ id: '5,5', name: 'Oakhaven', ex: 10, ey: 20 }], lastCity: '5,5', claimed: { 's1,1': 400 }, triggered: { 's2,2': 80 }, gathered: ['oak:100,56'], shopSold: { '5,5:3': [1, 4] }
     },
     ...over
   };
@@ -86,16 +86,16 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[4] = (raw) => ({ ...raw, version: 5, party: { ...raw.party, extra: 5 } });
-    MIGRATIONS[5] = (raw) => ({ ...raw, version: 6, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[5] = (raw) => ({ ...raw, version: 6, party: { ...raw.party, extra: 5 } });
+    MIGRATIONS[6] = (raw) => ({ ...raw, version: 7, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 6);
-      expect(out.version).toBe(6);
+      const out: any = migrate(sampleSave(), 7);
+      expect(out.version).toBe(7);
       expect(out.party.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[4];
       delete MIGRATIONS[5];
+      delete MIGRATIONS[6];
     }
   });
 
@@ -126,7 +126,7 @@ describe('save validation and migration', () => {
     const v3: any = sampleSave();
     v3.version = 3;
     v3.hero = { level: 12, experience: 5, nextLevel: 200, health: 55, mana: 33, pendingPicks: 2, picks: { might: 3 }, spells: [{ uid: 'a', tpl: 'bolt', level: 4, xp: 0, runes: ['swift', null] }], runes: ['echo'], auto: ['a'], active: [null, null, null], wallet: { gold: 9, wood: 0, stone: 0, iron: 1 }, lootFilter: 'basic' };
-    delete v3.party; delete v3.inventory; delete v3.world.lastCity;
+    delete v3.party; delete v3.inventory; delete v3.world.lastCity; delete v3.world.claimed; delete v3.world.triggered; delete v3.world.gathered; delete v3.world.shopSold;
     const out = migrate(v3);
     expect(out.version).toBe(SAVE_VERSION);
     expect((out as any).hero).toBeUndefined();
@@ -137,6 +137,8 @@ describe('save validation and migration', () => {
     expect(out.inventory.wallet.gold).toBe(9);
     expect(out.inventory.runes).toEqual(['echo']);
     expect(out.world.lastCity).toBe('5,5');
+    expect(out.world.claimed).toEqual({});
+    expect(out.world.gathered).toEqual([]);
     expect(validateSave(out)).toEqual([]);
   });
 });

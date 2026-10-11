@@ -68,8 +68,13 @@ function refreshLOS(game, e, tx, ty, d) {
 // Is the point ahead of the enemy free? Two short probes (a "whisker")
 function probe(game, e, dx, dy, look) {
     const r = e.radius * 0.8;
-    return !game.world.blocked(e.wx + dx * look * 0.5, e.wy + dy * look * 0.5, r) &&
-        !game.world.blocked(e.wx + dx * look, e.wy + dy * look, r);
+    if (game.world.blocked(e.wx + dx * look * 0.5, e.wy + dy * look * 0.5, r) || game.world.blocked(e.wx + dx * look, e.wy + dy * look, r)) return false;
+    // ground monsters steer around lava, swamp and quicksand unless they are immune to it
+    if (game.surfaces && !e.flying && (game.surfaces.hazardousFor(e, e.wx + dx * look, e.wy + dy * look) || game.surfaces.hazardousFor(e, e.wx + dx * look * 0.5, e.wy + dy * look * 0.5))) {
+        // but never refuse to move while already standing in it: that would trap them
+        return game.surfaces.hazardousFor(e, e.wx, e.wy);
+    }
+    return true;
 }
 
 function avoid(game, e, out) {
@@ -115,6 +120,7 @@ function pathDir(game, e, tx, ty, out) {
 function moveMul(game, e) {
     let m = 1;
     if (game.frame < e.slowUntil) m *= 1 - e.slowAmount;
+    if (e.surfSpeed !== undefined) m *= e.surfSpeed;
     if (!e.flying && game.world.biomeAtPos(e.wx, e.wy) === BIOME.SHALLOW) m *= 0.8;
     return m;
 }

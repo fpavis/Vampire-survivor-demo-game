@@ -158,14 +158,15 @@ export class SpellSystem {
     // -------------------------------------------------------------- update
     update(delta) {
         const g = this.game;
-        regenMana(this.mana, g.stats, delta);
+        const sfx = g.surfaces ? g.surfaces.fx : null;
+        regenMana(this.mana, g.stats, delta * (sfx ? sfx.manaRegen : 1));
         const wanted = new Set();
         for (const uid of this.auto) {
             const it = this.item(uid);
             if (!it) continue;
             const r = this.resolved(it);
             if (r.tpl.expr === 'orbit') { wanted.add(uid); this.updateOrbit(r, delta); continue; }
-            this.timers[uid] = (this.timers[uid] ?? 20) - delta;
+            this.timers[uid] = (this.timers[uid] ?? 20) - delta * (sfx ? sfx.haste : 1);
             if (this.timers[uid] > 0) continue;
             let fired = false;
             switch (r.tpl.expr) {

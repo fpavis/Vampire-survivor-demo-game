@@ -178,6 +178,17 @@ export class PartyRuntime {
         this.heroes.forEach((h, i) => { if (i !== this.active && !h.dead) h.experience += benchXp(h, v); });
     }
 
+    /** inn: everyone is revived, healed and has full mana */
+    restAll() {
+        this.commit();
+        for (const h of this.heroes) { const st = computeStats(h.picks); h.dead = false; h.health = st.maxHealth; h.mana = st.maxMana; }
+        const g = this.game;
+        g.state.health = this.hero.health;
+        g.spells.mana.value = this.hero.mana;
+        this.refreshStats();
+        this.publish();
+    }
+
     // ------------------------------------------------------------- healer
     quotes() { this.commit(); return this.heroes.map((h) => healerQuote(h)); }
 

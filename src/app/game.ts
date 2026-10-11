@@ -12,9 +12,14 @@ import { Lighting } from '../render/lighting';
 import { Ambience } from '../render/ambience';
 import { SpellSystem } from './spells';
 import { PartyRuntime } from './party';
+import { SurfaceSystem } from './surfaces';
+import { SitesRuntime } from './sites';
+import { NODES, isNode, nodeId, rollYield } from '../core/economy/gather';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
 import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet } from '../core/loot/loot';
+import { STOCK_EPOCH_SECONDS, epochOf, innCost, rumorFor, stockFor } from '../core/economy/shop';
+import { createNpc } from '../render/npcArt';
 import { AudioManager } from './audio';
 import { mountUi } from '../ui/mount';
 import { ui as uiBridge } from '../ui/bridge';
@@ -72,6 +77,8 @@ class Game {
         this.fx = new Effects(this);
         this.spells = new SpellSystem(this);
         this.party = new PartyRuntime(this);
+        this.surfaces = new SurfaceSystem(this);
+        this.sites = new SitesRuntime(this);
         this.audio = new AudioManager();
         this.lastMove = { x: 0, y: 0 };
         this.safeFor = 0;
@@ -92,7 +99,7 @@ class Game {
 
         // persistent-world plumbing
         this.events = new EventBus();
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [] };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {} };
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
         this.popRuntime = new PopulationRuntime(this);
@@ -443,10 +450,10 @@ class Game {
         if (this.gameTicker) this.app.ticker.remove(this.gameTicker);
 
         // the world: seed + saved deltas
-        this.overworld = new OverworldSource(save ? save.seed : randomSeed());
+        this.overworld = new OverworldSource(save ? save.seed : (window.__forceSeed ?? randomSeed()));
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {} };
         this.visited = {};
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
@@ -457,10 +464,15 @@ class Game {
             this.visited = JSON.parse(JSON.stringify(save.world.places));
             this.fog = FogOfWar.fromJSON(save.world.fog);
         }
+        this.world.removed = new Set(this.session.gathered);
+        this.world.setSource(this.overworld);   // regenerate chunks without harvested nodes
         this.popRuntime.reset(this.overworld);
+        this.sites.reset(this.overworld);
         this.map.reset();
         this.map.setMode('overworld');
         this.map.lairDefeated = (id) => this.session.defeatedLairs[id] !== undefined;
+        this.map.siteState = (id) => (this.session.claimed[id] !== undefined || this.session.triggered[id] !== undefined ? 'done' : 'open');
+        this.map.sitesFor = (cx, cy) => this.sites.sites ? this.sites.sites.near(cx * 12 + 6, cy * 12 + 6, 10) : [];
         this.setAmbient(0);
         this.flow.centerTx = NaN;
 
@@ -486,6 +498,12 @@ class Game {
             gameState.bossesDefeated = save.stats.bossesDefeated;
             gameState.time = save.playSeconds;
             this.session.lastCity = save.world.lastCity || null;
+            this.session.claimed = { ...save.world.claimed };
+            this.session.triggered = { ...save.world.triggered };
+            this.session.gathered = [...save.world.gathered];
+            this.world.removed = new Set(this.session.gathered);
+            this.world.setSource(this.overworld);   // chunks regenerate without the harvested nodes
+            this.session.shopSold = JSON.parse(JSON.stringify(save.world.shopSold));
         }
         EntityManager.heroLevel = gameState.level;
 
@@ -504,7 +522,7 @@ class Game {
         uiBridge.cardsOpen.value = false;
         uiBridge.pending.value = gameState.pending;
         this.party.publish();
-        uiBridge.healerOpen.value = false;
+        this.closeNpcPanels();
         uiBridge.wallet.value = { ...gameState.wallet };
         uiBridge.filter.value = gameState.lootFilter;
         this.cardsKey = '';
@@ -637,6 +655,9 @@ class Game {
         EntityManager.heroLevel = s.level;
         this.movePlayer(delta);
         this.updateFog();
+        this.surfaces.update(delta);
+        this.sites.update(delta);
+        this.updateShakers(delta);
         this.spells.update(delta);
         this.party.update(delta);
         this.updateSafety(delta);
@@ -698,6 +719,7 @@ class Game {
             const inShallows = this.world.biomeAtPos(player.wx, player.wy) === BIOME.SHALLOW;
             let mul = inShallows ? 0.72 : 1;
             if (this.frame < player.slowUntil) mul *= 1 - player.slowAmt;
+            mul *= this.surfaces.fx.speed;
             const speed = this.state.playerSpeed * this.stats.speed * delta * mul;
             this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius);
             moving = true;
@@ -720,6 +742,16 @@ class Game {
         if (this.stats.regen > 0 && s.health < s.maxHealth) {
             s.health = Math.min(s.maxHealth, s.health + (this.stats.regen / 60) * delta);
         }
+    }
+
+    // ground damage over time: quiet, ignores nothing but a ward and a dash
+    damagePlayerDot(amount) {
+        const s = this.state;
+        if (this.godMode || this.spells.barrierActive || this.frame < (this.invulnUntil || 0)) return;
+        s.health -= amount * (1 - this.stats.armor);
+        this.safeFor = 0;
+        this.dotAcc = (this.dotAcc || 0) + amount;
+        if (this.dotAcc > 6) { this.dotAcc = 0; this.ui.flashDamage(); }
     }
 
     // burst hits (dashes, slams, projectiles) grant a short grace period so stacked attacks stay fair
@@ -862,8 +894,10 @@ class Game {
         const crit = !opts.noCrit && Math.random() < this.stats.crit;
         const dmg = amount * (crit ? 2 : 1) * (1 - (e.armor || 0));
         e.health -= dmg;
-        e.hitFlash = 6;
-        this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
+        if (!opts.quiet) {
+            e.hitFlash = 6;
+            this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
+        }
 
         const k = opts.knock;
         if (k) {
@@ -964,6 +998,14 @@ class Game {
         if (this.mode === 'overworld') {
             const poi = this.world.nearestPoi(p.wx, p.wy, 72);
             if (poi) target = { kind: 'enter', poi, text: `[E]  Enter ${poi.name}` };
+            else {
+                const node = this.world.nearestNode(p.wx, p.wy, 64, isNode);
+                if (node) {
+                    const def = NODES[node.type];
+                    const left = def.hits - (node._hits || 0);
+                    target = { kind: 'gather', node, text: `[E]  ${def.verb} (${def.resource})${left < def.hits ? `  ·  ${left} more` : ''}` };
+                }
+            }
         } else {
             let best = Infinity;
             const consider = (t, x, y, r) => {
@@ -972,7 +1014,10 @@ class Game {
             };
             for (const it of this.interactables) {
                 if (it.kind === 'chest' && !it.opened) consider({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64);
-                if (it.kind === 'healer') consider({ kind: 'healer', text: '[E]  Talk to the Healer' }, it.x, it.y, 90);
+                if (it.npc) consider({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper' }[it.kind] }, it.x, it.y, 90);
+            }
+            for (const c of this.critters.list) {
+                if (c.kind === 'villager') consider({ kind: 'npc', c, text: '[E]  Talk' }, c.wx, c.wy, 56);
             }
             const src = this.interior;
             if (src.fountain) consider({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96);
@@ -980,7 +1025,8 @@ class Game {
             consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
         }
         this.target = target;
-        if (uiBridge.healerOpen.value && (!target || target.kind !== 'healer')) uiBridge.healerOpen.value = false;
+        const open = uiBridge.healerOpen.value ? 'healer' : uiBridge.shopOpen.value ? 'merchant' : uiBridge.innOpen.value ? 'innkeeper' : uiBridge.dialog.value ? 'npc' : null;
+        if (open && (!target || target.kind !== open)) this.closeNpcPanels();
         this.ui.setPrompt(target ? target.text : null);
     }
 
@@ -996,7 +1042,9 @@ class Game {
             case 'enter': this.enterPlace(t.poi); break;
             case 'exit': this.exitPlace(); break;
             case 'chest': this.openChest(t.it); break;
-            case 'healer': this.party.commit(); uiBridge.healerOpen.value = !uiBridge.healerOpen.value; this.audio.play('equip'); break;
+            case 'gather': this.gatherHit(t.node); break;
+            case 'healer': case 'merchant': case 'innkeeper': this.openNpc(t.kind); break;
+            case 'npc': if (uiBridge.dialog.value) uiBridge.dialog.value = null; else this.talkToVillager(t.c); break;
             case 'fountain':
                 if (this.fountainReady()) {
                     this.interiorState.fountainAt = this.frame;
@@ -1029,6 +1077,8 @@ class Game {
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
             this.clearWorldEntities();
             this.popRuntime.clearActive();
+            this.sites.clearDisplays();
+            this.surfaces.reset();
             this.addXp(banked);
 
             const src = createInterior(poi);
@@ -1092,37 +1142,155 @@ class Game {
             this.interactables.push({ kind: 'chest', x: c.x, y: c.y, idx: i, big: !!c.big, opened, sprite });
             if (!opened) this.map.markers.push({ tx: c.x / T, ty: c.y / T, icon: '🎁' });
         });
-        if (poi.type === 'city' && src.fountain) this.spawnHealer(src.fountain.x + 120, src.fountain.y + 10);
+        if (poi.type === 'city' && src.fountain) {
+            this.spawnNpc('healer', src.fountain.x + 120, src.fountain.y + 10);
+            this.spawnNpc('merchant', src.fountain.x - 130, src.fountain.y + 20);
+            if (src.altar) this.spawnNpc('innkeeper', src.altar.x + 150, src.altar.y + 70);
+        }
         this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: '🚪' });
         src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
     }
 
-    // The town healer: restores and revives heroes for gold.
-    spawnHealer(x, y) {
+    // Chop a tree / mine a rock: a few strikes, then it is gone for good (saved as a world delta).
+    gatherHit(node) {
+        if (this.frame < (this.gatherCd || 0)) return;
+        this.gatherCd = this.frame + 16;
+        const def = NODES[node.type];
+        node._hits = (node._hits || 0) + 1;
+        const wood = def.resource === 'wood';
+        const col = wood ? 0x9b6a3a : def.resource === 'iron' ? 0x9ab4d0 : 0xb8bcc8;
+        const top = node._sprite ? node._sprite.height * 0.5 : 30;
+        this.fx.burst(node.x, node.y, top * 0.6, col, 8, 2.4, { size: 0.7, life: 24, up: 2 });
+        if (wood) this.fx.burst(node.x, node.y, top, 0x6ab84a, 5, 1.6, { size: 0.8, life: 40, gravity: 0.03, up: 0.6 });
+        this.fx.addShake(1.5);
+        this.audio.play(wood ? 'chop' : 'mine');
+        (this.shakers ||= []).push({ s: node._sprite, t: 14 });
+        if (node._hits < def.hits) return;
+        const gains = rollYield(node.type, Math.random, Math.floor(this.zoneLevelNow / 25));
+        const id = this.world.removeDecor(node);
+        this.session.gathered.push(id);
+        for (const y of gains) {
+            for (let i = 0; i < y.amount; i++) this.dropGem(node.x + (Math.random() - 0.5) * 50, node.y + 10 + Math.random() * 30, 1, y.resource);
+        }
+        this.fx.burst(node.x, node.y, top, col, 18, 3.4, { size: 0.9, life: 34, up: 3 });
+        this.fx.popup(node.x, node.y, gains.map((y) => `+${y.amount} ${y.resource}`).join('  '), 0xffe9a8, 18, top + 20);
+        this.audio.play('pickup');
+        this.requestSave('gather');
+    }
+
+    animateNpcs() {
+        for (const it of this.interactables) if (it.sprite && it.sprite.animate) it.sprite.animate(this.frame);
+    }
+
+    updateShakers(delta) {
+        this.animateNpcs();
+        const sh = this.shakers;
+        if (!sh || !sh.length) return;
+        for (let i = sh.length - 1; i >= 0; i--) {
+            const k = sh[i];
+            k.t -= delta;
+            if (!k.s || k.s.destroyed) { sh.splice(i, 1); continue; }
+            k.s.rotation = k.t > 0 ? Math.sin(k.t * 1.6) * 0.07 * (k.t / 14) : 0;
+            if (k.t <= 0) sh.splice(i, 1);
+        }
+    }
+
+    // Named town NPCs: healer (revive / heal for gold), merchant (spells and runes), innkeeper (rest and save).
+    spawnNpc(role, x, y) {
         const spot = this.world.findFree(x, y, 14);
-        const c = new PIXI.Container();
-        const shadow = new PIXI.Graphics();
-        shadow.beginFill(0x000000, 0.35); shadow.drawEllipse(0, 0, 14, 5); shadow.endFill();
-        const body = new PIXI.Graphics();
-        body.beginFill(0xf2f2ea); body.drawPolygon([-12, 0, 12, 0, 8, -28, -8, -28]); body.endFill();
-        body.beginFill(0x3fbf6a); body.drawRect(-9, -16, 18, 3); body.endFill();
-        body.beginFill(0xffd7b0); body.drawCircle(0, -34, 8); body.endFill();
-        body.beginFill(0xf2f2ea); body.drawPolygon([-9, -32, 9, -32, 6, -46, -6, -46]); body.endFill();
-        body.beginFill(0x3fbf6a); body.drawRect(-2, -43, 4, 10); body.drawRect(-5, -40, 10, 4); body.endFill();
-        const staff = new PIXI.Graphics();
-        staff.lineStyle(3, 0x8a6a3a); staff.moveTo(16, 0); staff.lineTo(16, -46);
-        staff.beginFill(0x9bffb0, 0.9); staff.drawCircle(16, -50, 5); staff.endFill();
-        const glow = new PIXI.Graphics();
-        glow.beginFill(0x7bff9a, 0.25); glow.drawCircle(16, -50, 14); glow.endFill();
-        glow.blendMode = PIXI.BLEND_MODES.ADD;
-        const label = new PIXI.Text('Healer', { fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xbfffd0, stroke: 0x000000, strokeThickness: 3 });
-        label.anchor.set(0.5, 1); label.position.set(0, -62);
-        c.addChild(shadow, glow, staff, body, label);
+        const c = createNpc(role);
         c.position.set(spot.x, spot.y * TILT);
         c.zIndex = spot.y;
         this.objectLayer.addChild(c);
-        this.interactables.push({ kind: 'healer', x: spot.x, y: spot.y, sprite: c });
-        this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon: '✚' });
+        this.interactables.push({ kind: role, x: spot.x, y: spot.y, sprite: c, npc: true });
+        const icon = { healer: '✚', merchant: '💰', innkeeper: '🛏' }[role];
+        this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon });
+        return c;
+    }
+
+    openNpc(kind) {
+        const b = uiBridge;
+        const was = { healer: b.healerOpen.value, merchant: b.shopOpen.value, innkeeper: b.innOpen.value };
+        b.healerOpen.value = b.shopOpen.value = b.innOpen.value = false;
+        b.dialog.value = null;
+        this.party.commit();
+        if (kind === 'healer') b.healerOpen.value = !was.healer;
+        else if (kind === 'merchant') { b.shopOpen.value = !was.merchant; this.refreshShop(); }
+        else if (kind === 'innkeeper') b.innOpen.value = !was.innkeeper;
+        this.audio.play('equip');
+    }
+
+    closeNpcPanels() {
+        const b = uiBridge;
+        b.healerOpen.value = b.shopOpen.value = b.innOpen.value = false;
+        b.dialog.value = null;
+    }
+
+    // ---- merchant
+    shopKey() { return `${this.interiorPoi ? this.interiorPoi.id : 'x'}:${epochOf(this.state.time)}`; }
+
+    refreshShop() {
+        const poi = this.interiorPoi;
+        if (!poi) return;
+        const level = Math.max(1, this.overworld.levelAt(poi.tx, poi.ty));
+        const epoch = epochOf(this.state.time);
+        const sold = this.session.shopSold[this.shopKey()] || [];
+        uiBridge.shop.value = {
+            town: poi.name,
+            nextIn: Math.ceil(STOCK_EPOCH_SECONDS - (this.state.time % STOCK_EPOCH_SECONDS)),
+            items: stockFor(poi.seed, epoch, level).map((it, i) => ({ ...it, sold: sold.includes(i) }))
+        };
+    }
+
+    buyItem(i) {
+        const view = uiBridge.shop.value;
+        const it = view && view.items[i];
+        if (!it || it.sold) return false;
+        const w = this.state.wallet;
+        if (w.gold < it.price) { this.ui.toast('Not enough gold'); this.audio.play('deny'); return false; }
+        w.gold -= it.price;
+        if (it.kind === 'spell') this.spells.addSpell(it.tpl);
+        else this.spells.addRune(it.id);
+        const key = this.shopKey();
+        (this.session.shopSold[key] ||= []).push(i);
+        // keep only the current epoch's records
+        for (const k of Object.keys(this.session.shopSold)) if (!k.endsWith(':' + epochOf(this.state.time))) delete this.session.shopSold[k];
+        uiBridge.wallet.value = { ...w };
+        uiBridge.version.value = this.spells.version;
+        this.audio.play('buy');
+        this.ui.toast(it.kind === 'spell' ? `Bought ${TEMPLATES[it.tpl].name}` : `Bought ${RUNES[it.id].name} rune`);
+        this.refreshShop();
+        this.requestSave('shop');
+        return true;
+    }
+
+    // ---- inn
+    innQuote() {
+        this.party.commit();
+        const hs = this.party.heroes;
+        return innCost(hs.reduce((a, h) => a + h.level, 0) / hs.length);
+    }
+
+    restAtInn() {
+        const cost = this.innQuote();
+        const w = this.state.wallet;
+        if (w.gold < cost) { this.ui.toast('Not enough gold for a room'); this.audio.play('deny'); return false; }
+        w.gold -= cost;
+        uiBridge.wallet.value = { ...w };
+        this.party.restAll();
+        this.audio.play('levelup');
+        this.fx.pillar(this.state.player.wx, this.state.player.wy, 0xffd8a0, 50, 60, 200);
+        this.ui.banner('WELL RESTED', 0xffd8a0);
+        this.requestSave('inn', true);
+        return true;
+    }
+
+    // ---- townsfolk
+    talkToVillager(c) {
+        const poi = this.interiorPoi;
+        const dirs = ['north', 'east', 'south', 'west'];
+        const seed = ((poi ? poi.seed : 1) ^ Math.imul(Math.round(c.home ? c.home.x : c.wx) + 7, 7919) ^ Math.round(c.home ? c.home.y : c.wy)) | 0;
+        uiBridge.dialog.value = { speaker: 'Townsperson', icon: '🧑', text: rumorFor(seed, dirs[Math.abs(seed) % 4]) };
     }
 
     openChest(it) {
@@ -1224,6 +1392,8 @@ class Game {
         const p = s.player;
         this.clearWorldEntities();
         this.popRuntime.clearActive();
+        this.sites.clearDisplays();
+        this.surfaces.reset();
         this.world.setSource(this.overworld);
         this.map.setMode('overworld');
         this.mode = 'overworld';

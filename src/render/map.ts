@@ -38,6 +38,9 @@ export class MapView {
         this.pois = new Map();
         this.lairs = new Map();
         this.lairDefeated = () => false;
+        this.siteList = new Map();      // discovered claim zones / ambush plates
+        this.siteState = () => 'open';   // (id) => 'open' | 'done'
+        this.sitesFor = null;            // (cx, cy) => Site[] near a chunk
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
         this.minimap = document.createElement('canvas');
@@ -51,6 +54,7 @@ export class MapView {
         this.maps.interior.clear();
         this.pois.clear();
         this.lairs.clear();
+        this.siteList.clear();
         this.markers = [];
         this.dirty = true;
     }
@@ -76,6 +80,9 @@ export class MapView {
                     for (const c of population.campsForChunk(cx, cy)) {
                         if (c.lair && fog.isRevealed(c.tx, c.ty)) this.lairs.set(c.id, c);
                     }
+                }
+                if (this.sitesFor) {
+                    for (const st of this.sitesFor(cx, cy)) if (fog.isRevealed(st.tx, st.ty)) this.siteList.set(st.id, st);
                 }
             }
         }
@@ -140,6 +147,29 @@ export class MapView {
                     ctx.strokeText(`Lv ${l.level}`, x, y + 24);
                     ctx.fillStyle = '#ffb0b0';
                     ctx.fillText(`Lv ${l.level}`, x, y + 24);
+                    ctx.font = `${iconSize}px sans-serif`;
+                }
+            }
+        }
+        if (this.mode === 'overworld') {
+            for (const st of this.siteList.values()) {
+                const done = this.siteState(st.id) === 'done';
+                if (st.kind === 'trigger' && done) continue;
+                const x = ox + st.tx * ppt, y = oy + st.ty * ppt;
+                if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
+                const r = iconSize * (opts.big ? 0.55 : 0.42);
+                ctx.fillStyle = st.kind === 'claim' ? (done ? '#f3c75a' : '#2a2a30') : '#5a1410';
+                ctx.strokeStyle = st.kind === 'claim' ? '#f3c75a' : '#ff6a4a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                if (st.kind === 'claim') { ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); }
+                else ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
+                ctx.fill(); ctx.stroke();
+                if (opts.big) {
+                    ctx.font = 'bold 11px sans-serif';
+                    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                    const label = st.kind === 'claim' ? (done ? 'Claimed' : 'Zone') : 'Ambush';
+                    ctx.strokeText(label, x, y + r + 12); ctx.fillText(label, x, y + r + 12);
                     ctx.font = `${iconSize}px sans-serif`;
                 }
             }

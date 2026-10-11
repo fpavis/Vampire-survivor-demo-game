@@ -26,7 +26,11 @@ export function buildSave(game: any): SaveData {
       places: JSON.parse(JSON.stringify(game.visited)),
       fog: game.fog.toJSON(),
       cities: game.session.cities.map((c: any) => ({ ...c })),
-      lastCity: game.session.lastCity ?? null
+      lastCity: game.session.lastCity ?? null,
+      claimed: { ...game.session.claimed },
+      triggered: { ...game.session.triggered },
+      gathered: [...game.session.gathered],
+      shopSold: JSON.parse(JSON.stringify(game.session.shopSold))
     }
   };
 }

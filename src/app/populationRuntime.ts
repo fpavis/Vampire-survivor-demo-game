@@ -58,6 +58,7 @@ export class PopulationRuntime {
             if (this.active.has(camp.id)) continue;
             if (Math.hypot(camp.x - p.wx, camp.y - p.wy) > SPAWN_DIST) continue;
             if (this.isCleared(camp)) continue;
+            if (g.sites && g.sites.safeAt(camp.x, camp.y)) continue;   // claimed zones keep monsters out
             this.spawnCamp(camp);
           }
         }
@@ -134,6 +135,7 @@ export class PopulationRuntime {
     const entry = pickRosterEntry(group, level, Math.random());
     const type = g.enemyTypes[entry.type];
     if (!type.flying && g.world.blocked(pt.x, pt.y, type.radius)) return;
+    if (g.sites && g.sites.safeAt(pt.x, pt.y)) return;
     const e = g.makeEnemy(entry.type, pt.x, pt.y, { level, home: { x: pt.x, y: pt.y }, leash: ROAMER_LEASH, roamer: true });
     this.roamers.push(e);
     void tierOf;
