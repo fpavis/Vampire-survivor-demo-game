@@ -89,6 +89,7 @@ export function PauseMenu() {
       <button class="vs-btn" onClick={() => setAccess(game, { reducedMotion: !ui.reducedMotion.value })}>
         {ui.reducedMotion.value ? '🧘 Reduced motion is on (no shaking or flashing)' : '🎢 Reduced motion is off'}</button>
       <button class="vs-btn" onClick={() => (ui.rebindOpen.value = true)}>⌨ Rebind keys and buttons…</button>
+      <button class="vs-btn" onClick={() => { game.perf.toggle(); bump((n) => n + 1); }}>{game.perf.shown ? '📈 Frame rate is shown (F3)' : '📉 Show the frame rate (F3)'}</button>
       <div class="vs-sec">HELP</div>
       <button class="vs-btn" onClick={() => setHelp(!help)}>{help ? '▾ Hide the controls' : '▸ Show all controls'}</button>
       {help && <Controls />}

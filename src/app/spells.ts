@@ -343,9 +343,21 @@ export class SpellSystem {
     }
 
     nearestEnemies(x, y, range, limit = 1) {
-        const out = [];
         const r2 = range * range;
-        for (const e of this.game.state.enemies) {
+        // short searches use the spatial hash (rebuilt every frame); the nearest one needs no sort
+        const pool = range <= 420 && this.game.hash ? this.game.hash.near(x, y, range, this.nearBuf || (this.nearBuf = [])) : this.game.state.enemies;
+        if (limit === 1) {
+            let best = null, bd = r2;
+            for (let i = 0; i < pool.length; i++) {
+                const e = pool[i];
+                if (e.dead || e.untargetable) continue;
+                const dx = e.wx - x, dy = e.wy - y, d = dx * dx + dy * dy;
+                if (d <= bd) { bd = d; best = e; }
+            }
+            return best ? [best] : [];
+        }
+        const out = [];
+        for (const e of pool) {
             if (e.dead || e.untargetable) continue;
             const dx = e.wx - x, dy = e.wy - y;
             const d = dx * dx + dy * dy;
@@ -1009,6 +1021,7 @@ export class SpellSystem {
         const c = new PIXI.Container();
         const body = new PIXI.Container();
         buildHero(body, p.heroId || 'aria');
+        EntityManager.bake(body, 'hero:' + (p.heroId || 'aria'));
         body.scale.x = p.facing || 1;
         c.addChild(body);
         c.position.set(p.wx, p.wy * TILT);

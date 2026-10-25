@@ -3,7 +3,7 @@
 // lighting, per-biome micro texture, grass rims, earthen banks above water, shore foam and water depth.
 import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
-import { valueNoise } from '../core/world/noise';
+import { hash, valueNoise } from '../core/world/noise';
 import { BIOME, BIOME_COLOR } from '../core/world/biomes';
 import { SURFACES, SURFACE_IDS, SURFACE_NUM } from '../core/world/surfaces';
 
@@ -240,7 +240,97 @@ export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: num
             data[p + 3] = 255;
         }
     }
+    paintDetails(data, cx, cy, tb, tc, seed);
     return PIXI.Texture.fromBuffer(data, N, N, { scaleMode: PIXI.SCALE_MODES.LINEAR });
+}
+
+const shadeRGB = (c: number, f: number): [number, number, number] =>
+    [Math.min(255, ((c >> 16) & 255) * f), Math.min(255, ((c >> 8) & 255) * f), Math.min(255, (c & 255) * f)];
+
+/**
+ * Small per-tile marks painted straight into the texels: grass blades, pebbles, dune ripples, floor joints.
+ * (They used to be vector graphics drawn every frame; as texels they cost nothing to render.)
+ */
+function paintDetails(data: Uint8Array, cx: number, cy: number, tb: Uint8Array, tc: Int32Array, seed: number) {
+    const ox = cx * CT * T, oy = cy * CT * T;
+    const put = (u: number, v: number, rgb: [number, number, number], a: number) => {
+        if (u < 0 || v < 0 || u >= N || v >= N) return;
+        const p = (v * N + u) * 4;
+        data[p] += (rgb[0] - data[p]) * a; data[p + 1] += (rgb[1] - data[p + 1]) * a; data[p + 2] += (rgb[2] - data[p + 2]) * a;
+    };
+    const rect = (x: number, y: number, w: number, h: number, rgb: [number, number, number], a = 1) => {
+        const u0 = Math.round((x - ox) / GROUND_RES), v0 = Math.round((y - oy) / GROUND_RES);
+        const u1 = Math.max(u0 + 1, Math.round((x + w - ox) / GROUND_RES)), v1 = Math.max(v0 + 1, Math.round((y + h - oy) / GROUND_RES));
+        for (let v = v0; v < v1; v++) for (let u = u0; u < u1; u++) put(u, v, rgb, a);
+    };
+    const ellipse = (x: number, y: number, rx: number, ry: number, rgb: [number, number, number], a = 1) => {
+        const u0 = Math.floor((x - rx - ox) / GROUND_RES), u1 = Math.ceil((x + rx - ox) / GROUND_RES);
+        const v0 = Math.floor((y - ry - oy) / GROUND_RES), v1 = Math.ceil((y + ry - oy) / GROUND_RES);
+        for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) {
+            const dx = (ox + (u + 0.5) * GROUND_RES - x) / rx, dy = (oy + (v + 0.5) * GROUND_RES - y) / ry;
+            if (dx * dx + dy * dy <= 1) put(u, v, rgb, a);
+        }
+    };
+    for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) {
+        const tx = cx * CT + i, ty = cy * CT + j;
+        const k = (j + 1) * LT + (i + 1);
+        const biome = tb[k];
+        const base = tc[k];
+        const px = tx * T, py = ty * T;
+        const h1 = hash(tx, ty, seed + 201), h2 = hash(tx, ty, seed + 202), h3 = hash(tx, ty, seed + 203);
+        const tone = 0.95 + 0.1 * hash(tx, ty, seed + 5);
+        const sh = (f: number) => shadeRGB(base, tone * f);
+        switch (biome) {
+            case BIOME.GRASS:
+            case BIOME.FOREST:
+                rect(px + h1 * 38, py + h2 * 36, 2, 7, sh(0.8));
+                rect(px + h2 * 36 + 3, py + h3 * 34 + 2, 2, 6, sh(0.8));
+                rect(px + h3 * 40, py + h1 * 38, 2, 5, sh(1.22));
+                if (biome === BIOME.FOREST && h2 > 0.8) ellipse(px + 12 + h1 * 22, py + 12 + h3 * 22, 8 + h2 * 6, 8 + h2 * 6, [26, 74, 38], 0.5);
+                break;
+            case BIOME.SAND:
+                rect(px + h1 * 40, py + h2 * 40, 3, 2, sh(0.85));
+                rect(px + h3 * 40, py + h1 * 40, 2, 2, sh(0.85));
+                break;
+            case BIOME.DRY:
+                rect(px + h1 * 12, py + 10 + h2 * 8, 26 + h3 * 8, 2, sh(0.86), 0.8);
+                rect(px + 6 + h2 * 12, py + 28 + h1 * 8, 22 + h1 * 10, 2, sh(0.86), 0.8);
+                rect(px + h3 * 14, py + 14 + h1 * 6, 18, 2, sh(1.14), 0.7);
+                break;
+            case BIOME.HILL:
+                ellipse(px + h1 * 40 + 4, py + h2 * 40 + 4, 3, 3, sh(0.72));
+                ellipse(px + h3 * 40 + 4, py + h1 * 40 + 4, 2, 2, sh(1.2));
+                if (h2 > 0.8) {
+                    ellipse(px + 10 + h3 * 24, py + 22, 5, 3.5, sh(0.6));
+                    ellipse(px + 18 + h3 * 24, py + 26, 3.5, 2.5, sh(0.6));
+                    ellipse(px + 9 + h3 * 24, py + 20.5, 3.5, 2, sh(1.3));
+                }
+                break;
+            case BIOME.CAVE_FLOOR:
+                ellipse(px + h1 * 40 + 4, py + h2 * 40 + 4, 2.5, 2.5, sh(0.7));
+                ellipse(px + h3 * 40 + 4, py + h1 * 40 + 4, 1.8, 1.8, sh(0.7));
+                break;
+            case BIOME.RUIN_FLOOR:
+                rect(px, py, T + 1, 1, [0, 0, 0], 0.14);
+                rect(px, py, 1, T + 1, [0, 0, 0], 0.14);
+                if ((tx + ty) % 2 === 0) rect(px, py, T, T, [255, 255, 255], 0.04);
+                if (h1 > 0.82) {
+                    // a hairline crack
+                    const pts = [[px + h2 * 30, py + 4], [px + 14 + h3 * 20, py + 22], [px + 8 + h1 * 30, py + 42]];
+                    for (let s = 0; s < 2; s++) {
+                        const [x0, y0] = pts[s], [x1, y1] = pts[s + 1];
+                        const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / GROUND_RES);
+                        for (let q = 0; q <= n; q++) rect(x0 + (x1 - x0) * q / n, y0 + (y1 - y0) * q / n, 1, 1, [26, 24, 20], 0.55);
+                    }
+                }
+                break;
+            case BIOME.CITY_FLOOR:
+                rect(px, py + T / 2, T + 1, 1, [0, 0, 0], 0.12);
+                rect(px + (ty % 2 ? T / 2 : T / 4), py, 1, T / 2, [0, 0, 0], 0.12);
+                rect(px + (ty % 2 ? T / 4 : T / 2), py + T / 2, 1, T / 2, [0, 0, 0], 0.12);
+                break;
+        }
+    }
 }
 
 export { BIOME_COLOR };

@@ -53,6 +53,9 @@ function drawHealthBar(container, width, y) {
 export class EntityManager {
     // hero level, kept up to date by the game; used to colour enemy level tags by threat
     static heroLevel = 1;
+    // shared texture atlas for static vector art (set by the game once the renderer exists)
+    static atlas = null;
+    static bake(root, key) { if (EntityManager.atlas) EntityManager.atlas.bake(root, key); return root; }
 
     // Project a ground-plane entity to the screen (in world-container space)
     static place(entity) {
@@ -73,7 +76,8 @@ export class EntityManager {
         aura.beginFill(0xffffff, 0.12);
         aura.drawEllipse(0, 0, 26, 26 * TILT);
         aura.endFill();
-        aura.tint = 0x6aa8ff;
+        EntityManager.bake(aura, 'hero:aura');
+        EntityManager.tintAura(aura, 0x6aa8ff);
 
         const body = new PIXI.Container();
         container.addChild(makeShadow(15, 5.5, 0.4), aura, body);
@@ -85,9 +89,16 @@ export class EntityManager {
     /** Swap the hero drawn by a player container (party switching). */
     static setHeroLook(p, heroId, color = null) {
         p.rig = buildHero(p.body, heroId);
+        EntityManager.bake(p.body, 'hero:' + heroId);
         p.heroId = heroId;
         p.orbGlow = p.rig.orbGlow;
-        if (color !== null) p.aura.tint = color;
+        if (color !== null) EntityManager.tintAura(p.aura, color);
+    }
+
+    /** The aura is baked into the atlas, so its colour goes on the baked sprite as well. */
+    static tintAura(aura, color) {
+        aura.tint = color;
+        if (aura.baked) aura.baked.tint = color;
     }
 
     static animatePlayer(p, t, moving, facing) {
@@ -106,6 +117,7 @@ export class EntityManager {
         const r = type.radius;
         const body = new PIXI.Container();
         const art = ENEMY_ART[type.art](body, type, r);
+        EntityManager.bake(body, 'enemy:' + typeKey);
         const height = art.height;
 
         const shadow = makeShadow(r * 1.05, r * 0.42, 0.38);
@@ -245,6 +257,7 @@ export class EntityManager {
         core.endFill();
         body.addChild(trail, glow, core);
         body.y = -22;
+        EntityManager.bake(body, 'bolt:' + color);
         container.addChild(makeShadow(6, 2.4, 0.3), body);
         container.wx = x;
         container.wy = y;
@@ -264,6 +277,7 @@ export class EntityManager {
         core.lineStyle(0);
         body.addChild(glow, core);
         body.y = -26;
+        EntityManager.bake(body, 'wisp:' + color);
         container.addChild(makeShadow(6, 2.4, 0.25), body);
         container.wx = x;
         container.wy = y;
@@ -301,6 +315,7 @@ export class EntityManager {
         blade.lineStyle(0);
         body.addChild(glow, blade);
         body.y = -22;
+        EntityManager.bake(body, 'blade:' + color);
         container.addChild(makeShadow(7, 2.6, 0.25), body);
         container.blade = blade;
         container.wx = 0;
@@ -384,6 +399,7 @@ export class EntityManager {
             body.addChild(glowCircle(14, tier.color, 0.28));
         }
         body.addChild(g);
+        EntityManager.bake(body, `gem:${kind}:${kind === 'gem' ? EntityManager.gemTier(value).name : ''}`);
         body.scale.set(scale);
         container.addChild(makeShadow(7 * scale, 2.6 * scale, 0.3), body);
         Object.assign(container, {

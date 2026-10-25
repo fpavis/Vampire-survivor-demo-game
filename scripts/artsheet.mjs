@@ -27,7 +27,7 @@ await p.evaluate(() => {
   const heroes = game.party.heroes.map((h, i) => {
     const pl = EntityManager.createPlayer(game.party.heroes[i].id);
     const def = game.party.def(i);
-    pl.aura.tint = def.color;
+    pl.aura.tint = def.color; if (pl.aura.baked) pl.aura.baked.tint = def.color;
     put(pl, 90 + i * 120, 150, def.name, 1.6); pl.facing = 1; return pl;
   });
   // enemies

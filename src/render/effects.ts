@@ -112,7 +112,7 @@ export class Effects {
             };
             p.life = p.max;
             s.scale.set(p.scale);
-            this.game.objectLayer.addChild(s);
+            (glow && this.game.glowLayer ? this.game.glowLayer : this.game.objectLayer).addChild(s);
             this.particles.push(p);
         }
     }

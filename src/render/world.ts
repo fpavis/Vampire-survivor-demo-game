@@ -405,6 +405,7 @@ export class World {
             s.position.set(d.x, d.y * TILT);
             s.zIndex = d.y;
             s.occ = set.texture.height * set.anchorY > 40;     // tall enough to hide the hero: fades when in front of them
+            s.cullable = true;                                // skipped by the renderer while off screen
             d._sprite = s;
             if (d.flip) s.scale.x = -1;
             if (d.type === 'portal' || d.type === 'torch') animated.push({ s, kind: d.type, phase: d.x * 0.01 });
@@ -462,82 +463,8 @@ export class World {
 
     drawTileDetail(ground, sheen, biome, tx, ty, px, py, base, seed) {
         const h1 = hash(tx, ty, seed + 201), h2 = hash(tx, ty, seed + 202), h3 = hash(tx, ty, seed + 203);
+        // land marks (grass blades, pebbles, ripples, floor joints) are painted into the ground texture (groundBake)
         switch (biome) {
-            case BIOME.GRASS:
-            case BIOME.FOREST: {
-                const dark = shade(base, 0.8), lite = shade(base, 1.22);
-                ground.beginFill(dark);
-                ground.drawRect(px + h1 * 38, py + h2 * 36, 2, 7);
-                ground.drawRect(px + h2 * 36 + 3, py + h3 * 34 + 2, 2, 6);
-                ground.endFill();
-                ground.beginFill(lite);
-                ground.drawRect(px + h3 * 40, py + h1 * 38, 2, 5);
-                ground.endFill();
-                if (biome === BIOME.FOREST && h2 > 0.8) {
-                    ground.beginFill(0x1a4a26, 0.5);
-                    ground.drawCircle(px + 12 + h1 * 22, py + 12 + h3 * 22, 8 + h2 * 6);
-                    ground.endFill();
-                }
-                break;
-            }
-            case BIOME.SAND:
-                ground.beginFill(shade(base, 0.85));
-                ground.drawRect(px + h1 * 40, py + h2 * 40, 3, 2);
-                ground.drawRect(px + h3 * 40, py + h1 * 40, 2, 2);
-                ground.endFill();
-                break;
-            case BIOME.DRY:
-                // wind-blown dune ripples
-                ground.beginFill(shade(base, 0.86), 0.8);
-                ground.drawRect(px + h1 * 12, py + 10 + h2 * 8, 26 + h3 * 8, 2);
-                ground.drawRect(px + 6 + h2 * 12, py + 28 + h1 * 8, 22 + h1 * 10, 2);
-                ground.endFill();
-                ground.beginFill(shade(base, 1.14), 0.7);
-                ground.drawRect(px + h3 * 14, py + 14 + h1 * 6, 18, 2);
-                ground.endFill();
-                break;
-            case BIOME.HILL:
-                ground.beginFill(shade(base, 0.72));
-                ground.drawCircle(px + h1 * 40 + 4, py + h2 * 40 + 4, 3);
-                ground.endFill();
-                ground.beginFill(shade(base, 1.2));
-                ground.drawCircle(px + h3 * 40 + 4, py + h1 * 40 + 4, 2);
-                ground.endFill();
-                if (h2 > 0.8) {
-                    ground.beginFill(shade(base, 0.6));
-                    ground.drawEllipse(px + 10 + h3 * 24, py + 22, 5, 3.5);
-                    ground.drawEllipse(px + 18 + h3 * 24, py + 26, 3.5, 2.5);
-                    ground.endFill();
-                    ground.beginFill(shade(base, 1.3));
-                    ground.drawEllipse(px + 9 + h3 * 24, py + 20.5, 3.5, 2);
-                    ground.endFill();
-                }
-                break;
-            case BIOME.CAVE_FLOOR:
-                ground.beginFill(shade(base, 0.7));
-                ground.drawCircle(px + h1 * 40 + 4, py + h2 * 40 + 4, 2.5);
-                ground.drawCircle(px + h3 * 40 + 4, py + h1 * 40 + 4, 1.8);
-                ground.endFill();
-                break;
-            case BIOME.RUIN_FLOOR:
-                ground.beginFill(0x000000, 0.14);
-                ground.drawRect(px, py, T + 1, 1);
-                ground.drawRect(px, py, 1, T + 1);
-                ground.endFill();
-                if ((tx + ty) % 2 === 0) { ground.beginFill(0xffffff, 0.04); ground.drawRect(px, py, T, T); ground.endFill(); }
-                if (h1 > 0.82) {
-                    ground.lineStyle(1, 0x1a1814, 0.55);
-                    ground.moveTo(px + h2 * 30, py + 4); ground.lineTo(px + 14 + h3 * 20, py + 22); ground.lineTo(px + 8 + h1 * 30, py + 42);
-                    ground.lineStyle(0);
-                }
-                break;
-            case BIOME.CITY_FLOOR:
-                ground.beginFill(0x000000, 0.12);
-                ground.drawRect(px, py + T / 2, T + 1, 1);
-                ground.drawRect(px + (ty % 2 ? T / 2 : T / 4), py, 1, T / 2);
-                ground.drawRect(px + (ty % 2 ? T / 4 : T / 2), py + T / 2, 1, T / 2);
-                ground.endFill();
-                break;
             case BIOME.SHALLOW:
             case BIOME.DEEP: {
                 const foam = biome === BIOME.SHALLOW;

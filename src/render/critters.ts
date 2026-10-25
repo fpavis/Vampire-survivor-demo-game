@@ -39,7 +39,7 @@ const ART = {
         circ(wl, -6, 2, 2, 0xffffff, 0.7); circ(wr, 6, 2, 2, 0xffffff, 0.7);
         const g = new PIXI.Graphics(); ell(g, 0, 0, 1.5, 6, 0x3a2a2a);
         hover.addChild(wl, wr, g); body.addChild(hover);
-        return { flying: true, update: (c) => { const f = Math.abs(Math.sin(c.phase * 6)); wl.scale.x = wr.scale.x = 0.2 + f * 0.9; hover.y = -26 + Math.sin(c.phase * 1.5) * 4; } };
+        return { key: col, flying: true, update: (c) => { const f = Math.abs(Math.sin(c.phase * 6)); wl.scale.x = wr.scale.x = 0.2 + f * 0.9; hover.y = -26 + Math.sin(c.phase * 1.5) * 4; } };
     },
     deer(body) {
         const g = new PIXI.Graphics();
@@ -171,7 +171,9 @@ export class Critters {
     create(kind, x, y, extra) {
         const c = new PIXI.Container();
         const body = new PIXI.Container();
-        const info = ART[kind](body, extra && extra.hue !== undefined ? extra.hue : 0) || {};
+        const hue = extra && extra.hue !== undefined ? extra.hue : 0;
+        const info = ART[kind](body, hue) || {};
+        EntityManager.bake(body, `critter:${kind}:${info.key ?? hue}`);
         const shadow = shadowOf(info.flying ? 6 : 11, info.flying ? 2.5 : 4);
         c.addChild(shadow, body);
         Object.assign(c, {

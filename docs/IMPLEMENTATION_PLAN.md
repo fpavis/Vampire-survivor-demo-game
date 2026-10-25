@@ -537,6 +537,28 @@ controller rebinding.
 **8f Performance**: a benchmark script (150 monsters, ~200 spell objects), culling, caps, spatial queries,
 fewer per-frame allocations, an FPS overlay; measured numbers recorded here.
 
+Measured with `node scripts/perf.mjs 200`: 1280 × 720, 150 monsters kept alive around the hero, five auto-cast
+spells at level 8 with Multishot and Piercing. The ticker is stopped so every frame is timed the same way, and draw
+calls are counted after a 60-frame warm-up. Same machine, runs alternated; before = the 8e commit.
+
+| | Before | After |
+|---|---|---|
+| Draw calls per frame | 1,112–1,130 | 23 |
+| Render time per frame (software GPU) | ~600 ms | ~360 ms |
+| Simulation step, average / p95 | 6.8–7.0 / 14.5–15.3 ms | 5.9–6.6 / 10.5–11.9 ms |
+
+Render times come from a software GPU (SwiftShader), so they only compare runs with each other. On a real GPU
+the draw-call count is what matters. What brought it down:
+- Monster, hero, critter, gem, bolt, wisp and blade art is baked into shared atlas pages (`render/atlas.ts`).
+- Additive glows are stored with zero alpha so they batch with normal sprites without a blend switch.
+- Graphics up to 1,000 points are batched.
+- Grass, pebble and floor-joint details are painted into the ground texture.
+- Additive particles go to one glow layer.
+- Decor is culled off screen.
+- `nearestEnemies` uses the spatial hash, and occlusion reuses its sets.
+
+F3 or the pause menu shows frame rate, step time and draw calls in game.
+
 **8g Onboarding**: contextual, non-blocking tips that follow the input device, a How to play page, a tips
 switch; save v8 keeps seen tips and discovered regions.
 

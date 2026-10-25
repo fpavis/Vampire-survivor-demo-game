@@ -81,7 +81,8 @@ export class Occlusion {
         const l = hx - HERO_W, r = hx + HERO_W, t = hy - HERO_H, b = hy - 4;
         const pcx = Math.floor(p.wx / (T * CT)), pcy = Math.floor(p.wy / (T * CT));
         const htx = Math.floor(p.wx / T), hty = Math.floor(p.wy / T);
-        const hit = new Set();
+        const hit = this.hit || (this.hit = new Set());
+        hit.clear();
         let wall = false;
         for (const v of g.world.views.values()) {
             if (Math.abs(v.cx - pcx) > 1 || v.cy < pcy || v.cy > pcy + 1) continue;

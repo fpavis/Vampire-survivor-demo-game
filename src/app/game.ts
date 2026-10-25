@@ -9,6 +9,7 @@ import { UIManager } from './ui';
 import { World, BIOME } from '../render/world';
 import { Effects } from '../render/effects';
 import { Occlusion } from '../render/occlusion';
+import { PartAtlas } from '../render/atlas';
 import { Lighting } from '../render/lighting';
 import { Ambience } from '../render/ambience';
 import { SpellSystem } from './spells';
@@ -54,6 +55,7 @@ import { QuestSystem } from './quests';
 import { isTyping } from '../ui/nav';
 import { normKey } from '../core/input/bindings';
 import { applyAccess, loadAccess } from './access';
+import { PerfOverlay } from './perfOverlay';
 import { quickGlyph } from '../ui/hints';
 
 const TILT = WORLD_CONFIG.tilt;
@@ -80,7 +82,11 @@ class Game {
         this.groundLayer.scale.y = TILT;
         this.objectLayer = new PIXI.Container();
         this.objectLayer.sortableChildren = true;
-        this.worldContainer.addChild(this.groundLayer, this.objectLayer);
+        // additive glows (sparks, embers) drawn together above the objects, so they batch instead of
+        // switching blend modes between every sprite
+        this.glowLayer = new PIXI.Container();
+        this.worldContainer.addChild(this.groundLayer, this.objectLayer, this.glowLayer);
+        EntityManager.atlas = new PartAtlas(this.app.renderer);
         this.app.stage.addChild(this.worldContainer);
 
         this.createAtmosphere();
@@ -119,6 +125,7 @@ class Game {
         this.input = new InputSystem(this);
         loadAccess();
         applyAccess(this);
+        this.perf = new PerfOverlay(this);
 
         // persistent-world plumbing
         this.events = new EventBus();
@@ -706,6 +713,7 @@ class Game {
     // ------------------------------------------------------------ game loop
     // The simulation advances in fixed 1/60 s steps; rendering simply follows the latest state.
     gameLoop(rawDelta) {
+        const t0 = this.perf && this.perf.shown ? performance.now() : 0;
         this.input.poll();
         this.accum = Math.min(this.accum + rawDelta * this.timeScale, 5 * this.timeScale);
         while (this.accum >= 1) {
@@ -715,6 +723,7 @@ class Game {
         if (this.state.player && !this.state.paused) this.ambience.update(Math.min(rawDelta, 2.5), this.cam, this.worldContainer);
         this.occlusion.update(Math.min(rawDelta, 2.5));
         this.renderLights();
+        if (t0) this.perf.frame(performance.now() - t0);
     }
 
     step(rawDelta) {
