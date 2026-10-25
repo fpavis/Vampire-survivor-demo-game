@@ -161,6 +161,7 @@ export class SpellSystem {
         const g = this.game;
         const sfx = g.surfaces ? g.surfaces.fx : null;
         regenMana(this.mana, g.stats, delta * (sfx ? sfx.manaRegen : 1));
+        this.tickActiveCooldowns(delta * (sfx ? sfx.haste : 1));
         const wanted = new Set();
         for (const uid of this.auto) {
             const it = this.item(uid);
@@ -190,6 +191,15 @@ export class SpellSystem {
         this.updateMeteors(delta);
         this.updateBolts(delta);
         this.updateDecals(delta);
+    }
+
+    /** Active skills (dash, blink, aegis) count their cooldown down here; auto-cast spells do it as they fire. */
+    tickActiveCooldowns(step) {
+        for (const uid in this.timers) {
+            if (this.timers[uid] <= 0) continue;
+            const it = this.item(uid);
+            if (it && TEMPLATES[it.tpl].mode === 'active') this.timers[uid] = Math.max(0, this.timers[uid] - step);
+        }
     }
 
     // ------------------------------------------------------- damage + hooks

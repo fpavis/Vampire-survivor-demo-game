@@ -107,6 +107,7 @@ class Game {
         // persistent-world plumbing
         this.events = new EventBus();
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
+        this.gemStash = null;
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
         this.popRuntime = new PopulationRuntime(this);
@@ -478,6 +479,7 @@ class Game {
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
+        this.gemStash = null;
         this.visited = {};
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
@@ -1124,13 +1126,11 @@ class Game {
         this.ui.fade(1, 0.09, () => {
             const s = this.state;
             const p = s.player;
-            // gems on the ground are banked so nothing is lost
-            let banked = 0;
-            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
+            // gems lying on the ground wait where they fell: nothing is lost, and nothing is granted just for walking in
+            this.gemStash = this.mode === 'overworld' ? { poiId: poi.id, gems: s.gems.map((g) => ({ x: g.wx, y: g.wy, value: g.value, kind: g.kind })) } : null;
             this.clearWorldEntities();
             this.popRuntime.clearActive();
             this.clearOverworldDisplays();
-            this.addXp(banked);
 
             const src = createInterior(poi);
             this.interior = src;
@@ -1471,10 +1471,14 @@ class Game {
             const s = this.state;
             let banked = 0;
             s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
-            this.addXp(banked);
+            if (banked > 0) { this.addXp(banked); this.ui.toast(`Gathered the gems you left behind: +${Math.round(banked * this.stats.growth)} XP`); }
             const poi = this.interiorPoi;
             this.events.emit('PlaceLeft', { id: poi.id });
             this.applyOverworld(poi.ex, poi.ey + 34);
+            // the gems that were on the ground outside are still there
+            const stash = this.gemStash;
+            this.gemStash = null;
+            if (stash && stash.poiId === poi.id) for (const d of stash.gems) this.dropGem(d.x, d.y, d.value, d.kind);
             this.requestSave('place', true);
             this.ui.fade(0, 0.06, () => {
                 this.busy = false;
@@ -1663,6 +1667,7 @@ class Game {
         const s = this.state;
         this.ui.fade(1, 0.1, () => {
             s.gameOver = false;
+            this.gemStash = null;
             this.sea.abandon();
             this.party.wipeRevive();
             s.player.visible = true;

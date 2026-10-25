@@ -43,6 +43,23 @@ const dash = await page.evaluate(() => {
 });
 check('dash moves the hero', dash.ok && dash.moved > 60, JSON.stringify(dash));
 check('dash costs mana and grants i-frames', dash.spent > 5 && dash.iframes);
+// regression: the cooldown must really count down by itself (a test used to reset the timers and hide a skill that never came back)
+const again = await page.evaluate(() => {
+  const g = window.game;
+  g.spells.mana.value = g.stats.maxMana;
+  const before = g.spells.slotInfo(0).cdFrac;
+  let frames = 0;
+  while (g.spells.slotInfo(0).cdFrac > 0 && frames < 3000) { g.gameLoop(1); frames++; }
+  g.spells.mana.value = g.stats.maxMana;
+  const ready = g.spells.slotInfo(0).cdFrac === 0;
+  const ok = g.spells.cast(0);
+  return { before, frames, ready, ok };
+});
+check('an active skill is ready again after its cooldown', again.before > 0 && again.ready && again.ok && again.frames > 30 && again.frames < 2000, JSON.stringify(again));
+await page.evaluate(() => { const g = window.game; g.spells.mana.value = g.stats.maxMana; let f = 0; while (g.spells.slotInfo(0).cdFrac > 0 && f++ < 3000) g.gameLoop(1); for (let i = 0; i < 12; i++) g.gameLoop(1); });
+await page.waitForTimeout(150);
+const dom = await page.evaluate(() => { const b = document.querySelector('.vs-skill'); return { cls: b.className, cd: b.querySelector('.cd').style.transform }; });
+check('the skill button is lit again after its cooldown', !/poor/.test(dom.cls) && /scaleY\(0\)/.test(dom.cd), JSON.stringify(dom));
 const poor = await page.evaluate(() => { const g = window.game; g.spells.mana.value = 0; g.spells.timers = {}; return g.spells.cast(0); });
 check('no mana: active skill refuses', poor === false);
 

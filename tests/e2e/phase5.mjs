@@ -204,7 +204,26 @@ const poi = await page.evaluate(() => {
   }
   return null;
 });
-await page.evaluate((p) => { window.game.godMode = true; window.game.enterPlace(p); }, poi);
+// walking into a place neither grants XP nor loses the gems lying outside
+const gemTest = await page.evaluate((p) => {
+  const g = window.game; g.godMode = true; g.state.nextLevel = 20; g.state.experience = 0; g.state.pending = 0;   // earlier steps banked a lot of XP
+  for (const e of [...g.state.enemies]) e.dead = true; g.reap();
+  for (const q of [...g.state.gems]) { q.dead = true; }
+  g.state.gems.length = 0;
+  const pl = g.state.player; pl.wx = p.ex; pl.wy = p.ey + 200;
+  for (let i = 0; i < 12; i++) g.dropGem(p.ex + 100 + i * 12, p.ey + 260, 40);   // far more than a level, out of magnet reach
+  window.__gemsBefore = g.state.gems.length; window.__lvl0 = g.state.level;
+  g.enterPlace(p);
+  return { n: window.__gemsBefore, lvl: g.state.level };
+}, poi);
+await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
+const inside = await page.evaluate(() => ({ lvl: window.game.state.level, pending: window.game.state.pending, xp: Math.round(window.game.state.experience), lvl0: window.__lvl0 }));
+check('entering a town does not level the hero up', inside.lvl === inside.lvl0 && inside.pending === 0 && inside.xp === 0, JSON.stringify({ gemTest, inside }));
+await page.evaluate(() => window.game.exitPlace());
+await page.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 8000 });
+const outside = await page.evaluate(() => ({ gems: window.game.state.gems.length, before: window.__gemsBefore, lvl: window.game.state.level, lvl0: window.__lvl0 }));
+check('the gems left outside are still there after leaving', outside.gems === outside.before && outside.lvl === outside.lvl0, JSON.stringify(outside));
+await page.evaluate((p) => { window.game.godMode = true; window.game.state.nextLevel = 1e12; window.game.state.gems.length = 0; window.game.enterPlace(p); }, poi);
 await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
 const town = await page.evaluate(() => { const k = window.game.interactables.filter((i) => i.npc).map((i) => i.kind).sort(); return k; });
 check('towns have a healer, a merchant and an innkeeper', JSON.stringify(town) === JSON.stringify(['healer', 'innkeeper', 'merchant']), JSON.stringify(town));
