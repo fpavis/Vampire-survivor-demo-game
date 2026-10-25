@@ -128,7 +128,7 @@ export class DungeonSystem {
         const g = this.game;
         const sprite = this.chestSprite(x, y, 1.6, false);
         g.interactables.push({ kind: 'chest', x, y, idx: 'boss', big: true, opened: false, sprite });
-        g.map.markers.push({ tx: x / T, ty: y / T, icon: '🎁' });
+        g.map.markers.push({ tx: x / T, ty: y / T, icon: 'chest' });
         g.map.dirty = true;
     }
 
@@ -138,7 +138,7 @@ export class DungeonSystem {
         if (!poi || e.dungeonBoss !== poi.id) return;
         const place = g.visited[poi.id];
         place.bossDead = true;
-        g.map.markers = g.map.markers.filter((m) => m.icon !== '💀');
+        g.map.markers = g.map.markers.filter((m) => m.icon !== 'lair');
         g.ui.banner('DUNGEON CLEARED!', 0xffd84a);
         this.spawnBossChest(e.wx, e.wy + 40);
         g.events.emit('DungeonCleared', { id: poi.id, name: poi.name, type: poi.type, group: poi.group, realm: poi.dungeon.realm });

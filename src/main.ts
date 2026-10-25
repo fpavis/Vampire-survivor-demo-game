@@ -1,3 +1,4 @@
+import { fontsReady } from './ui/fonts';
 import { startGame } from './app/game';
 
-startGame();
+fontsReady().then(() => startGame());

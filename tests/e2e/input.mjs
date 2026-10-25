@@ -243,7 +243,7 @@ await page.waitForTimeout(100);
 const novaRow = page.locator('.vs-item', { hasText: 'Frost Nova', hasNotText: /on (Aria|Brann|Cyra)/ }).first();   // the spare one, not a hero's
 await novaRow.focus();
 await page.keyboard.press('Enter');
-const equipBtn = page.locator('.vs-acts button', { hasText: /^⚔ Equip$/ }).first();
+const equipBtn = page.locator('.vs-acts button', { hasText: /^\s*Equip$/ }).first();
 await equipBtn.focus();
 await page.keyboard.press('Enter');
 await page.waitForTimeout(100);

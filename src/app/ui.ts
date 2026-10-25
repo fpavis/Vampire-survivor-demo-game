@@ -9,8 +9,9 @@ import { TEMPLATES, CORE_INFO } from '../core/spells/spells';
 import { CARDS } from '../core/hero/stats';
 
 import { WORLD_CONFIG } from '../core/config';
+import { IconLabel, iconSprite } from '../render/icons';
 const WORLD_T = WORLD_CONFIG.tile;
-const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
+import { FONT_UI as FONT, FONT_DISPLAY as DISPLAY } from '../ui/fonts';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function formatTime(seconds) {
@@ -77,18 +78,22 @@ export class UIManager {
 
         this.hpBar = new PIXI.Graphics();
         this.hpBar.position.set(40, 10);
-        this.elements.heart = new PIXI.Text('❤️', { fontSize: 22 });
-        this.elements.heart.position.set(8, 6);
+        this.elements.heart = iconSprite('heart', 24);
+        this.elements.heart.position.set(21, 20);
         this.elements.healthText = new PIXI.Text('100/100', {
             fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3
         });
         this.elements.healthText.anchor.set(0.5);
         this.elements.healthText.position.set(40 + 110, 10 + 10);
-        this.elements.statLine = new PIXI.Text('', {
-            fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xe6e9f2, stroke: 0x000000, strokeThickness: 3
+        // time, kills and score, each behind its icon
+        const statStyle = { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xe6e9f2, stroke: 0x000000, strokeThickness: 3 };
+        this.elements.stats = [['timer', 0xe6e9f2], ['skull', undefined], ['star', 0xffd84a]].map(([icon, color]) => {
+            const l = new IconLabel(icon, '', statStyle, 16, 4, 0);
+            l.iconColor = color;
+            l.y = 48;
+            return l;
         });
-        this.elements.statLine.position.set(12, 38);
-        this.panel.addChild(this.hpBar, this.elements.heart, this.elements.healthText, this.elements.statLine);
+        this.panel.addChild(this.hpBar, this.elements.heart, this.elements.healthText, ...this.elements.stats);
 
         // Weapon / passive inventory
         this.slotsContainer = new PIXI.Container();
@@ -98,11 +103,10 @@ export class UIManager {
         });
 
         // Banner
-        this.elements.banner = new PIXI.Text('', {
-            fontFamily: FONT, fontSize: 40, fontWeight: 'bold', fill: 0xffffff,
+        this.elements.banner = new IconLabel('', '', {
+            fontFamily: DISPLAY, fontSize: 40, fontWeight: 'bold', fill: 0xffffff,
             stroke: 0x000000, strokeThickness: 6, dropShadow: true, dropShadowDistance: 4, dropShadowAlpha: 0.6
-        });
-        this.elements.banner.anchor.set(0.5);
+        }, 44, 12);
         this.elements.banner.visible = false;
         this.bannerTimer = 0;
 
@@ -111,8 +115,7 @@ export class UIManager {
 
         // Settings button in the top right
         const settingsButton = new PIXI.Container();
-        const settingsIcon = new PIXI.Text('⚙️', { fontSize: 22 });
-        settingsIcon.anchor.set(0.5);
+        const settingsIcon = iconSprite('settings', 24, 0xe6e9f2);
         const settingsBg = new PIXI.Graphics();
         const drawBg = (alpha) => {
             settingsBg.clear();
@@ -197,10 +200,11 @@ export class UIManager {
         this.damageFlash = access.reducedMotion ? 0.35 : 1;
     }
 
-    banner(text, color = 0xffffff) {
+    /** A big centred announcement, with an optional icon before it. */
+    banner(text, color = 0xffffff, icon = '') {
         const b = this.elements.banner;
-        b.text = text;
-        b.style.fill = color;
+        b.text.style.fill = color;
+        b.set(icon, text);
         b.visible = true;
         b.alpha = 1;
         b.scale.set(access.reducedMotion ? 1 : 0.4);
@@ -236,10 +240,12 @@ export class UIManager {
             this.shown.level = s.level;
         }
 
-        const stat = `⏱ ${formatTime(s.time)}   ☠ ${s.kills}   ★ ${Math.floor(s.score)}`;
+        const stat = `${formatTime(s.time)}|${s.kills}|${Math.floor(s.score)}`;
         if (stat !== this.shown.stat) {
             this.shown.stat = stat;
-            this.elements.statLine.text = stat;
+            const vals = stat.split('|');
+            let x = 12;
+            this.elements.stats.forEach((l, i) => { l.set(['timer', 'skull', 'star'][i], vals[i], l.iconColor); l.x = x; x += l.width + 14; });
         }
 
         this.updateSlots(game);
@@ -281,8 +287,7 @@ export class UIManager {
             bg.lineStyle(2, color, level >= max ? 1 : 0.55);
             bg.drawRoundedRect(0, 0, 40, 40, 9);
             bg.endFill();
-            const t = new PIXI.Text(icon, { fontSize: 22 });
-            t.anchor.set(0.5);
+            const t = iconSprite(icon, 26);
             t.position.set(20, 19);
             const lv = new PIXI.Text(level >= max ? 'MAX' : `${level}`, {
                 fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: level >= max ? 0xffd84a : 0xffffff,
@@ -338,7 +343,7 @@ export class UIManager {
         mf.drawRoundedRect(73, -15, 24, 16, 5);
         mf.endFill();
         mf.lineStyle(0);
-        const north = new PIXI.Text('N', { fontFamily: 'Georgia, serif', fontSize: 12, fontWeight: 'bold', fill: 0xf3c75a });
+        const north = new PIXI.Text('N', { fontFamily: DISPLAY, fontSize: 12, fontWeight: 'bold', fill: 0xf3c75a });
         north.anchor.set(0.5);
         north.position.set(85, -7);
         mf.addChild(north);
@@ -347,11 +352,10 @@ export class UIManager {
         const mask = new PIXI.Graphics();
         mask.beginFill(0xffffff); mask.drawRoundedRect(0, 0, 170, 170, 12); mask.endFill();
         this.mapSprite.mask = mask;
-        this.mapZone = new PIXI.Text('', {
+        this.mapZone = new IconLabel('', '', {
             fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3
-        });
-        this.mapZone.anchor.set(0.5, 0);
-        this.mapZone.position.set(85, 178);
+        }, 15, 4, 1);
+        this.mapZone.position.set(172, 187);
         const hint = new PIXI.Text('[M] world map', { fontFamily: FONT, fontSize: 11, fill: 0xaab4cc, stroke: 0x000000, strokeThickness: 3 });
         this.mapHint = hint;
         hint.anchor.set(0.5, 0);
@@ -377,11 +381,10 @@ export class UIManager {
         hud.addChild(this.prompt);
 
         // zone name banner
-        this.zoneText = new PIXI.Text('', {
-            fontFamily: FONT, fontSize: 30, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 6,
+        this.zoneText = new IconLabel('', '', {
+            fontFamily: DISPLAY, fontSize: 30, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 6,
             dropShadow: true, dropShadowDistance: 3, dropShadowAlpha: 0.6, letterSpacing: 2
-        });
-        this.zoneText.anchor.set(0.5);
+        }, 34, 10);
         this.zoneText.visible = false;
         this.zoneTimer = 0;
         hud.addChild(this.zoneText);
@@ -412,17 +415,17 @@ export class UIManager {
         this.mapOverlay = null;
 
         // small non-blocking message (saves, discoveries)
-        this.toastText = new PIXI.Text('', {
+        this.toastText = new IconLabel('', '', {
             fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xdfe8ff, stroke: 0x000000, strokeThickness: 4
-        });
-        this.toastText.anchor.set(0, 1);
+        }, 18, 6, 0);
         this.toastText.visible = false;
         this.toastTimer = 0;
         hud.addChild(this.toastText);
     }
 
-    toast(text) {
-        this.toastText.text = text;
+    /** A small message at the bottom left, with an optional icon. */
+    toast(text, icon = '') {
+        this.toastText.set(icon, text);
         this.toastText.visible = true;
         this.toastText.alpha = 1;
         this.toastTimer = 150;
@@ -445,11 +448,10 @@ export class UIManager {
         this.mapBox.position.set(w - 12 - 177 * mk, mk < 1 ? 76 : 92);
         // the zone name stays readable: keep its size and right-align it under the map so it never runs off screen
         this.mapZone.scale.set(1 / mk);
-        this.mapZone.anchor.set(1, 0);
         this.mapZone.x = 172;
         this.mapHint.visible = mk === 1;
         this.publishHudTop();
-        this.toastText.position.set(14, h - 14);
+        this.toastText.position.set(14, h - 24);
         this.prompt.position.set(w / 2, h - 120);
         this.zoneText.position.set(w / 2, h * 0.16);
         this.bossBox.position.set(w / 2, 62);
@@ -489,8 +491,8 @@ export class UIManager {
     }
 
     showZone(name, icon, color) {
-        this.zoneText.text = `${icon}  ${name}`;
-        this.zoneText.style.fill = color;
+        this.zoneText.text.style.fill = color;
+        this.zoneText.set(icon, name);
         this.zoneText.visible = true;
         this.zoneText.alpha = 0;
         this.zoneTimer = 190;
@@ -510,10 +512,10 @@ export class UIManager {
                 this.mapTexture.baseTexture.update();
             }
         }
-        const zoneName = game.zoneLabel || '';
+        const zoneName = (game.zoneIcon || '') + '|' + (game.zoneLabel || '');
         if (zoneName !== this.shownZone) {
             this.shownZone = zoneName;
-            this.mapZone.text = zoneName;
+            this.mapZone.set(game.zoneIcon || '', game.zoneLabel || '');
         }
 
         if (this.zoneTimer > 0) {
@@ -596,18 +598,24 @@ export class UIManager {
             border.lineStyle(3, 0xffffff, 0.4);
             border.drawRoundedRect(sprite.x - 3, sprite.y - 3, side + 6, side + 6, 10);
             const title = new PIXI.Text(game.world.bounded ? game.interiorName : 'WORLD MAP', {
-                fontFamily: FONT, fontSize: 28, fontWeight: 'bold', fill: 0xffffff, letterSpacing: 4
+                fontFamily: DISPLAY, fontSize: 28, fontWeight: 'bold', fill: 0xf3e6c4, letterSpacing: 4
             });
             title.anchor.set(0.5);
             title.position.set(w / 2, 38);
             const pois = game.world.bounded ? [] : game.map.discoveredPois();
-            const legend = new PIXI.Text(game.world.bounded
-                ? 'You are here (blue marker)   ·   🚪 exit' + (game.map.markers.some((m) => m.icon === '🎁') ? '   ·   🎁 treasure' : '')
-                : `${pois.length} place${pois.length === 1 ? '' : 's'} discovered   ·   🕳️ cave   🏛️ ruins   🏘️ town   💀 warlord lair`, {
-                fontFamily: FONT, fontSize: 15, fill: 0xc9d1e6
-            });
-            legend.anchor.set(0.5);
-            legend.position.set(w / 2, sprite.y + side + 26);
+            // legend: a row of icons with their meaning
+            const items = game.world.bounded
+                ? [['', 'You are here (blue marker)'], ['door', 'exit'], ...(game.map.markers.some((m) => m.icon === 'chest') ? [['chest', 'treasure']] : [])]
+                : [['', `${pois.length} place${pois.length === 1 ? '' : 's'} discovered`], ['place-cave', 'cave'], ['place-ruins', 'ruins'], ['place-town', 'town'], ['lair', 'warlord lair']];
+            const legend = new PIXI.Container();
+            let lx = 0;
+            for (const [ic, tx] of items) {
+                const l = new IconLabel(ic, tx, { fontFamily: FONT, fontSize: 15, fill: 0xc9d1e6 }, 18, 5, 0);
+                l.x = lx;
+                legend.addChild(l);
+                lx += l.width + 22;
+            }
+            legend.position.set(Math.round(w / 2 - (lx - 22) / 2), sprite.y + side + 26);
             const close = new PIXI.Text(`Press ${glyph('map')}, ${glyph('cancel')} or click to close`, { fontFamily: FONT, fontSize: 12, fill: 0x8e97b0 });
             close.anchor.set(0.5);
             close.position.set(w / 2, sprite.y + side + 50);

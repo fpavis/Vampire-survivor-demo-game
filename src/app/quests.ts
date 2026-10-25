@@ -15,7 +15,7 @@ import { WORLD_CONFIG } from '../core/config';
 
 const T = WORLD_CONFIG.tile;
 
-const rewardText = (r) => [r.gold ? `🪙 ${r.gold}` : '', r.xp ? `✨ ${r.xp} xp` : '', r.loot ? `🎁 ${r.loot >= 2 ? 'rare ' : ''}skills` : '',
+const rewardText = (r) => [r.gold ? `${r.gold} gold` : '', r.xp ? `${r.xp} xp` : '', r.loot ? `${r.loot >= 2 ? 'rare ' : ''}skills` : '',
     ...Object.entries(r.resources || {}).map(([k, v]) => `${v} ${k}`)].filter(Boolean).join('  ·  ');
 
 export class QuestSystem {
@@ -116,7 +116,7 @@ export class QuestSystem {
                 g.ui.toast(`${def.title}: all done. ${def.giver === 'elder' ? 'Return to the Elder' : 'Claim it at a bounty board'}`);
                 g.audio.play('levelup');
             } else if (u.objectiveDone) {
-                g.ui.toast(`✔ ${describeObjective(def.objectives[u.index], this.names(), this.state.active[u.quest].targets[u.index])}`);
+                g.ui.toast(describeObjective(def.objectives[u.index], this.names(), this.state.active[u.quest].targets[u.index]), 'check');
                 g.audio.play('pickup');
             }
         }
@@ -404,7 +404,7 @@ export class QuestSystem {
                 const rid = q.targets[i];
                 if (!rid || q.progress[i] >= goalOf(o)) return;
                 const p = this.poiById(rid);
-                if (p) out.push({ tx: p.tx, ty: p.ty, icon: o.type === 'clear' ? '⚔' : '❗', label: def.title, color: '#7ad8ff' });
+                if (p) out.push({ tx: p.tx, ty: p.ty, icon: o.type === 'clear' ? 'swords' : 'quest-marker', label: def.title, color: '#7ad8ff' });
             });
         }
         return out;

@@ -63,20 +63,20 @@ export function groupOf(b: number): string {
 }
 
 export const GROUP_INFO = {
-    field: { name: 'Verdant Fields', icon: '🌾', color: 0x62b447 },
-    forest: { name: 'Whispering Woods', icon: '🌲', color: 0x2a6a38 },
-    desert: { name: 'Scorched Dunes', icon: '🏜️', color: 0xd4a55a },
-    shore: { name: 'Salt Shore', icon: '🏖️', color: 0x4fb4d8 },
-    mountain: { name: 'Stonecrest Mountains', icon: '⛰️', color: 0x9aa3b4 },
-    cave: { name: 'Cave', icon: '🕳️', color: 0x6b5a46 },
-    ruins: { name: 'Ruins', icon: '🏛️', color: 0x8a8478 },
-    city: { name: 'City', icon: '🏘️', color: 0xd9b66a }
+    field: { name: 'Verdant Fields', icon: 'biome-field', color: 0x62b447 },
+    forest: { name: 'Whispering Woods', icon: 'biome-forest', color: 0x2a6a38 },
+    desert: { name: 'Scorched Dunes', icon: 'biome-desert', color: 0xd4a55a },
+    shore: { name: 'Salt Shore', icon: 'biome-shore', color: 0x4fb4d8 },
+    mountain: { name: 'Stonecrest Mountains', icon: 'biome-mountain', color: 0x9aa3b4 },
+    cave: { name: 'Cave', icon: 'place-cave', color: 0x6b5a46 },
+    ruins: { name: 'Ruins', icon: 'place-ruins', color: 0x8a8478 },
+    city: { name: 'City', icon: 'place-town', color: 0xd9b66a }
 };
 
 export const POI_INFO = {
-    cave: { icon: '🕳️', label: 'Cave' },
-    ruins: { icon: '🏛️', label: 'Ruins' },
-    city: { icon: '🏘️', label: 'Town' }
+    cave: { icon: 'place-cave', label: 'Cave' },
+    ruins: { icon: 'place-ruins', label: 'Ruins' },
+    city: { icon: 'place-town', label: 'Town' }
 };
 
 // Which enemies roam each region. `level` is the player level at which they start appearing.

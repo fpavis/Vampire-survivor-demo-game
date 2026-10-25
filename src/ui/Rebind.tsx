@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { ui } from './bridge';
 import { KEY_ACTIONS, type KeyAction } from '../core/input/bindings';
 import { PAD_ACTION_LABEL, PAD_REBINDABLE, buttonLabel, type PadAction } from '../core/input/gamepad';
+import { Icon } from './Icon';
 
 /** Lists every action with its key and controller button; pick one, then press the new key or button. */
 export function RebindPanel() {
@@ -31,8 +32,8 @@ export function RebindPanel() {
   const b = input.mapper.bindings;
   return (
     <div class="vs-panel vs-rebind hit">
-      <button class="vs-btn vs-x" onClick={close}>✕</button>
-      <h2>⌨ Keys and buttons</h2>
+      <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
+      <h2><Icon name="keyboard" /> Keys and buttons</h2>
       <div class="sub">Choose an action, then press the new key or controller button. Taking a key that is already used swaps the two.</div>
       {note && <div class="vs-lock">{note}</div>}
       <div class="vs-sec">KEYBOARD</div>
@@ -58,7 +59,7 @@ export function RebindPanel() {
         ))}
       </div>
       <div class="vs-acts">
-        <button class="vs-btn" onClick={() => { input.resetBindings(); setNote('Back to the default keys and buttons.'); }}>↺ Reset to defaults</button>
+        <button class="vs-btn" onClick={() => { input.resetBindings(); setNote('Back to the default keys and buttons.'); }}><Icon name="reset" /> Reset to defaults</button>
         <button class="vs-btn" onClick={close}>Done</button>
       </div>
     </div>

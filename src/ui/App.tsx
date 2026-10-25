@@ -6,6 +6,7 @@ import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './B
 import { PauseMenu } from './Pause';
 import { RebindPanel } from './Rebind';
 import { TipCard } from './Tips';
+import { Icon } from './Icon';
 import { BoardPanel, Journal, Tracker } from './Quests';
 import { glyph, onPad, quickGlyph } from './hints';
 import { isTyping } from './nav';
@@ -25,12 +26,12 @@ function ActiveBar() {
   return (
     <div class="vs-bar hit vs-hud">
       <div class="vs-btns">
-        <button class="vs-btn vs-ico" onClick={() => open('spells')} title={`Spells and runes (${quickGlyph('spells')})`} aria-label="Spells and runes">🎒</button>
-        <button class="vs-btn vs-ico" onClick={() => open('journal')} title={`Journal (${quickGlyph('journal')})`} aria-label="Journal">📖</button>
-        <button class="vs-btn vs-ico" onClick={() => open('build')} title={`Build (${quickGlyph('build')})`} aria-label="Build">🔨</button>
+        <button class="vs-btn vs-ico" onClick={() => open('spells')} title={`Spells and runes (${quickGlyph('spells')})`} aria-label="Spells and runes"><Icon name="backpack" /></button>
+        <button class="vs-btn vs-ico" onClick={() => open('journal')} title={`Journal (${quickGlyph('journal')})`} aria-label="Journal"><Icon name="journal" /></button>
+        <button class="vs-btn vs-ico" onClick={() => open('build')} title={`Build (${quickGlyph('build')})`} aria-label="Build"><Icon name="hammer" /></button>
       </div>
       <div class="vs-wallet" title="Gold, wood, stone, iron">
-        <span>🪙 {w.gold}</span>{w.wood > 0 && <span>🪵 {w.wood}</span>}{w.stone > 0 && <span>🪨 {w.stone}</span>}{w.iron > 0 && <span>⛓ {w.iron}</span>}
+        <span><Icon name="res-gold" /> {w.gold}</span>{w.wood > 0 && <span><Icon name="res-wood" /> {w.wood}</span>}{w.stone > 0 && <span><Icon name="res-stone" /> {w.stone}</span>}{w.iron > 0 && <span><Icon name="res-iron" /> {w.iron}</span>}
       </div>
       {ui.surface.value && (
         <div class={`vs-surface${ui.surface.value.bad ? ' bad' : ''}`} style={{ '--sc': `#${ui.surface.value.color.toString(16).padStart(6, '0')}` }}>
@@ -46,7 +47,7 @@ function ActiveBar() {
           s ? (
             <button key={i} class={`vs-skill${s.affordable ? '' : ' poor'}`} style={{ borderColor: s.affordable ? hex(s.color) : undefined }}
               onClick={() => ui.game?.spells.cast(i)} title={`${s.name} — ${s.cost} mana`}>
-              {s.icon}
+              <Icon name={s.icon} />
               <span class="k">{keys[i]}</span>
               <span class="c">{s.cost}</span>
               <span class="cd" style={{ transform: `scaleY(${s.cdFrac})` }} />
@@ -67,16 +68,16 @@ function CardsPanel() {
   const pick = (i: number) => ui.game?.pickCard(i);
   return (
     <div class="vs-panel vs-cards hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.cardsOpen.value = false)}>✕</button>
+      <button class="vs-btn vs-x" onClick={() => (ui.cardsOpen.value = false)} aria-label="Close"><Icon name="close" /></button>
       <h2>Level up! <span style={{ color: '#ffd84a' }}>{pending > 1 ? `×${pending} ready` : ''}</span></h2>
       <div class="sub">{onPad() ? `The game keeps running. Choose with the D-pad and ${glyph('interact')}, close with ${glyph('cancel')}.` : `The game keeps running. Pick a card (1–3) or close this with U.`}</div>
       {cards.map((c, i) => {
         const def = CARDS[c.id], r = RARITY[Math.min(3, c.rarity)], path = PATHS[def.path];
         return (
           <button key={c.id} class="vs-card" style={{ '--rc': hexCss(rarityColor(ui.palette.value, Math.min(3, c.rarity))) }} onClick={() => pick(i)}>
-            <div class="ic">{def.icon}</div>
+            <div class="ic"><Icon name={def.icon} /></div>
             <div>
-              <div class="tg">{path.icon} {path.name.toUpperCase()} · {r.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
+              <div class="tg"><Icon name={path.icon} /> {path.name.toUpperCase()} · {r.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
               <div class="nm">{def.name}</div>
               {c.lines.map((l) => <div class="ln">{l}</div>)}
             </div>
@@ -95,7 +96,7 @@ function HoldBar() {
   if (!h) return null;
   return (
     <div class="vs-hold">
-      <div class="t">🚩 {h.label} — wave {h.wave} / {h.waves} · {h.seconds}s</div>
+      <div class="t"><Icon name="flag" /> {h.label} — wave {h.wave} / {h.waves} · {h.seconds}s</div>
       <div class="b"><i style={{ width: `${Math.round(h.progress * 100)}%` }} /></div>
     </div>
   );
@@ -106,7 +107,7 @@ function Pill() {
   if (!n || ui.cardsOpen.value) return null;
   return (
     <button class="vs-pill hit" onClick={() => (ui.cardsOpen.value = true)}>
-      ⬆ {n} upgrade{n > 1 ? 's' : ''}<span class="long"> ready</span> · {quickGlyph('upgrades')}
+      <Icon name="upgrade" /> {n} upgrade{n > 1 ? 's' : ''}<span class="long"> ready</span> · {quickGlyph('upgrades')}
     </button>
   );
 }

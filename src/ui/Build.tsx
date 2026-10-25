@@ -1,10 +1,11 @@
 import { ui } from './bridge';
 import { glyph, onPad, quickGlyph } from './hints';
+import { Icon } from './Icon';
 import { TOWER_DEFS, TOWER_KINDS, fareBetween, totalOf } from '../core/world/towers';
 import { CORE_INFO, TEMPLATES, describeSpell, resolveSpell } from '../core/spells/spells';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
-const RES: [keyof typeof TOWER_DEFS.spire.cost, string][] = [['gold', '🪙'], ['wood', '🪵'], ['stone', '🪨'], ['iron', '⛓']];
+const RES: [keyof typeof TOWER_DEFS.spire.cost, string][] = [['gold', 'res-gold'], ['wood', 'res-wood'], ['stone', 'res-stone'], ['iron', 'res-iron']];
 
 export function BuildMenu() {
   if (!ui.buildMenuOpen.value || !ui.game) return null;
@@ -12,19 +13,19 @@ export function BuildMenu() {
   const w = ui.wallet.value;
   return (
     <div class="vs-panel vs-build hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.buildMenuOpen.value = false)}>✕ ({quickGlyph('build')})</button>
-      <h2>🔨 Build</h2>
+      <button class="vs-btn vs-x" onClick={() => (ui.buildMenuOpen.value = false)}><Icon name="close" /> ({quickGlyph('build')})</button>
+      <h2><Icon name="hammer" /> Build</h2>
       <div class="sub">Towers are monumental and permanent. Lay a site, then haul in the materials and press E at the site. No limit on how many, only on what you can gather.</div>
       <div class="vs-goods">
         {TOWER_KINDS.map((k) => {
           const d = TOWER_DEFS[k];
           return (
             <div key={k} class="vs-good" style={{ '--gc': hex(d.color) }}>
-              <span class="ic">{d.icon}</span>
+              <span class="ic"><Icon name={d.icon} /></span>
               <span class="tx">
                 <b>{d.name}</b>
                 <small>{d.blurb}</small>
-                <small class="cost">{RES.map(([r, ic]) => <span key={r} class={w[r] >= d.cost[r] ? 'ok' : ''}>{ic} {d.cost[r]}{'  '}</span>)}</small>
+                <small class="cost">{RES.map(([r, ic]) => <span key={r} class={w[r] >= d.cost[r] ? 'ok' : ''}><Icon name={ic} /> {d.cost[r]}{'  '}</span>)}</small>
               </span>
               <button class="vs-btn" onClick={() => game.towers.startBuild(k)}>Place</button>
             </div>
@@ -41,8 +42,8 @@ export function BuildHud() {
   const game = ui.game;
   return (
     <div class={`vs-buildhud${b.valid ? ' ok' : ' bad'}`}>
-      <div class="t">{b.icon} Placing {b.name}</div>
-      <div class="r">{b.valid ? (onPad() ? `Walk to move the ghost, ${glyph('interact')} lays the site, ${glyph('cancel')} cancels.` : 'Click (or press Enter) to lay the site. Esc cancels.') : `✕ ${b.reason}`}</div>
+      <div class="t"><Icon name={b.icon} /> Placing {b.name}</div>
+      <div class="r">{b.valid ? (onPad() ? `Walk to move the ghost, ${glyph('interact')} lays the site, ${glyph('cancel')} cancels.` : 'Click (or press Enter) to lay the site. Esc cancels.') : <><Icon name="close" /> {b.reason}</>}</div>
       <div class="b hit">
         <button class="vs-btn" disabled={!b.valid} onClick={() => game?.towers.confirmBuild()}>Place here</button>
         <button class="vs-btn" onClick={() => game?.towers.cancelBuild()}>Cancel</button>
@@ -65,7 +66,7 @@ export function TowerPanel() {
     const r = resolveSpell(s);
     return (
       <div key={s.uid} class="vs-good" style={{ '--gc': hex(CORE_INFO[t.core].color) }}>
-        <span class="ic">{t.icon}</span>
+        <span class="ic"><Icon name={t.icon} /></span>
         <span class="tx"><b>{t.name} · Lv {s.level}</b><small>{describeSpell(r).join(' · ')}</small><small>{s.runes.map((x: string | null) => (x ? '◆' : '◇')).join(' ')} runes</small></span>
         <button class="vs-btn" onClick={fn}>{action}</button>
       </div>
@@ -73,8 +74,8 @@ export function TowerPanel() {
   };
   return (
     <div class="vs-panel vs-tpanel hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.towerPanel.value = null)}>✕</button>
-      <h2>🗼 Arcane Spire</h2>
+      <button class="vs-btn vs-x" onClick={() => (ui.towerPanel.value = null)} aria-label="Close"><Icon name="close" /></button>
+      <h2><Icon name="tower-spire" /> Arcane Spire</h2>
       <div class="sub">Arm it with an auto-cast spell. It fires from here at anything nearby, using the spell’s own level and runes (socket runes in your spell panel, I). Spells in a tower are not available to your heroes.</div>
       <div class="vs-sec">ARMED</div>
       {armed ? row(armed, 'Disarm', () => { game.towers.arm(id, null); ui.version.value++; }) : <div class="vs-empty">Nothing armed.</div>}
@@ -95,18 +96,18 @@ export function WaypointPanel() {
   const gold = ui.wallet.value.gold;
   return (
     <div class="vs-panel vs-tpanel hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.waypointOpen.value = null)}>✕</button>
-      <h2>🌀 Waypoint</h2>
-      <div class="sub">Step through to another waypoint you have built. 🪙 You have {gold}.</div>
+      <button class="vs-btn vs-x" onClick={() => (ui.waypointOpen.value = null)} aria-label="Close"><Icon name="close" /></button>
+      <h2><Icon name="tower-waypoint" /> Waypoint</h2>
+      <div class="sub">Step through to another waypoint you have built. <Icon name="res-gold" /> You have {gold}.</div>
       {!others.length && <div class="vs-empty">This is your only waypoint. Build another somewhere far away to link them.</div>}
       {others.map((w: any) => {
         const fare = fareBetween(here, w);
         const dist = Math.round(Math.hypot(w.tx - here.tx, w.ty - here.ty));
         return (
           <div key={w.id} class="vs-good" style={{ '--gc': '#b06af0' }}>
-            <span class="ic">🌀</span>
+            <span class="ic"><Icon name="tower-waypoint" /></span>
             <span class="tx"><b>Waypoint at {w.tx}, {w.ty}</b><small>{dist} tiles away</small></span>
-            <button class="vs-btn" disabled={gold < fare} onClick={() => game.towers.travel(id, w.id)}>🪙 {fare}</button>
+            <button class="vs-btn" disabled={gold < fare} onClick={() => game.towers.travel(id, w.id)}><Icon name="res-gold" /> {fare}</button>
           </div>
         );
       })}
@@ -116,7 +117,7 @@ export function WaypointPanel() {
 
 export function SailingHint() {
   if (!ui.sailing.value) return null;
-  return <div class="vs-sailing">⛵ Sailing — {onPad() ? 'left stick' : 'WASD'} to steer · {glyph('interact')} near a shore to step off · spells still work</div>;
+  return <div class="vs-sailing"><Icon name="sail" /> Sailing — {onPad() ? 'left stick' : 'WASD'} to steer · {glyph('interact')} near a shore to step off · spells still work</div>;
 }
 
 export { totalOf };

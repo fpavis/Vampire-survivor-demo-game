@@ -240,7 +240,7 @@ export class SitesRuntime {
         g.session.triggered[site.id] = g.state.time;
         const members = this.ring(site, this.enemyMix(site, site.waves, Math.max(1, Math.floor(site.waves / 3))), 150);
         this.waves.push({ site, members, kind: 'ambush' });
-        g.ui.banner('⚠  AMBUSH!  ⚠', 0xff4a3a);
+        g.ui.banner('AMBUSH!', 0xff4a3a, 'warning');
         g.fx.shockwave(site.x, site.y, 200, 0xff4a3a, 30, 6);
         g.fx.flash(site.x, site.y, 260, 0xff4a3a, 30);
         g.fx.addShake(7);

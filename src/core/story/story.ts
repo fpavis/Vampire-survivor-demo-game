@@ -136,7 +136,7 @@ function talk(id: string, lines: Line[], end: { choices?: { text: string; next?:
   const nodes: DialogueScript['nodes'] = {};
   lines.forEach((text, i) => {
     const last = i === lines.length - 1;
-    nodes[`n${i}`] = { speaker: E, icon: '🧓', text, ...(last ? { choices: end.choices, effects: end.effects } : { next: `n${i + 1}` }) };
+    nodes[`n${i}`] = { speaker: E, icon: 'elder', text, ...(last ? { choices: end.choices, effects: end.effects } : { next: `n${i + 1}` }) };
   });
   return { id, start: 'n0', nodes };
 }
@@ -153,9 +153,9 @@ export const DIALOGUES: Record<string, DialogueScript> = {
   'elder.intro': {
     id: 'elder.intro', start: 'n0',
     nodes: {
-      n0: { speaker: E, icon: '🧓', text: 'Travellers, at last. Do you feel it? The sky has been wrong since the spring. Things have crawled up out of the deep places and made thrones of them.', next: 'ask' },
+      n0: { speaker: E, icon: 'elder', text: 'Travellers, at last. Do you feel it? The sky has been wrong since the spring. Things have crawled up out of the deep places and made thrones of them.', next: 'ask' },
       ask: {
-        speaker: E, icon: '🧓', text: 'Five demon lords hold the five lands, and above them waits Azrathul, the Demon Sovereign, who would end every light there is. The old songs say heroes will rise. I had hoped they would be taller. Will you stand against them?',
+        speaker: E, icon: 'elder', text: 'Five demon lords hold the five lands, and above them waits Azrathul, the Demon Sovereign, who would end every light there is. The old songs say heroes will rise. I had hoped they would be taller. Will you stand against them?',
         choices: [
           { text: 'We will fight them.', next: 'yes', effects: [{ flag: 'begun' }, { start: 'm0_omen' }] },
           { text: 'Tell me about the lords.', next: 'lore' },
@@ -163,18 +163,18 @@ export const DIALOGUES: Record<string, DialogueScript> = {
         ]
       },
       lore: {
-        speaker: E, icon: '🧓',
+        speaker: E, icon: 'elder',
         text: 'Morwen the Hollow Queen holds the fields. Thornax the Rootbound, the woods. Khazreth the Sand Tyrant buries the dunes, Nerezza the Tide Witch drowns the shore, and Gorvak the Stone Warlord has the peaks. Each sits in a dungeon, and each answers to Azrathul.',
         next: 'ask'
       },
-      yes: { speaker: E, icon: '🧓', text: 'Then begin small. The beasts on our roads grow bolder every night. Thin them — a dozen should do — and come back to me.' },
-      bye: { speaker: E, icon: '🧓', text: 'The offer stands, whenever you are ready. No one will force you. The world is wide.' }
+      yes: { speaker: E, icon: 'elder', text: 'Then begin small. The beasts on our roads grow bolder every night. Thin them — a dozen should do — and come back to me.' },
+      bye: { speaker: E, icon: 'elder', text: 'The offer stands, whenever you are ready. No one will force you. The world is wide.' }
     }
   },
-  'elder.idle': { id: 'elder.idle', start: 'n0', nodes: { n0: { speaker: E, icon: '🧓', text: 'Walk freely. The world is wide, and not all of it is a war. Come back when you are stronger, and I will have more to ask of you.' } } },
-  'elder.epilogue': { id: 'elder.epilogue', start: 'n0', nodes: { n0: { speaker: E, icon: '🧓', text: 'The song is sung, and you are in it. Go where you like. The light will keep.' } } },
+  'elder.idle': { id: 'elder.idle', start: 'n0', nodes: { n0: { speaker: E, icon: 'elder', text: 'Walk freely. The world is wide, and not all of it is a war. Come back when you are stronger, and I will have more to ask of you.' } } },
+  'elder.epilogue': { id: 'elder.epilogue', start: 'n0', nodes: { n0: { speaker: E, icon: 'elder', text: 'The song is sung, and you are in it. Go where you like. The light will keep.' } } },
   'elder.offer': offer('elder.offer', 'current', ['{quest.title}. {quest.summary}']),
-  'elder.hint': { id: 'elder.hint', start: 'n0', nodes: { n0: { speaker: E, icon: '🧓', text: '{quest.title}: {quest.hint}' } } },
+  'elder.hint': { id: 'elder.hint', start: 'n0', nodes: { n0: { speaker: E, icon: 'elder', text: '{quest.title}: {quest.hint}' } } },
   'elder.turnin': turnIn('elder.turnin', 'current', ['You have done it. Well done.']),
 
   'm0.turnin': turnIn('m0.turnin', 'm0_omen', [

@@ -17,25 +17,25 @@ export interface StatCard {
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 export const PATHS: Record<PathId, { name: string; icon: string; color: number }> = {
-  arcane: { name: 'Arcane', icon: '🔮', color: 0xc08bff },
-  vigor: { name: 'Vigor', icon: '❤️', color: 0xff7a7a },
-  mobility: { name: 'Wayfarer', icon: '👟', color: 0x7be0d0 },
-  mana: { name: 'Spirit', icon: '💧', color: 0x6ab8ff }
+  arcane: { name: 'Arcane', icon: 'path-arcane', color: 0xc08bff },
+  vigor: { name: 'Vigor', icon: 'path-vigor', color: 0xff7a7a },
+  mobility: { name: 'Wayfarer', icon: 'path-wayfarer', color: 0x7be0d0 },
+  mana: { name: 'Spirit', icon: 'path-spirit', color: 0x6ab8ff }
 };
 
 export const CARDS: Record<string, StatCard> = {
-  might: { id: 'might', name: 'Might', icon: '💪', path: 'arcane', max: 5, label: 'Spell damage', desc: 'All spell damage is increased.', value: (l) => 0.15 * l, fmt: (v) => `+${pct(v)}` },
-  haste: { id: 'haste', name: 'Cast Speed', icon: '⏱️', path: 'arcane', max: 5, label: 'Cooldowns', desc: 'Spells recharge faster.', value: (l) => 1 - Math.pow(0.92, l), fmt: (v) => `-${pct(v)}` },
-  crit: { id: 'crit', name: 'Precision', icon: '🎯', path: 'arcane', max: 5, label: 'Crit chance', desc: 'Hits can deal double damage.', value: (l) => 0.06 * l, fmt: (v) => `+${pct(v)}` },
-  vitality: { id: 'vitality', name: 'Vitality', icon: '❤️', path: 'vigor', max: 5, label: 'Max health', desc: 'More health, and heals when taken.', value: (l) => 25 * l, fmt: (v) => `+${v}` },
-  recovery: { id: 'recovery', name: 'Recovery', icon: '💖', path: 'vigor', max: 5, label: 'Regeneration', desc: 'Slowly heal over time.', value: (l) => 0.6 * l, fmt: (v) => `+${v.toFixed(1)}/s` },
-  armor: { id: 'armor', name: 'Armor', icon: '🛡️', path: 'vigor', max: 5, label: 'Damage taken', desc: 'Reduces all incoming damage.', value: (l) => 0.06 * l, fmt: (v) => `-${pct(v)}` },
-  swift: { id: 'swift', name: 'Swiftness', icon: '👟', path: 'mobility', max: 5, label: 'Move speed', desc: 'Run faster.', value: (l) => 0.08 * l, fmt: (v) => `+${pct(v)}` },
-  magnet: { id: 'magnet', name: 'Magnet', icon: '🧲', path: 'mobility', max: 5, label: 'Pickup range', desc: 'Gems fly to you from further away.', value: (l) => 0.35 * l, fmt: (v) => `+${pct(v)}` },
-  growth: { id: 'growth', name: 'Wisdom', icon: '📘', path: 'mobility', max: 5, label: 'XP gain', desc: 'Gain experience faster.', value: (l) => 0.12 * l, fmt: (v) => `+${pct(v)}` },
-  reservoir: { id: 'reservoir', name: 'Reservoir', icon: '🔷', path: 'mana', max: 5, label: 'Max mana', desc: 'A deeper pool of mana for dashes, blinks and wards.', value: (l) => 20 * l, fmt: (v) => `+${v}` },
-  wellspring: { id: 'wellspring', name: 'Wellspring', icon: '🌊', path: 'mana', max: 5, label: 'Mana regen', desc: 'Mana returns faster.', value: (l) => 2.5 * l, fmt: (v) => `+${v.toFixed(1)}/s` },
-  thrift: { id: 'thrift', name: 'Thrift', icon: '🪙', path: 'mana', max: 4, label: 'Mana cost', desc: 'Active skills cost less mana.', value: (l) => 0.08 * l, fmt: (v) => `-${pct(v)}` }
+  might: { id: 'might', name: 'Might', icon: 'card-might', path: 'arcane', max: 5, label: 'Spell damage', desc: 'All spell damage is increased.', value: (l) => 0.15 * l, fmt: (v) => `+${pct(v)}` },
+  haste: { id: 'haste', name: 'Cast Speed', icon: 'card-haste', path: 'arcane', max: 5, label: 'Cooldowns', desc: 'Spells recharge faster.', value: (l) => 1 - Math.pow(0.92, l), fmt: (v) => `-${pct(v)}` },
+  crit: { id: 'crit', name: 'Precision', icon: 'card-crit', path: 'arcane', max: 5, label: 'Crit chance', desc: 'Hits can deal double damage.', value: (l) => 0.06 * l, fmt: (v) => `+${pct(v)}` },
+  vitality: { id: 'vitality', name: 'Vitality', icon: 'card-vitality', path: 'vigor', max: 5, label: 'Max health', desc: 'More health, and heals when taken.', value: (l) => 25 * l, fmt: (v) => `+${v}` },
+  recovery: { id: 'recovery', name: 'Recovery', icon: 'card-recovery', path: 'vigor', max: 5, label: 'Regeneration', desc: 'Slowly heal over time.', value: (l) => 0.6 * l, fmt: (v) => `+${v.toFixed(1)}/s` },
+  armor: { id: 'armor', name: 'Armor', icon: 'card-armor', path: 'vigor', max: 5, label: 'Damage taken', desc: 'Reduces all incoming damage.', value: (l) => 0.06 * l, fmt: (v) => `-${pct(v)}` },
+  swift: { id: 'swift', name: 'Swiftness', icon: 'card-swift', path: 'mobility', max: 5, label: 'Move speed', desc: 'Run faster.', value: (l) => 0.08 * l, fmt: (v) => `+${pct(v)}` },
+  magnet: { id: 'magnet', name: 'Magnet', icon: 'card-magnet', path: 'mobility', max: 5, label: 'Pickup range', desc: 'Gems fly to you from further away.', value: (l) => 0.35 * l, fmt: (v) => `+${pct(v)}` },
+  growth: { id: 'growth', name: 'Wisdom', icon: 'card-growth', path: 'mobility', max: 5, label: 'XP gain', desc: 'Gain experience faster.', value: (l) => 0.12 * l, fmt: (v) => `+${pct(v)}` },
+  reservoir: { id: 'reservoir', name: 'Reservoir', icon: 'card-reservoir', path: 'mana', max: 5, label: 'Max mana', desc: 'A deeper pool of mana for dashes, blinks and wards.', value: (l) => 20 * l, fmt: (v) => `+${v}` },
+  wellspring: { id: 'wellspring', name: 'Wellspring', icon: 'card-wellspring', path: 'mana', max: 5, label: 'Mana regen', desc: 'Mana returns faster.', value: (l) => 2.5 * l, fmt: (v) => `+${v.toFixed(1)}/s` },
+  thrift: { id: 'thrift', name: 'Thrift', icon: 'card-thrift', path: 'mana', max: 4, label: 'Mana cost', desc: 'Active skills cost less mana.', value: (l) => 0.08 * l, fmt: (v) => `-${pct(v)}` }
 };
 
 export type Picks = Record<string, number>;

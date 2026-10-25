@@ -2,6 +2,7 @@
 import * as PIXI from 'pixi.js';
 import { access } from '../app/access';
 import { WORLD_CONFIG } from '../core/config';
+import { FONT_UI } from '../ui/fonts';
 
 const TILT = WORLD_CONFIG.tilt;
 const MAX_PARTICLES = 450;
@@ -135,7 +136,8 @@ export class Effects {
         let t = this.popupPool.pop();
         if (!t) {
             t = new PIXI.Text('', {
-                fontFamily: 'Arial Black, Arial, sans-serif',
+                fontFamily: FONT_UI,
+                fontWeight: '800',
                 fontSize: 16,
                 fill: 0xffffff,
                 stroke: 0x000000,

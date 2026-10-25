@@ -24,19 +24,19 @@ export interface TowerDef {
 
 // Monumental: every tower is a long-term investment. Resources are the only cap on how many exist.
 export const TOWER_DEFS: Record<TowerKind, TowerDef> = {
-  spire: { kind: 'spire', name: 'Arcane Spire', icon: '🗼', color: 0x7ab4ff, cost: { gold: 140, wood: 40, stone: 70, iron: 28 }, spacing: 7,
+  spire: { kind: 'spire', name: 'Arcane Spire', icon: 'tower-spire', color: 0x7ab4ff, cost: { gold: 140, wood: 40, stone: 70, iron: 28 }, spacing: 7,
     blurb: 'Fires a spell of your choice at anything that comes near. Arm it with a spare spell from your bag.' },
-  ward: { kind: 'ward', name: 'Warding Obelisk', icon: '🔰', color: 0xf3c75a, cost: { gold: 260, wood: 20, stone: 130, iron: 45 }, spacing: 10,
+  ward: { kind: 'ward', name: 'Warding Obelisk', icon: 'tower-ward', color: 0xf3c75a, cost: { gold: 260, wood: 20, stone: 130, iron: 45 }, spacing: 10,
     blurb: 'A shimmering dome that repels monsters and slowly heals those within.' },
-  beacon: { kind: 'beacon', name: 'Beacon', icon: '🔥', color: 0xff9a4a, cost: { gold: 70, wood: 36, stone: 44, iron: 6 }, spacing: 9,
+  beacon: { kind: 'beacon', name: 'Beacon', icon: 'tower-beacon', color: 0xff9a4a, cost: { gold: 70, wood: 36, stone: 44, iron: 6 }, spacing: 9,
     blurb: 'Reveals the land around it for good and shines through the dark.' },
-  waypoint: { kind: 'waypoint', name: 'Waypoint', icon: '🌀', color: 0xb06af0, cost: { gold: 110, wood: 14, stone: 54, iron: 14 }, spacing: 9,
+  waypoint: { kind: 'waypoint', name: 'Waypoint', icon: 'tower-waypoint', color: 0xb06af0, cost: { gold: 110, wood: 14, stone: 54, iron: 14 }, spacing: 9,
     blurb: 'A stone gate. Travel between waypoints for a little gold.' },
-  climb: { kind: 'climb', name: 'Climbing Tower', icon: '⛰️', color: 0xa8a090, cost: { gold: 320, wood: 130, stone: 170, iron: 64 }, spacing: 8,
+  climb: { kind: 'climb', name: 'Climbing Tower', icon: 'tower-climb', color: 0xa8a090, cost: { gold: 320, wood: 130, stone: 170, iron: 64 }, spacing: 8,
     blurb: 'Cuts a stair into a mountain and opens the plateau at its heart, with ore and crystals to mine.' },
-  bridge: { kind: 'bridge', name: 'Bridge Tower', icon: '🌉', color: 0xc8a060, cost: { gold: 90, wood: 110, stone: 80, iron: 24 }, spacing: 6,
+  bridge: { kind: 'bridge', name: 'Bridge Tower', icon: 'tower-bridge', color: 0xc8a060, cost: { gold: 90, wood: 110, stone: 80, iron: 24 }, spacing: 6,
     blurb: 'Spans the water in front of it with a bridge, joining the shores.' },
-  dock: { kind: 'dock', name: 'Dock', icon: '⚓', color: 0x6ab8d8, cost: { gold: 90, wood: 84, stone: 30, iron: 12 }, spacing: 4,
+  dock: { kind: 'dock', name: 'Dock', icon: 'tower-dock', color: 0x6ab8d8, cost: { gold: 90, wood: 84, stone: 30, iron: 12 }, spacing: 4,
     blurb: 'A pier on the shore with a boat. Sail across deep water to far islands.' }
 };
 export const TOWER_KINDS = Object.keys(TOWER_DEFS) as TowerKind[];

@@ -7,6 +7,7 @@ import {
   CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES, canSocket, describeSpell, previewRune, resolveSpell, spellXpFor, type SpellItem
 } from '../core/spells/spells';
 import { runeValue, spellValue } from '../core/loot/loot';
+import { Icon } from './Icon';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 /** Rarity colour in the player's colour palette. */
@@ -52,7 +53,7 @@ function useDndWiring() {
       if (t.type === 'salvage') {
         if (sp().equipped(it.uid)) return { ok: false, reason: 'Unequip it before salvaging' };
         if (held) return { ok: false, reason: `${held} has it equipped` };
-        return it.locked ? { ok: false, reason: 'Locked 🔒 — unlock it first' } : { ok: true };
+        return it.locked ? { ok: false, reason: 'Locked: unlock it first' } : { ok: true };
       }
       return { ok: false };
     };
@@ -74,7 +75,7 @@ function useDndWiring() {
 function Ghost() {
   const d = dragging.value;
   if (!d) return null;
-  return <div class="vs-ghost" style={{ left: `${d.x}px`, top: `${d.y}px` }}>{d.label}</div>;
+  return <div class="vs-ghost" style={{ left: `${d.x}px`, top: `${d.y}px` }}>{d.icon && <Icon name={d.icon} />} {d.label}</div>;
 }
 
 function dropClass(t: DropTarget): string {
@@ -95,16 +96,16 @@ function SpellRow({ it, sel, onSel }: { it: SpellItem; sel: boolean; onSel: () =
     <div class={`vs-item${sel ? ' sel' : ''}`} tabIndex={0} style={{ touchAction: 'none' }} data-spell={it.uid}
       onFocus={() => { if (ui.device.value === 'pad' || ui.device.value === 'key') onSel(); }}
       onKeyDown={(e) => { if (e.key === 'Enter') onSel(); }}
-      onPointerDown={(e) => beginDrag(e as any, { kind: 'spell', uid: it.uid }, `${t.icon} ${t.name}`, onSel)}>
-      <span class="ic">{t.icon}</span>
+      onPointerDown={(e) => beginDrag(e as any, { kind: 'spell', uid: it.uid }, t.name, onSel, t.icon)}>
+      <span class="ic"><Icon name={t.icon} /></span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <b>{t.name}</b> <span style={{ color: hex(core.color) }}>· {core.name}</span>
         <small>{held && <span class="vs-tag">on {held}</span>} Lv {it.level}{it.level < t.max ? ` · ${it.xp}/${spellXpFor(it.level)} xp` : ' · MAX'} · {t.mode === 'auto' ? 'auto' : 'active'}</small>
       </span>
-      <span>{it.runes.map((r) => (r ? RUNES[r].icon : '◦')).join(' ')}</span>
+      <span class="vs-rr">{it.runes.map((r, i) => (r ? <Icon key={i} name={RUNES[r].icon} /> : <i key={i}>◦</i>))}</span>
       <button class="vs-lockb" title={it.locked ? 'Locked: cannot be salvaged' : 'Lock to protect from salvage'}
         onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => { e.stopPropagation(); it.locked = !it.locked; game.spells.touch(); }}>{it.locked ? '🔒' : '🔓'}</button>
+        onClick={(e) => { e.stopPropagation(); it.locked = !it.locked; game.spells.touch(); }} aria-label={it.locked ? 'Unlock' : 'Lock'}><Icon name={it.locked ? 'lock' : 'unlock'} /></button>
     </div>
   );
 }
@@ -221,11 +222,11 @@ export function Loadout() {
   return (
     <>
     <div class="vs-panel vs-load hit" ref={setPanel}>
-      <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}>✕ ({quickGlyph('spells')})</button>
+      <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}><Icon name="close" /> ({quickGlyph('spells')})</button>
       <h2>Spells &amp; Runes — {ui.party.value.heroes[ui.party.value.active]?.name}
         <span class="vs-heroes">{ui.party.value.heroes.map((h, i) => (
           <button key={h.id} class={`vs-btn vs-hb${i === ui.party.value.active ? ' on' : ''}`} tabIndex={-1} disabled={h.dead}
-            title={i === ui.party.value.active ? `${h.name}'s loadout` : `Switch to ${h.name}`} onClick={() => game.party.switchTo(i)}>{h.icon}</button>
+            title={i === ui.party.value.active ? `${h.name}'s loadout` : `Switch to ${h.name}`} onClick={() => game.party.switchTo(i)}><Icon name={h.icon} /></button>
         ))}</span>
       </h2>
       <div class="sub">Drag spells and runes, or select one and use its buttons (works with the keyboard and a controller too). Greyed runes don’t fit — hover for why. Each hero has their own loadout; a spell can be equipped by one hero at a time.</div>
@@ -263,19 +264,19 @@ export function Loadout() {
           {item && tpl && resolved && (
             <>
               <div class="vs-sec">SELECTED</div>
-              <div><b>{tpl.icon} {tpl.name}</b> — {tpl.desc}</div>
+              <div><b><Icon name={tpl.icon} /> {tpl.name}</b> — {tpl.desc}</div>
               <div class="vs-tip">{describeSpell(resolved).join('  ·  ')}</div>
               <div class="vs-acts">
                 {tpl.mode === 'auto' && !sp.equipped(item.uid) && (
-                  <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'equip' })}>⚔ Equip</button>
+                  <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'equip' })}><Icon name="swords" /> Equip</button>
                 )}
                 {tpl.mode === 'active' && [0, 1, 2].map((i) => (
                   <button key={i} class="vs-btn" disabled={sp.active[i] === item.uid} onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'equip', slot: i })}>
-                    {sp.active[i] === item.uid ? '✔' : '→'} {slotKeys[i]} slot
+                    <Icon name={sp.active[i] === item.uid ? 'check' : 'arrow-right'} /> {slotKeys[i]} slot
                   </button>
                 ))}
                 {sp.equipped(item.uid) && <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'unequip' })}>Unequip</button>}
-                <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'salvage' })}>♻ Salvage{!sp.equipped(item.uid) && !item.locked ? ` ${spellValue(item)}g` : ''}</button>
+                <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'salvage' })}><Icon name="recycle" /> Salvage{!sp.equipped(item.uid) && !item.locked ? ` ${spellValue(item)}g` : ''}</button>
               </div>
               <div class="vs-socks">
                 {item.runes.map((r: string | null, i: number) => {
@@ -284,9 +285,9 @@ export function Loadout() {
                     <button key={i} class={`vs-sock${r ? ' full' : ''}${selRune && canSocket(item, selRune, i).ok ? ' drop' : ''}${dropClass(target)}`}
                       data-drop="socket" data-uid={item.uid} data-slot={i} style={{ touchAction: 'none' }}
                       title={r ? `${RUNES[r].name}: ${RUNES[r].desc} (click to remove, or drag out)` : 'Empty socket'}
-                      onPointerDown={(e) => { if (r) beginDrag(e as any, { kind: 'rune', id: r, from: { uid: item.uid, slot: i } }, `${RUNES[r].icon} ${RUNES[r].name}`, () => trySocket(i)); }}
+                      onPointerDown={(e) => { if (r) beginDrag(e as any, { kind: 'rune', id: r, from: { uid: item.uid, slot: i } }, RUNES[r].name, () => trySocket(i), RUNES[r].icon); }}
                       onClick={(e) => { if (!r || (e as MouseEvent).detail === 0) trySocket(i); }}>
-                      {r ? RUNES[r].icon : '+'}
+                      {r ? <Icon name={RUNES[r].icon} /> : '+'}
                     </button>
                   );
                 })}
@@ -303,8 +304,8 @@ export function Loadout() {
                     <div key={id} class={`vs-rune${selRune === id ? ' sel' : ''}${chk.ok ? '' : ' bad'}`} tabIndex={0} data-rune={id} style={{ touchAction: 'none', borderColor: selRune === id ? undefined : RC(def.rarity) }}
                       title={`${def.name} (${RARITY_NAMES[def.rarity]}) — ${chk.ok ? def.desc : chk.reason}`}
                       onKeyDown={(e) => { if (e.key === 'Enter') setRune(selRune === id ? null : id); }}
-                      onPointerDown={(e) => beginDrag(e as any, { kind: 'rune', id, from: 'bag' }, `${def.icon} ${def.name}`, () => setRune(selRune === id ? null : id))}>
-                      <span class="ic">{def.icon}</span>{def.name}{runeCounts[id] > 1 ? ` ×${runeCounts[id]}` : ''}
+                      onPointerDown={(e) => beginDrag(e as any, { kind: 'rune', id, from: 'bag' }, def.name, () => setRune(selRune === id ? null : id), def.icon)}>
+                      <span class="ic"><Icon name={def.icon} /></span>{def.name}{runeCounts[id] > 1 ? ` ×${runeCounts[id]}` : ''}
                       <i class="vs-rl" style={{ color: RC(def.rarity) }}>{rarityLetter(def.rarity)}</i>
                     </div>
                   );
@@ -312,23 +313,23 @@ export function Loadout() {
               </div>
               {selRune && (
                 <div class="vs-acts">
-                  <button class="vs-btn" onClick={() => { if (applyDrop({ kind: 'rune', id: selRune, from: 'bag' }, { type: 'salvage' })) setRune(null); }}>♻ Salvage {RUNES[selRune].name} {runeValue(selRune)}g</button>
+                  <button class="vs-btn" onClick={() => { if (applyDrop({ kind: 'rune', id: selRune, from: 'bag' }, { type: 'salvage' })) setRune(null); }}><Icon name="recycle" /> Salvage {RUNES[selRune].name} {runeValue(selRune)}g</button>
                   <button class="vs-btn" onClick={() => setRune(null)}>Put it back</button>
                 </div>
               )}
               <div class="vs-tip">
                 {selRune && <b>{RUNES[selRune].name}: {RUNES[selRune].desc}</b>}
                 {selRune && preview.length > 0 && <div>{preview.join('  ·  ')}</div>}
-                {selRune && !preview.length && selReason && <div style={{ color: '#ff9a9a' }}>✕ {selReason}</div>}
+                {selRune && !preview.length && selReason && <div style={{ color: 'var(--c-bad)' }}><Icon name="close" /> {selReason}</div>}
               </div>
             </>
           )}
           <div class={`vs-zone vs-salv${dropClass({ type: 'salvage' })}`} data-drop="salvage">
-            ♻ Drop here to salvage for gold
+            <Icon name="recycle" /> Drop here to salvage for gold
             {item && !sp.equipped(item.uid) && !item.locked && <span class="vs-small"> (selected spell: {spellValue(item)}g)</span>}
           </div>
           <div class="vs-foot">
-            <span title="Gold">🪙 {wallet.gold}</span> <span title="Wood">🪵 {wallet.wood}</span> <span title="Stone">🪨 {wallet.stone}</span> <span title="Iron">⛓ {wallet.iron}</span>
+            <span title="Gold"><Icon name="res-gold" /> {wallet.gold}</span> <span title="Wood"><Icon name="res-wood" /> {wallet.wood}</span> <span title="Stone"><Icon name="res-stone" /> {wallet.stone}</span> <span title="Iron"><Icon name="res-iron" /> {wallet.iron}</span>
             <label>Auto-salvage drops:{' '}
               <select class="vs-in" value={ui.filter.value} onChange={(e) => { const v = (e.target as HTMLSelectElement).value as any; ui.filter.value = v; game.state.lootFilter = v; }}>
                 <option value="off">off</option><option value="basic">basic runes</option><option value="advanced">basic + advanced</option>
@@ -384,8 +385,8 @@ function RunePicker({ item, slot, close }: { item: SpellItem; slot: number; clos
   const tpl = TEMPLATES[item.tpl];
   return (
     <div class="vs-panel vs-picker hit">
-      <button class="vs-btn vs-x" onClick={close}>✕</button>
-      <h2>{tpl.icon} {tpl.name} · socket {slot + 1}</h2>
+      <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
+      <h2><Icon name={tpl.icon} /> {tpl.name} · socket {slot + 1}</h2>
       <div class="sub">Runes that fit this socket. {misfit > 0 ? `${misfit} other rune${misfit > 1 ? 's' : ''} in your bag ${misfit > 1 ? "don't" : "doesn't"} fit.` : ''}</div>
       {!fit.length && <div class="vs-empty">{ids.length ? 'None of your runes fit this spell.' : 'No runes yet. Rare drops from enemies, chests and altars.'}</div>}
       {fit.map((id) => {
@@ -394,7 +395,7 @@ function RunePicker({ item, slot, close }: { item: SpellItem; slot: number; clos
         return (
           <button key={id} class="vs-pick" style={{ '--rc': RC(def.rarity) }}
             onClick={() => { sp.socket(item.uid, id, slot); game.audio.play('equip'); close(); }}>
-            <span class="ic">{def.icon}</span>
+            <span class="ic"><Icon name={def.icon} /></span>
             <span class="tx">
               <b>{def.name}{count(id) > 1 ? ` ×${count(id)}` : ''}</b> <i>{RARITY_NAMES[def.rarity]}</i>
               <small>{def.desc}</small>

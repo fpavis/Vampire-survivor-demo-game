@@ -1,19 +1,19 @@
-# Survival Game 🎮
+# Survival Game 
 
 A fast-paced, browser-based survival game built with PixiJS where you fight endless waves of enemies, collect experience, and level up to become stronger.
 
 ![Game Preview](preview.gif) <!-- TODO: Add your game preview gif -->
 
-## 🌟 Features
+## Features
 
 - **Pseudo-3D View**: Tilted ground plane, upright billboard sprites sorted by depth, raised walls and mountains, cliffs, shadows, atmospheric haze and vignette
 - **Five Biomes, Infinite World**: Chunk-streamed terrain from layered noise
-  - 🌾 **Verdant Fields** (apple trees, birches, flower beds, haystacks, scarecrows) · 🌲 **Whispering Woods** (oaks, pines, giant and glowing mushrooms, logs, ferns) · 🏜️ **Scorched Dunes** (cacti, spires, bones, oasis palms) · 🏖️ **Salt Shore** (palms, shells, driftwood, sea stacks, shallows and deep water) · ⛰️ **Stonecrest Mountains** (snowy pines, boulders, crystals, ore, tall walls and peaks)
+  - **Verdant Fields** (apple trees, birches, flower beds, haystacks, scarecrows) · **Whispering Woods** (oaks, pines, giant and glowing mushrooms, logs, ferns) · **Scorched Dunes** (cacti, spires, bones, oasis palms) · **Salt Shore** (palms, shells, driftwood, sea stacks, shallows and deep water) · **Stonecrest Mountains** (snowy pines, boulders, crystals, ore, tall walls and peaks)
   - Harmless wildlife per biome (rabbits, butterflies, deer, foxes, lizards, snakes, sandpipers, goats) that flee from you
 - **Places to Enter**: caves, ruins and towns are scattered across the world map. Walk up to an entrance and press **E** (or tap the prompt)
-  - 🕳️ **Caves** – cellular-automata tunnels, crystals, guarded treasure chests
-  - 🏛️ **Ruins** – rooms and corridors with pillars, torches and a guardian vault
-  - 🏘️ **Towns** – safe streets with markets, villagers, a healing fountain and an altar that grants a free upgrade
+  - **Caves** – cellular-automata tunnels, crystals, guarded treasure chests
+  - **Ruins** – rooms and corridors with pillars, torches and a guardian vault
+  - **Towns** – safe streets with markets, villagers, a healing fountain and an altar that grants a free upgrade
   - Treasure chests and altars give free upgrade picks without costing a level
 - **World Map**: live minimap plus a full-screen map (**M**) that remembers everything you have explored and every place you have discovered
 - **Regions and roads**: the world is cut into named regions (Hearthvale at the start, then the likes of "the Weald of Morvale") with a banner when you cross into one and their names and capitals on the world map. Roads link neighbouring towns and lead from the start to the nearest one, routed around water and walls; you walk 25% faster on them and signposts (**E**) name where they lead
@@ -29,12 +29,12 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 - **World systems**: ground surfaces (lava and poison hurt, mud and quicksand slow, ice speeds you up, springs heal, mana wells and glyphs boost your magic; fireproof golems and poison-bred spiders shrug them off), claimable hold-out zones that become safe havens, ambush plates, harvestable trees, rocks and ore, and towns with a merchant, an innkeeper, a healer and gossiping townsfolk
 - **Towers, docks and boats**: press **B** to build. Lay a site (click, or Enter), haul gold, wood, stone and iron to it and press **E**; the scaffold grows in stages and a ceremony marks the finished tower. **Arcane Spire** (fires a socketed auto-cast spell from the tower with the spell's own level and runes), **Warding Obelisk** (a dome that holds monsters out and heals you), **Beacon** (reveals a wide area of the map), **Waypoint** (fast travel between waypoints for a gold fare), **Climbing Tower** (carves a stair into a mountain and opens a plateau of ore and crystals), **Bridge Tower** (spans deep water) and **Dock** (moors a boat: sail deep water with WASD, step ashore with **E**, find buried treasure on remote islands, beware gulls and jellyfish). All edits are saved as small deltas on top of the seeded world
 - **Quests, story and dungeons**: every town has an **Elder** (a data-driven main story: five demon lords hold the five regions, Azrathul the Demon Sovereign waits above them) and a **bounty board** (four rotating side jobs from templates: cull, deliver, scout, clear, build, survive; claim the reward at any board). Objectives listen to the world: kills, finding places on the map, clearing dungeons, collecting, delivering goods, building towers, entering places, surviving. **J** opens the journal (D-pad → on a controller), a tracker sits under your portrait and tracked quests mark the world map. Nothing is mandatory: the story only moves when you talk to the Elder
-  - **Dungeons** are a seeded share of caves and ruins (marked 🗝️ on the map): 2 to 5 floors, harder with every step down, stairs that stay **sealed until the floor's guardians fall**, a **boss on the last floor** (the nearest dungeon of each region is its demon lord's lair) and a **guaranteed chest of skills** that waits for you if you leave. Climbing-tower plateaus hide a three-floor **Skyvault** and some remote islands hide a **drowned shrine** (reach them by boat)
+  - **Dungeons** are a seeded share of caves and ruins (marked on the map): 2 to 5 floors, harder with every step down, stairs that stay **sealed until the floor's guardians fall**, a **boss on the last floor** (the nearest dungeon of each region is its demon lord's lair) and a **guaranteed chest of skills** that waits for you if you leave. Climbing-tower plateaus hide a three-floor **Skyvault** and some remote islands hide a **drowned shrine** (reach them by boat)
 - **Graphics**: baked ground textures with organic biome borders, shore foam, earthen banks and water depth; textured cliffs with moss, snow and glowing crystal veins; a light map for caves, ruins and the dark far regions (torches, crystals, spells and explosions glow); region ambience (leaves, pollen, blowing sand, snow, cave motes, ash); `npm run gallery` saves screenshots of every scene
 - **Art**: three distinct, rigged heroes (mage, knight, druid) with walk cycles, shaded robes, armour and sleeves; outlined, shaded monsters with animated legs, wings and glowing eyes; ink-outlined trees with clustered three-tone crowns, feathered palms and snow-laden pines, faceted rocks with cracks, moss and ore; spell effects with trails, shockwaves, light pillars and dash afterimages; gabled, half-timbered town houses with shutters, flower boxes and lanterns; varied townsfolk; gilded minimap frame. `node scripts/artsheet.mjs` lays every sprite out on one sheet, `node scripts/decorsheet.mjs` every tree, rock and prop, and `node scripts/spellshot.mjs` captures each spell
 - **Readable depth**: trees, rocks and buildings in front of the hero fade while they cover them, walls and cliffs show the hero as a silhouette, and names, health bars and damage numbers float above the world. Ordinary monsters show no labels; level tags appear only on elites, warlords and monsters above your level
 - **Sound and music**: every common action has a synthesized sound (hits, crits, kills, each spell, pickups, chests, stairs, building, quests, menus), placed in stereo by where it happens. Procedural music follows the region, towns, caves and dungeons and bosses, gets drums when a fight heats up and darker far from the start. Master, music, effects and menu volume in the pause menu
-- **Accessibility**: text size (90–140%), colour-blind palettes (red-green, blue-yellow) with shape cues on threat tags (▲ ☠) and rarity letters, reduced motion (no shaking or flashing; follows the system setting), and rebinding of every key and controller button (conflicts swap)
+- **Accessibility**: text size (90–140%), colour-blind palettes (red-green, blue-yellow) with shape cues on threat tags (▲ ) and rarity letters, reduced motion (no shaking or flashing; follows the system setting), and rebinding of every key and controller button (conflicts swap)
 - **Onboarding**: short tips that come up once when they matter (moving, gems, level-ups, loot, towns, roads, dark caves, building, quests, the map, bosses) and name the keys or buttons of your device; switch them off or see them again in the pause menu, which also has a How to play page
 - **Performance**: monster, hero and pickup art is baked into shared texture atlases and additive glows batch with everything else, so a fight with 150 monsters draws in about 25 calls per frame. **F3** shows frame rate, step time and draw calls; `node scripts/perf.mjs` runs the benchmark
 - **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, spell and stat slots, mana bar and active skill bar, floating damage numbers with crits, damage vignette. On phones and small windows the HUD shrinks, stacks down the left edge and steps aside whenever a panel is open, so it never covers a menu (`node scripts/layoutshot.mjs` checks three screen sizes)
@@ -44,7 +44,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - In the spell loadout the face buttons act on what is focused: **X** equips or unequips a spell (or sockets a rune), **Y** locks it, **A** on a socket opens a rune picker that lists only the runes that fit with their exact effect, **LB / RB** switch the hero whose loadout you see; on a keyboard **F** and **L** do the same. A hint bar along the bottom shows the buttons for your device
   - The pause menu (Esc / Start) has volume sliders, controller vibration, stick dead zone, the touch joystick options, accessibility options, rebinding, tips, a How to play page and a table of every control
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -73,7 +73,7 @@ npm run dev        # dev server with hot reload
 The roadmap lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and the design notes in
 [docs/VISION.md](docs/VISION.md).
 
-## 🎮 How to Play
+## How to Play
 
 1. **Start the game**: press Enter (or A) on the title screen; tips appear as you play
 2. **Move**: WASD or the arrow keys, click and hold the mouse, the touch joystick, or the left stick
@@ -82,14 +82,14 @@ The roadmap lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) 
 5. **Explore**: follow the roads to towns (healer, merchant, elder, bounty board), enter caves, ruins and dungeons with **E**, open the map with **M**
 6. **Settings**: Esc or Start pauses; the pause menu has sound, accessibility, rebinding, tips and How to play
 
-## 🛠️ Built With
+## Built With
 
 - [PixiJS](https://pixijs.com/) - 2D WebGL renderer
 - Modern JavaScript (ES6+)
 - HTML5 Canvas
 - CSS3
 
-## 🎯 Game Design
+## Game Design
 
 ### Player Stats
 - Health: 100 (base)
@@ -107,7 +107,7 @@ The roadmap lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) 
 - Enemies become more numerous over time
 - Score multiplier increases with level
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -117,17 +117,18 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🎨 Credits
+## Credits
 
-- Game Design & Development: [Your Name]
-- Engine: [PixiJS](https://pixijs.com/)
+- Engine: [PixiJS](https://pixijs.com/), UI: [Preact](https://preactjs.com/)
 - Sound effects and music: synthesized in the browser with the Web Audio API
+- Icons: [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors ([CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)), and [Material Design Icons](https://pictogrammers.com/library/mdi/) ([Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)); only the icons in use are bundled (`scripts/build-icons.mjs`)
+- Fonts: [Cinzel](https://fonts.google.com/specimen/Cinzel) by Natanael Gama and [Nunito](https://fonts.google.com/specimen/Nunito) by Vernon Adams, Cyreal and Jacques Le Bailly ([SIL Open Font License](https://openfontlicense.org))
 
-## 🔮 Future Features
+## Future Features
 
 - [ ] Multiple Character Classes
 - [ ] New Enemy Types
@@ -138,5 +139,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Additional Weapon Types
 - [ ] Boss Battles
 
-## 📧 DEMO
+## DEMO
 https://fpavis.github.io/Vampire-survivor-demo-game/

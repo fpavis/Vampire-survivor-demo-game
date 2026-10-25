@@ -13,7 +13,7 @@ describe('colour palettes', () => {
   it('repeat the meaning with shapes and letters', () => {
     expect(threatMark('even')).toBe('');
     expect(threatMark('high')).toContain('▲');
-    expect(threatMark('deadly')).toContain('☠');
+    expect(threatMark('deadly')).toBe('▲▲ ');
     expect([0, 1, 2, 3, 4].map(rarityLetter)).toEqual(['C', 'U', 'R', 'E', 'L']);
     expect(rarityColor('default', 99)).toBe(rarityColor('default', 4));
   });

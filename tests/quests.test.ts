@@ -167,7 +167,7 @@ describe('quest engine', () => {
     expect(describeObjective({ type: 'clear', target: { kind: 'dungeon' } }, names, 'Gloom Depths')).toBe('Clear Gloom Depths');
     expect(describeObjective({ type: 'kill', count: 2, text: 'Custom' }, names)).toBe('Custom');
     expect(progressText({ type: 'kill', count: 20 }, 7)).toBe('7 / 20');
-    expect(progressText({ type: 'kill', count: 20 }, 20)).toBe('✔');
+    expect(progressText({ type: 'kill', count: 20 }, 20)).toBe('');
     expect(goalOf({ type: 'survive', seconds: 90 })).toBe(90);
   });
 });

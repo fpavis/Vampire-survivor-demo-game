@@ -4,6 +4,7 @@ import { glyph, onPad, quickGlyph } from './hints';
 import { padGlyph } from '../core/input/gamepad';
 import { PALETTES } from '../core/access/palettes';
 import { setAccess } from '../app/access';
+import { Icon } from './Icon';
 
 const kind = () => ui.padKind.value;
 
@@ -76,18 +77,18 @@ export function PauseMenu() {
   const setJoy = (patch: any) => { Object.assign(joy.config, patch); game.ui.updateJoystickConfig(joy); game.ui.updateJoystickPosition(joy); bump((n) => n + 1); };
   return (
     <div class="vs-panel vs-pause hit">
-      <button class="vs-btn vs-x" onClick={close}>✕ ({glyph('menu')})</button>
-      <h2>⏸ Paused</h2>
+      <button class="vs-btn vs-x" onClick={close}><Icon name="close" /> ({glyph('menu')})</button>
+      <h2><Icon name="pause" /> Paused</h2>
       <div class="sub">{onPad() ? 'D-pad to move, A to press, B to go back.' : 'Arrow keys or the mouse to choose, Enter to press, Esc to go back.'}</div>
-      <button class="vs-btn big" onClick={close}>▶ Resume</button>
+      <button class="vs-btn big" onClick={close}><Icon name="play" /> Resume</button>
       <div class="vs-sec">SOUND</div>
-      <button class="vs-btn" onClick={() => { ui.muted.value = !ui.muted.value; game.audio.setMuted(ui.muted.value); }}>{ui.muted.value ? '🔇 Sound is off' : '🔊 Sound is on'}</button>
+      <button class="vs-btn" onClick={() => { ui.muted.value = !ui.muted.value; game.audio.setMuted(ui.muted.value); }}><Icon name={ui.muted.value ? 'sound-off' : 'sound-on'} /> {ui.muted.value ? 'Sound is off' : 'Sound is on'}</button>
       {([['master', 'Master volume'], ['music', 'Music'], ['sfx', 'Effects'], ['ui', 'Menu sounds']] as const).map(([bus, label]) => (
         <Slider key={bus} label={label} min={0} max={1} step={0.05} value={game.audio.volumes[bus]} fmt={(v) => `${Math.round(v * 100)}%`}
           onInput={(v) => { game.audio.setVolume(bus, v); if (bus !== 'music') game.audio.play(bus === 'ui' ? 'uiMove' : 'pickup'); bump((n) => n + 1); }} />
       ))}
       <div class="vs-sec">CONTROLLER{ui.padName.value ? ` — ${ui.padName.value}` : ' — none detected (press any button on it)'}</div>
-      <button class="vs-btn" onClick={() => { ui.vibration.value = !ui.vibration.value; game.input.savePrefs(); game.input.rumble(0.6, 0.6, 200); }}>{ui.vibration.value ? '📳 Vibration is on' : '📴 Vibration is off'}</button>
+      <button class="vs-btn" onClick={() => { ui.vibration.value = !ui.vibration.value; game.input.savePrefs(); game.input.rumble(0.6, 0.6, 200); }}><Icon name={ui.vibration.value ? 'vibrate' : 'vibrate-off'} /> {ui.vibration.value ? 'Vibration is on' : 'Vibration is off'}</button>
       <Slider label="Stick dead zone" min={0.05} max={0.6} step={0.05} value={ui.deadzone.value} fmt={(v) => `${Math.round(v * 100)}%`}
         onInput={(v) => { ui.deadzone.value = v; game.input.savePrefs(); }} />
       {touch && (
@@ -104,18 +105,18 @@ export function PauseMenu() {
       <button class="vs-btn" onClick={() => {
         const i = PALETTES.findIndex((p) => p.id === ui.palette.value);
         setAccess(game, { palette: PALETTES[(i + 1) % PALETTES.length].id });
-      }}>🎨 Colours: {PALETTES.find((p) => p.id === ui.palette.value)?.label}</button>
+      }}><Icon name="palette" /> Colours: {PALETTES.find((p) => p.id === ui.palette.value)?.label}</button>
       <button class="vs-btn" onClick={() => setAccess(game, { reducedMotion: !ui.reducedMotion.value })}>
-        {ui.reducedMotion.value ? '🧘 Reduced motion is on (no shaking or flashing)' : '🎢 Reduced motion is off'}</button>
-      <button class="vs-btn" onClick={() => (ui.rebindOpen.value = true)}>⌨ Rebind keys and buttons…</button>
-      <button class="vs-btn" onClick={() => { game.perf.toggle(); bump((n) => n + 1); }}>{game.perf.shown ? '📈 Frame rate is shown (F3)' : '📉 Show the frame rate (F3)'}</button>
+        <Icon name={ui.reducedMotion.value ? 'motion-off' : 'motion'} /> {ui.reducedMotion.value ? 'Reduced motion is on (no shaking or flashing)' : 'Reduced motion is off'}</button>
+      <button class="vs-btn" onClick={() => (ui.rebindOpen.value = true)}><Icon name="keyboard" /> Rebind keys and buttons…</button>
+      <button class="vs-btn" onClick={() => { game.perf.toggle(); bump((n) => n + 1); }}><Icon name="gauge" /> {game.perf.shown ? 'Frame rate is shown (F3)' : 'Show the frame rate (F3)'}</button>
       <div class="vs-sec">HELP</div>
-      <button class="vs-btn" onClick={() => setAccess(game, { tips: !ui.tipsOn.value })}>{ui.tipsOn.value ? '💡 Tips are on' : '💡 Tips are off'}</button>
-      <button class="vs-btn" onClick={() => { game.tips.forget(); setAccess(game, { tips: true }); game.ui.toast('Tips will show again'); }}>↺ Show every tip again</button>
-      <button class="vs-btn" onClick={() => setHelp(!help)}>{help ? '▾ Hide How to play' : '▸ How to play'}</button>
+      <button class="vs-btn" onClick={() => setAccess(game, { tips: !ui.tipsOn.value })}><Icon name="bulb" /> {ui.tipsOn.value ? 'Tips are on' : 'Tips are off'}</button>
+      <button class="vs-btn" onClick={() => { game.tips.forget(); setAccess(game, { tips: true }); game.ui.toast('Tips will show again'); }}><Icon name="reset" /> Show every tip again</button>
+      <button class="vs-btn" onClick={() => setHelp(!help)}><Icon name={help ? 'chevron-down' : 'chevron-right'} /> {help ? 'Hide How to play' : 'How to play'}</button>
       {help && <HowToPlay />}
       <div class="vs-sec">GAME</div>
-      <button class="vs-btn" onClick={() => { game.requestSave('manual', true); game.ui.toast('Game saved'); }}>💾 Save now</button>
+      <button class="vs-btn" onClick={() => { game.requestSave('manual', true); game.ui.toast('Game saved'); }}><Icon name="save" /> Save now</button>
     </div>
   );
 }

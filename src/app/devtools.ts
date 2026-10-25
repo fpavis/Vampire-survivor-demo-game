@@ -8,6 +8,7 @@ import { ENEMY_TYPES } from '../core/config';
 import * as towersApi from '../core/world/towers';
 import { engage } from '../core/ai/ai';
 import { BIOME } from '../core/world/biomes';
+import { iconDef } from '../core/icons/icons';
 
 declare const __BUILD_INFO__: string;
 declare const __DEVTOOLS_BUTTON__: boolean;
@@ -173,7 +174,7 @@ export function installDevTools(game: any): void {
   if (__DEVTOOLS_BUTTON__) {
     const b = document.createElement('button');
     b.id = 'devtoggle';
-    b.textContent = '🧪';
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="' + iconDef('flask').d + '"/></svg>';
     b.title = 'Test tools (or press `)';
     b.onclick = (e) => { e.stopPropagation(); toggle(); };
     document.body.appendChild(b);

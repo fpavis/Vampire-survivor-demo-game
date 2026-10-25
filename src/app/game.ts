@@ -18,7 +18,7 @@ import { SurfaceSystem } from './surfaces';
 import { SitesRuntime } from './sites';
 import { TowerSystem } from './towers';
 import { SeaSystem } from './sea';
-import { BOAT_SPEED } from '../core/world/towers';
+import { BOAT_SPEED, TOWER_DEFS } from '../core/world/towers';
 import { NODES, isNode, nodeId, rollYield } from '../core/economy/gather';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
@@ -61,7 +61,7 @@ import { quickGlyph } from '../ui/hints';
 
 const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
-const FONT = 'Trebuchet MS, Verdana, Arial, sans-serif';
+import { FONT_UI as FONT, FONT_DISPLAY as SERIF } from '../ui/fonts';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 class Game {
@@ -262,7 +262,7 @@ class Game {
         };
         draw(false);
         const label = new PIXI.Text(text, {
-            fontFamily: 'Georgia, "Palatino Linotype", "Book Antiqua", Palatino, serif', fontSize: 25, fontWeight: 'bold', fill: 0xffffff,
+            fontFamily: SERIF, fontSize: 25, fontWeight: 'bold', fill: 0xffffff,
             letterSpacing: 3, stroke: 0x000000, strokeThickness: 3, dropShadow: true, dropShadowDistance: 2, dropShadowAlpha: 0.6
         });
         label.anchor.set(0.5);
@@ -294,7 +294,6 @@ class Game {
         gctx.fillStyle = grad;
         gctx.fillRect(0, 0, 2, 256);
         const dim = new PIXI.Sprite(PIXI.Texture.from(gc));
-        const SERIF = 'Georgia, "Palatino Linotype", "Book Antiqua", Palatino, serif';
         const title = new PIXI.Text('SURVIVAL', {
             fontFamily: SERIF, fontSize: 92, fontWeight: 'bold', fill: ['#fff8dc', '#f3c75a', '#b0731c'], fillGradientStops: [0, 0.55, 1],
             stroke: 0x2a1604, strokeThickness: 8, dropShadow: true, dropShadowColor: 0xffb44a, dropShadowBlur: 18,
@@ -504,6 +503,7 @@ class Game {
         this.busy = false;
         this.zoneGroup = null;
         this.zoneLabel = '';
+        this.zoneIcon = '';
         this.regionId = null;
         this.regionsSeen = new Set(save && save.regions ? save.regions : []);
         this.interior = null;
@@ -541,8 +541,8 @@ class Game {
         this.map.lairDefeated = (id) => this.session.defeatedLairs[id] !== undefined;
         this.map.extras = () => {
             const out = [];
-            for (const r of this.towers.recs) out.push({ tx: r.tx, ty: r.ty, icon: r.built ? { spire: '🗼', ward: '🔰', beacon: '🔥', waypoint: '🌀', climb: '⛰️', bridge: '🌉', dock: '⚓' }[r.kind] : '🚧', label: r.built ? '' : 'Site', color: '#ffd070' });
-            for (const c of this.sea.known.values()) if (!this.sea.isOpened(c.id) && this.fog.isRevealed(c.tx, c.ty)) out.push({ tx: c.tx, ty: c.ty, icon: '✖', label: 'Treasure', color: '#ffd84a' });
+            for (const r of this.towers.recs) out.push({ tx: r.tx, ty: r.ty, icon: r.built ? TOWER_DEFS[r.kind].icon : 'site', label: r.built ? '' : 'Site', color: '#ffd070' });
+            for (const c of this.sea.known.values()) if (!this.sea.isOpened(c.id) && this.fog.isRevealed(c.tx, c.ty)) out.push({ tx: c.tx, ty: c.ty, icon: 'x-mark', label: 'Treasure', color: '#ffd84a' });
             for (const m of this.quests.markers()) out.push(m);
             return out;
         };
@@ -1004,7 +1004,7 @@ class Game {
         const pt = this.spawnPoint(false) || { x: p.wx + 700, y: p.wy };
         const e = this.makeEnemy(key, pt.x, pt.y, { level: this.zoneLevelNow + 2 });
         e.shell = 'engaged'; e.ai = null;
-        this.ui.banner(`⚠  ${type.name.toUpperCase()} APPROACHES  ⚠`, 0xff5a5a);
+        this.ui.banner(`${type.name.toUpperCase()} APPROACHES`, 0xff5a5a, 'warning');
         this.fx.addShake(6);
         this.audio.play('roar');
     }
@@ -1124,7 +1124,8 @@ class Game {
         this.ambience.setRegion(group, tier >= 2);
         const regionId = this.overworld.regionId(tx, ty);
         const region = this.overworld.region(regionId);
-        this.zoneLabel = `${info.icon} ${region.name} · ${info.name} · Lv ${level}`;
+        this.zoneIcon = info.icon;
+        this.zoneLabel = `${region.name} · ${info.name} · Lv ${level}`;
         const newRegion = regionId !== this.regionId;
         if (newRegion) {
             this.regionId = regionId;
@@ -1132,8 +1133,8 @@ class Game {
             this.regionsSeen.add(regionId);
             this.map.dirty = true;
             if (this.frame > 30) {
-                this.ui.showZone(`${region.name.toUpperCase()}${first ? '' : ''}`, '⚜', 0xf3d08a);
-                this.ui.toast(`${first ? 'Discovered ' : ''}${region.title}${region.capital ? ` · capital: ${region.capital.name}` : ''}`);
+                this.ui.showZone(region.name.toUpperCase(), 'fleur', 0xf3d08a);
+                this.ui.toast(`${first ? 'Discovered ' : ''}${region.title}${region.capital ? ` · capital: ${region.capital.name}` : ''}`, first ? 'map' : '');
             }
             this.events.emit('RegionEntered', { id: regionId, name: region.name, first });
         }
@@ -1308,7 +1309,8 @@ class Game {
         this.populateInterior(src, poi);
         this.dungeons.showFeatures();
         const label = src.dungeon ? `${poi.name} · floor ${floor + 1} of ${src.floors}` : poi.name;
-        this.zoneLabel = `${POI_INFO[poi.type].icon} ${label}`;
+        this.zoneIcon = POI_INFO[poi.type].icon;
+        this.zoneLabel = label;
         this.ui.showZone(label, POI_INFO[poi.type].icon, GROUP_INFO[poi.type].color);
         if (src.dungeon) this.events.emit('FloorEntered', { id: poi.id, floor, floors: src.floors });
 
@@ -1361,7 +1363,7 @@ class Game {
             if (c.big) sprite.scale.set(1.35);
             this.objectLayer.addChild(sprite);
             this.interactables.push({ kind: 'chest', x: c.x, y: c.y, idx: i, big: !!c.big, opened, sprite });
-            if (!opened) this.map.markers.push({ tx: c.x / T, ty: c.y / T, icon: '🎁' });
+            if (!opened) this.map.markers.push({ tx: c.x / T, ty: c.y / T, icon: 'chest' });
         });
         if (poi.type === 'city' && src.fountain) {
             this.spawnNpc('healer', src.fountain.x + 120, src.fountain.y + 10);
@@ -1370,11 +1372,11 @@ class Game {
             this.spawnNpc('elder', src.fountain.x - 230, src.fountain.y - 150);
             this.spawnBoard(src.fountain.x + 240, src.fountain.y - 140);
         }
-        this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: src.floor > 0 ? '⬆' : '🚪' });
-        if (src.stairsDown) this.map.markers.push({ tx: src.stairsDown.x / T, ty: src.stairsDown.y / T, icon: '⬇' });
+        this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: src.floor > 0 ? 'stairs-up' : 'door' });
+        if (src.stairsDown) this.map.markers.push({ tx: src.stairsDown.x / T, ty: src.stairsDown.y / T, icon: 'stairs-down' });
         if (src.dungeon && src.boss) {
             const place = this.visited[poi.id];
-            if (!place.bossDead) { this.dungeons.spawnBoss(src, poi, place); this.map.markers.push({ tx: src.boss.x / T, ty: src.boss.y / T, icon: '💀' }); }
+            if (!place.bossDead) { this.dungeons.spawnBoss(src, poi, place); this.map.markers.push({ tx: src.boss.x / T, ty: src.boss.y / T, icon: 'lair' }); }
             else if (!place.bossChestOpened) this.dungeons.spawnBossChest(src.boss.x, src.boss.y);
         }
         src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
@@ -1433,7 +1435,7 @@ class Game {
         this.objectLayer.addChild(c);
         this.occlusion.float(c, c.label);
         this.interactables.push({ kind: role, x: spot.x, y: spot.y, sprite: c, npc: true });
-        const icon = { healer: '✚', merchant: '💰', innkeeper: '🛏', elder: '📜' }[role];
+        const icon = { healer: 'healer', merchant: 'merchant', innkeeper: 'innkeeper', elder: 'elder' }[role];
         this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon });
         return c;
     }
@@ -1446,7 +1448,7 @@ class Game {
         this.objectLayer.addChild(c);
         this.occlusion.float(c, c.label);
         this.interactables.push({ kind: 'board', x: spot.x, y: spot.y, sprite: c, npc: true });
-        this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon: '📋' });
+        this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon: 'board' });
         return c;
     }
 
@@ -1534,7 +1536,7 @@ class Game {
         const poi = this.interiorPoi;
         const dirs = ['north', 'east', 'south', 'west'];
         const seed = ((poi ? poi.seed : 1) ^ Math.imul(Math.round(c.home ? c.home.x : c.wx) + 7, 7919) ^ Math.round(c.home ? c.home.y : c.wy)) | 0;
-        uiBridge.dialog.value = { speaker: 'Townsperson', icon: '🧑', text: rumorFor(seed, dirs[Math.abs(seed) % 4]) };
+        uiBridge.dialog.value = { speaker: 'Townsperson', icon: 'person', text: rumorFor(seed, dirs[Math.abs(seed) % 4]) };
     }
 
     openChest(it) {
@@ -1545,7 +1547,7 @@ class Game {
         it.sprite.texture = set[1].texture;
         this.fx.burst(it.x, it.y, 28, 0xffd84a, 30, 3.2, { size: 0.9, life: 40, up: 4.2 });
         this.audio.play('chest');
-        this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== '🎁');
+        this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== 'chest');
         this.map.dirty = true;
         if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); return; }
         this.grantLoot(it.big ? 1 : 0);
@@ -1557,14 +1559,14 @@ class Game {
         const found = [];
         const roll = (power) => {
             const d = rollSkillDrop(rand, power);
-            if (d.kind === 'spell') { this.spells.addSpell(d.tpl); found.push(`${TEMPLATES[d.tpl].icon} ${TEMPLATES[d.tpl].name}`); }
-            else { this.spells.addRune(d.id); found.push(`${RUNES[d.id].icon} ${RUNES[d.id].name} rune`); }
+            if (d.kind === 'spell') { this.spells.addSpell(d.tpl); found.push(TEMPLATES[d.tpl].name); }
+            else { this.spells.addRune(d.id); found.push(`${RUNES[d.id].name} rune`); }
         };
         roll(1 + tier);
         if (tier >= 1 || Math.random() < 0.3) roll(1 + tier);
         if (tier >= 2) roll(2 + tier);
         this.audio.play('loot');
-        this.ui.toast(`Found: ${found.join(', ')}`);
+        this.ui.toast(`Found: ${found.join(', ')}`, 'chest');
         const p = this.state.player;
         this.fx.popup(p.wx, p.wy, found[0], 0xffe27a, 20, 80);
         uiBridge.version.value = this.spells.version;
@@ -1584,7 +1586,7 @@ class Game {
         const d = rollSkillDrop(Math.random, power);
         if (d.kind === 'spell') {
             this.spells.addSpell(d.tpl);
-            this.ui.banner(`${TEMPLATES[d.tpl].icon} NEW SPELL: ${TEMPLATES[d.tpl].name.toUpperCase()}`, 0xb9a5ff);
+            this.ui.banner(`NEW SPELL: ${TEMPLATES[d.tpl].name.toUpperCase()}`, 0xb9a5ff, TEMPLATES[d.tpl].icon);
         } else if (filteredOut(d.id, this.state.lootFilter)) {
             const g = Math.round(runeValue(d.id));
             this.state.wallet.gold += g;
@@ -1592,7 +1594,7 @@ class Game {
             return;
         } else {
             this.spells.addRune(d.id);
-            this.ui.banner(`${RUNES[d.id].icon} RUNE: ${RUNES[d.id].name.toUpperCase()}`, 0x9ff2ff);
+            this.ui.banner(`RUNE: ${RUNES[d.id].name.toUpperCase()}`, 0x9ff2ff, RUNES[d.id].icon);
         }
         this.audio.play('loot');
         uiBridge.version.value = this.spells.version;

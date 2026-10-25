@@ -62,7 +62,7 @@ const dun = await ev(() => { const p = window.fieldDungeon(); return p && { id: 
 check('a dungeon exists in the fields', !!dun && dun.group === 'field', JSON.stringify(dun));
 await ev((id) => { const g = window.game; const poi = window.fieldDungeon(); window.__poi = poi; g.state.nextLevel = 1e12; g.enterPlace(poi); }, dun.id);
 await waitInside();
-const f0 = await ev(() => { const g = window.game, i = g.interior; return { floor: g.floor, floors: i.floors, stairs: !!i.stairsDown, boss: !!i.boss, guardians: g.state.enemies.filter((e) => e.guardian).length, label: g.zoneLabel, hasUpMarker: g.map.markers.some((m) => m.icon === '⬇') }; });
+const f0 = await ev(() => { const g = window.game, i = g.interior; return { floor: g.floor, floors: i.floors, stairs: !!i.stairsDown, boss: !!i.boss, guardians: g.state.enemies.filter((e) => e.guardian).length, label: g.zoneLabel, hasUpMarker: g.map.markers.some((m) => m.icon === 'stairs-down') }; });
 check('the dungeon opens on its first floor with stairs down and guardians', f0.floor === 0 && f0.floors >= 2 && f0.stairs && !f0.boss && f0.guardians >= 2 && f0.hasUpMarker, JSON.stringify(f0));
 check('the zone label names the floor', /floor 1 of/.test(f0.label), f0.label);
 const sealed = await ev(() => { const g = window.game, s = g.interior.stairsDown; window.stand(s.x, s.y + 30); return { kind: g.target && g.target.kind, sealed: g.target && g.target.sealed, text: g.target && g.target.text }; });
@@ -89,7 +89,7 @@ for (let f = 0; f < last; f++) {
   await ev(() => { window.game.changeFloor(1); });
   await page.waitForFunction((n) => window.game.floor === n && !window.game.busy, f + 1, { timeout: 8000 });
 }
-const boss = await ev(() => { const g = window.game, b = g.state.enemies.find((e) => e.dungeonBoss); return b && { name: b.bossName, isBoss: !!b.isBoss, type: b.type, level: b.level, hasStairs: !!g.interior.stairsDown, marker: g.map.markers.some((m) => m.icon === '💀') }; });
+const boss = await ev(() => { const g = window.game, b = g.state.enemies.find((e) => e.dungeonBoss); return b && { name: b.bossName, isBoss: !!b.isBoss, type: b.type, level: b.level, hasStairs: !!g.interior.stairsDown, marker: g.map.markers.some((m) => m.icon === 'lair') }; });
 check('the last floor holds the boss and no stairs', boss && boss.isBoss && !boss.hasStairs && boss.marker, JSON.stringify(boss));
 const items0 = await ev(() => window.game.spells.spells.length + window.game.spells.runes.length);
 await ev(() => { window.killAll((e) => e.dungeonBoss); });

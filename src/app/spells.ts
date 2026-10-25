@@ -279,7 +279,7 @@ export class SpellSystem {
         if (!item) return;
         const r = this.resolved(item);
         if (addSpellXp(item, 1)) {
-            g.ui.toast(`${r.tpl.icon} ${r.tpl.name} reached level ${item.level}`);
+            g.ui.toast(`${r.tpl.name} reached level ${item.level}`, r.tpl.icon);
             this.touch();
         }
         if (r.p.leech) g.state.health = Math.min(g.state.maxHealth, g.state.health + r.p.leech);

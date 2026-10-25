@@ -1,6 +1,7 @@
 import { ui } from './bridge';
 import { glyph, onPad, quickGlyph } from './hints';
 import { fillTip } from '../core/onboarding/tips';
+import { Icon } from './Icon';
 
 const QUICK = new Set(['spells', 'upgrades', 'build', 'journal']);
 
@@ -21,9 +22,9 @@ export function TipCard() {
   if (!tip || !ui.tipsOn.value) return null;
   return (
     <div class="vs-coach hit" role="status" data-tip={tip.id}>
-      <span class="ic">{tip.icon}</span>
+      <span class="ic"><Icon name={tip.icon} /></span>
       <span class="tx">{fillTip(tip.text, tipGlyph)}</span>
-      <button class="vs-btn vs-x" onClick={() => ui.game?.tips.dismiss()} title={onPad() ? `Hide (${glyph('cancel')})` : 'Hide'} aria-label="Hide this tip">✕</button>
+      <button class="vs-btn vs-x" onClick={() => ui.game?.tips.dismiss()} title={onPad() ? `Hide (${glyph('cancel')})` : 'Hide'} aria-label="Hide this tip"><Icon name="close" /></button>
     </div>
   );
 }

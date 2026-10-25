@@ -65,7 +65,7 @@ export class DialogueRunner {
       .map((c, index) => ({ c, index }))
       .filter(({ c }) => (c.if ?? []).every((k) => this.ctx.check(k)))
       .map(({ c, index }) => ({ text: fillVars(c.text, this.ctx.vars), index }));
-    return { speaker: n.speaker, icon: n.icon ?? '🧓', text: fillVars(n.text, this.ctx.vars), choices, last: !n.next && !choices.length };
+    return { speaker: n.speaker, icon: n.icon ?? 'elder', text: fillVars(n.text, this.ctx.vars), choices, last: !n.next && !choices.length };
   }
 
   /** Move on (a click, or a chosen answer). Returns true while the conversation continues. */

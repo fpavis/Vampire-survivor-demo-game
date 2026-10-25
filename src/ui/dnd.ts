@@ -8,7 +8,7 @@ export type Payload =
 export interface DropTarget { type: 'socket' | 'bag' | 'equip' | 'unequip' | 'salvage'; uid?: string; slot?: number }
 export interface DropCheck { ok: boolean; reason?: string }
 
-export const dragging = signal<{ payload: Payload; label: string; x: number; y: number; hover: DropTarget | null } | null>(null);
+export const dragging = signal<{ payload: Payload; label: string; icon?: string; x: number; y: number; hover: DropTarget | null } | null>(null);
 
 let validate: (p: Payload, t: DropTarget) => DropCheck = () => ({ ok: true });
 let commit: (p: Payload, t: DropTarget) => void = () => {};
@@ -31,18 +31,44 @@ function targetAt(x: number, y: number): DropTarget | null {
   return { type: el.dataset.drop as DropTarget['type'], uid: el.dataset.uid, slot: el.dataset.slot !== undefined ? Number(el.dataset.slot) : undefined };
 }
 
+/** The scrollable panel under a point, if any: dragging near its top or bottom edge scrolls it. */
+function scrollerAt(x: number, y: number): HTMLElement | null {
+  let el = document.elementFromPoint(x, y) as HTMLElement | null;
+  for (; el; el = el.parentElement) if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(el).overflowY)) return el;
+  return null;
+}
+
+const EDGE = 56;          // px from a panel's edge where dragging starts to scroll it
+
 /** Attach to onPointerDown of a draggable. `onClick` runs if the pointer never moved far enough to drag. */
-export function beginDrag(e: PointerEvent, payload: Payload, label: string, onClick?: () => void) {
+export function beginDrag(e: PointerEvent, payload: Payload, label: string, onClick?: () => void, icon?: string) {
   if (e.button !== 0 && e.pointerType === 'mouse') return;
   const sx = e.clientX, sy = e.clientY;
   let active = false;
+  let px = sx, py = sy, raf = 0;
+  // scroll the panel under the pointer while it rests near the panel's top or bottom edge
+  const scroll = () => {
+    raf = 0;
+    if (!active) return;
+    const box = scrollerAt(px, py);
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    const v = py < r.top + EDGE ? -(r.top + EDGE - py) : py > r.bottom - EDGE ? py - (r.bottom - EDGE) : 0;
+    if (!v) return;
+    box.scrollTop += Math.max(-18, Math.min(18, v * 0.35));
+    dragging.value = dragging.value && { ...dragging.value, hover: targetAt(px, py) };
+    raf = requestAnimationFrame(scroll);
+  };
   const move = (ev: PointerEvent) => {
     if (!active && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 7) return;
     active = true;
     ev.preventDefault();
-    dragging.value = { payload, label, x: ev.clientX, y: ev.clientY, hover: targetAt(ev.clientX, ev.clientY) };
+    px = ev.clientX; py = ev.clientY;
+    dragging.value = { payload, label, icon, x: ev.clientX, y: ev.clientY, hover: targetAt(ev.clientX, ev.clientY) };
+    if (!raf) raf = requestAnimationFrame(scroll);
   };
   const up = (ev: PointerEvent) => {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
     window.removeEventListener('pointercancel', cancel);
@@ -54,6 +80,7 @@ export function beginDrag(e: PointerEvent, payload: Payload, label: string, onCl
     if (chk.ok) commit(payload, t); else if (chk.reason) reject(chk.reason);
   };
   const cancel = () => {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
     window.removeEventListener('pointercancel', cancel);

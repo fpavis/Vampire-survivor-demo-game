@@ -12,9 +12,9 @@ export const RESPAWN_HEALTH = 0.4;
 export interface HeroDef { id: string; name: string; icon: string; color: number; tint: number; starter: { auto: string[]; active: string[] } }
 
 export const HERO_DEFS: HeroDef[] = [
-  { id: 'aria', name: 'Aria', icon: '🔮', color: 0x6aa8ff, tint: 0xffffff, starter: { auto: ['bolt'], active: ['dash'] } },
-  { id: 'brann', name: 'Brann', icon: '🔥', color: 0xff8a5a, tint: 0xffa890, starter: { auto: ['orbit'], active: ['barrier'] } },
-  { id: 'cyra', name: 'Cyra', icon: '🌿', color: 0x7be07b, tint: 0xa6ffb4, starter: { auto: ['nova'], active: ['blink'] } }
+  { id: 'aria', name: 'Aria', icon: 'hero-aria', color: 0x6aa8ff, tint: 0xffffff, starter: { auto: ['bolt'], active: ['dash'] } },
+  { id: 'brann', name: 'Brann', icon: 'hero-brann', color: 0xff8a5a, tint: 0xffa890, starter: { auto: ['orbit'], active: ['barrier'] } },
+  { id: 'cyra', name: 'Cyra', icon: 'hero-cyra', color: 0x7be07b, tint: 0xa6ffb4, starter: { auto: ['nova'], active: ['blink'] } }
 ];
 
 export interface HeroState {

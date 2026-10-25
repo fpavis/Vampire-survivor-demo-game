@@ -38,7 +38,7 @@ export const rarityColor = (p: PaletteId, tier: number): number => {
 export const goodBad = (p: PaletteId) => GOOD_BAD[p] ?? GOOD_BAD.default;
 
 /** Shape cue in front of a level tag: nothing for ordinary monsters, a triangle for strong, a skull for deadly. */
-export const threatMark = (t: Threat): string => (t === 'deadly' ? '☠ ' : t === 'high' ? '▲ ' : '');
+export const threatMark = (t: Threat): string => (t === 'deadly' ? '▲▲ ' : t === 'high' ? '▲ ' : '');
 
 /** Letter cue for a rarity tier. */
 export const rarityLetter = (tier: number): string => 'CURELL'[Math.max(0, Math.min(4, tier))];

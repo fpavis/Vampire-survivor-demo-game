@@ -53,11 +53,15 @@ await page.evaluate(() => {
 });
 await page.keyboard.press('i');
 await page.waitForSelector('.vs-load');
+// the panel scrolls: bring the item into view, pick it up, scroll to the target (as a wheel would) and drop it there
 const drag = async (from, to) => {
-  const a = await from.boundingBox(), b = await to.boundingBox();
+  await from.scrollIntoViewIfNeeded();
+  const a = await from.boundingBox();
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12, { steps: 3 });
+  await to.scrollIntoViewIfNeeded();
+  const b = await to.boundingBox();
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
   await page.mouse.up();
 };

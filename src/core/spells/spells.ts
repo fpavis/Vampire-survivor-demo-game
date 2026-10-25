@@ -72,12 +72,12 @@ export interface RuneDef {
 }
 
 export const CORE_INFO: Record<CoreId, { name: string; color: number; icon: string }> = {
-  arcane: { name: 'Arcane', color: 0xffd84a, icon: '✨' },
-  frost: { name: 'Frost', color: 0x9be7ff, icon: '❄️' },
-  fire: { name: 'Fire', color: 0xff8a3a, icon: '🔥' },
-  lightning: { name: 'Storm', color: 0xb9a5ff, icon: '⚡' },
-  force: { name: 'Force', color: 0xc9d4e0, icon: '💠' },
-  life: { name: 'Life', color: 0x7be07b, icon: '🌿' }
+  arcane: { name: 'Arcane', color: 0xffd84a, icon: 'school-arcane' },
+  frost: { name: 'Frost', color: 0x9be7ff, icon: 'school-frost' },
+  fire: { name: 'Fire', color: 0xff8a3a, icon: 'school-fire' },
+  lightning: { name: 'Storm', color: 0xb9a5ff, icon: 'school-storm' },
+  force: { name: 'Force', color: 0xc9d4e0, icon: 'school-force' },
+  life: { name: 'Life', color: 0x7be07b, icon: 'school-life' }
 };
 
 const D: Params = {
@@ -90,72 +90,72 @@ const cd = (base: number, f: number, l: number) => Math.round(base * Math.pow(f,
 // Level curves reproduce the original five weapons so balance stays comparable.
 export const TEMPLATES: Record<string, SpellTemplate> = {
   bolt: {
-    id: 'bolt', name: 'Arcane Bolt', icon: '✨', core: 'arcane', expr: 'bolt', mode: 'auto', sockets: 2, max: 8,
+    id: 'bolt', name: 'Arcane Bolt', icon: 'spell-bolt', core: 'arcane', expr: 'bolt', mode: 'auto', sockets: 2, max: 8,
     desc: 'Fires magic bolts at the nearest enemies.',
     base: (l) => ({ damage: 22 + 6 * (l - 1), cooldown: cd(700, 0.92, l), count: 1 + Math.floor((l - 1) / 2), pierce: Math.floor((l - 1) / 3), speed: 9 })
   },
   orbit: {
-    id: 'orbit', name: 'Spirit Blades', icon: '🗡️', core: 'force', expr: 'orbit', mode: 'auto', sockets: 2, max: 8,
+    id: 'orbit', name: 'Spirit Blades', icon: 'spell-orbit', core: 'force', expr: 'orbit', mode: 'auto', sockets: 2, max: 8,
     desc: 'Blades circle around you and shred anything close.',
     base: (l) => ({ damage: 12 + 4 * (l - 1), count: 2 + Math.floor(l / 2), radius: 78 + 6 * (l - 1), speed: 0.034 + 0.004 * (l - 1) })
   },
   lightning: {
-    id: 'lightning', name: 'Chain Lightning', icon: '⚡', core: 'lightning', expr: 'chain', mode: 'auto', sockets: 2, max: 8,
+    id: 'lightning', name: 'Chain Lightning', icon: 'spell-chain', core: 'lightning', expr: 'chain', mode: 'auto', sockets: 2, max: 8,
     desc: 'Calls down lightning that jumps between enemies.',
     base: (l) => ({ damage: 26 + 8 * (l - 1), cooldown: cd(1500, 0.93, l), count: 1 + Math.floor((l - 1) / 3), jumps: 2 + Math.floor(l / 2) })
   },
   nova: {
-    id: 'nova', name: 'Frost Nova', icon: '❄️', core: 'frost', expr: 'nova', mode: 'auto', sockets: 2, max: 8,
+    id: 'nova', name: 'Frost Nova', icon: 'spell-nova', core: 'frost', expr: 'nova', mode: 'auto', sockets: 2, max: 8,
     desc: 'A freezing shockwave that damages, slows and pushes back.',
     base: (l) => ({ damage: 22 + 7 * (l - 1), cooldown: cd(3200, 0.92, l), radius: 130 + 16 * (l - 1), slow: Math.min(0.75, 0.35 + 0.05 * (l - 1)), knock: 1 })
   },
   meteor: {
-    id: 'meteor', name: 'Meteor', icon: '☄️', core: 'fire', expr: 'meteor', mode: 'auto', sockets: 2, max: 8,
+    id: 'meteor', name: 'Meteor', icon: 'spell-meteor', core: 'fire', expr: 'meteor', mode: 'auto', sockets: 2, max: 8,
     desc: 'Summons meteors that crash down on enemies.',
     base: (l) => ({ damage: 46 + 15 * (l - 1), cooldown: cd(2800, 0.92, l), count: 1 + Math.floor(l / 3), radius: 64 + 7 * (l - 1), burn: 6 })
   },
   dash: {
-    id: 'dash', name: 'Dash', icon: '💨', core: 'force', expr: 'dash', mode: 'active', sockets: 1, max: 5,
+    id: 'dash', name: 'Dash', icon: 'spell-dash', core: 'force', expr: 'dash', mode: 'active', sockets: 1, max: 5,
     desc: 'Burst forward and become untouchable for a moment.',
     base: (l) => ({ cooldown: 900, mana: 22, range: 150 + 12 * (l - 1), duration: 0.28 + 0.03 * l, damage: 0 })
   },
   blink: {
-    id: 'blink', name: 'Blink', icon: '🌀', core: 'arcane', expr: 'blink', mode: 'active', sockets: 1, max: 5,
+    id: 'blink', name: 'Blink', icon: 'spell-blink', core: 'arcane', expr: 'blink', mode: 'active', sockets: 1, max: 5,
     desc: 'Teleport toward the cursor or your movement direction.',
     base: (l) => ({ cooldown: 2400, mana: 38, range: 260 + 25 * (l - 1), damage: 0 })
   },
   barrier: {
-    id: 'barrier', name: 'Aegis', icon: '🛡️', core: 'life', expr: 'barrier', mode: 'active', sockets: 1, max: 5,
+    id: 'barrier', name: 'Aegis', icon: 'spell-barrier', core: 'life', expr: 'barrier', mode: 'active', sockets: 1, max: 5,
     desc: 'A ward that blocks all damage while mana lasts.',
     base: (l) => ({ cooldown: 6000, mana: 45, duration: 2.2 + 0.4 * (l - 1), radius: 60 })
   },
   trail: {
-    id: 'trail', name: 'Ember Trail', icon: '🔥', core: 'fire', expr: 'trail', mode: 'auto', sockets: 2, max: 8,
+    id: 'trail', name: 'Ember Trail', icon: 'spell-trail', core: 'fire', expr: 'trail', mode: 'auto', sockets: 2, max: 8,
     desc: 'You leave burning ground behind you as you move.',
     base: (l) => ({ damage: 9 + 3 * (l - 1), cooldown: cd(320, 0.95, l), radius: 34 + 3 * (l - 1), duration: 2.2 + 0.2 * (l - 1), burn: 4 })
   },
   wisp: {
-    id: 'wisp', name: 'Seeker Wisps', icon: '🔮', core: 'arcane', expr: 'wisp', mode: 'auto', sockets: 2, max: 8,
+    id: 'wisp', name: 'Seeker Wisps', icon: 'spell-wisp', core: 'arcane', expr: 'wisp', mode: 'auto', sockets: 2, max: 8,
     desc: 'Slow wisps drift out and hunt the nearest enemies.',
     base: (l) => ({ damage: 18 + 5 * (l - 1), cooldown: cd(1500, 0.93, l), count: 1 + Math.floor(l / 3), speed: 4.2, homing: 1 })
   },
   glaive: {
-    id: 'glaive', name: 'Returning Glaive', icon: '🪃', core: 'force', expr: 'glaive', mode: 'auto', sockets: 2, max: 8,
+    id: 'glaive', name: 'Returning Glaive', icon: 'spell-glaive', core: 'force', expr: 'glaive', mode: 'auto', sockets: 2, max: 8,
     desc: 'A spinning glaive cuts through a line of enemies and flies back to you.',
     base: (l) => ({ damage: 20 + 6 * (l - 1), cooldown: cd(1700, 0.93, l), count: 1 + Math.floor((l - 1) / 3), range: 270 + 15 * (l - 1), speed: 8, pierce: 99 })
   },
   cloud: {
-    id: 'cloud', name: 'Spore Cloud', icon: '🍄', core: 'life', expr: 'cloud', mode: 'auto', sockets: 2, max: 8,
+    id: 'cloud', name: 'Spore Cloud', icon: 'spell-cloud', core: 'life', expr: 'cloud', mode: 'auto', sockets: 2, max: 8,
     desc: 'A choking cloud settles on a crowd, hurting and slowing it.',
     base: (l) => ({ damage: 7 + 2.5 * (l - 1), cooldown: cd(3800, 0.92, l), radius: 72 + 6 * (l - 1), duration: 4 + 0.25 * (l - 1), slow: 0.3 })
   },
   slam: {
-    id: 'slam', name: 'Earthshatter', icon: '🪨', core: 'force', expr: 'slam', mode: 'active', sockets: 1, max: 5,
+    id: 'slam', name: 'Earthshatter', icon: 'spell-slam', core: 'force', expr: 'slam', mode: 'active', sockets: 1, max: 5,
     desc: 'Smash the ground: everything around you is hurt and hurled away.',
     base: (l) => ({ damage: 40 + 12 * (l - 1), cooldown: 4000, mana: 30, radius: 140 + 10 * (l - 1), knock: 2.2, slow: 0.4 })
   },
   heal: {
-    id: 'heal', name: 'Mending Light', icon: '💚', core: 'life', expr: 'heal', mode: 'active', sockets: 1, max: 5,
+    id: 'heal', name: 'Mending Light', icon: 'spell-heal', core: 'life', expr: 'heal', mode: 'active', sockets: 1, max: 5,
     desc: 'Warm light heals the active hero for a few seconds.',
     base: (l) => ({ cooldown: 9000, mana: 40, heal: 6 + 2 * (l - 1), duration: 4 + 0.5 * (l - 1) })
   }
@@ -164,41 +164,41 @@ export const TEMPLATES: Record<string, SpellTemplate> = {
 const ALL_DMG: ExprId[] = ['bolt', 'orbit', 'chain', 'nova', 'meteor', 'trail', 'wisp', 'glaive', 'cloud', 'slam'];
 
 export const RUNES: Record<string, RuneDef> = {
-  multishot: { id: 'multishot', name: 'Multishot', icon: '🔱', rarity: 1, desc: '+1 projectile, -12% damage.', exprs: ['bolt', 'chain', 'meteor', 'orbit', 'wisp', 'glaive'],
+  multishot: { id: 'multishot', name: 'Multishot', icon: 'rune-multishot', rarity: 1, desc: '+1 projectile, -12% damage.', exprs: ['bolt', 'chain', 'meteor', 'orbit', 'wisp', 'glaive'],
     mods: [{ p: 'count', add: 1 }, { p: 'damage', mul: 0.88 }] },
-  piercing: { id: 'piercing', name: 'Piercing', icon: '➶', rarity: 1, desc: 'Bolts pierce 2 more enemies.', exprs: ['bolt', 'wisp'],
+  piercing: { id: 'piercing', name: 'Piercing', icon: 'rune-piercing', rarity: 1, desc: 'Bolts pierce 2 more enemies.', exprs: ['bolt', 'wisp'],
     mods: [{ p: 'pierce', add: 2 }] },
-  swift: { id: 'swift', name: 'Swift', icon: '⏩', rarity: 1, desc: '-20% cooldown.', mods: [{ p: 'cooldown', mul: 0.8 }] },
-  heavy: { id: 'heavy', name: 'Heavy', icon: '🔨', rarity: 1, desc: '+35% damage, +15% cooldown.', exprs: ALL_DMG,
+  swift: { id: 'swift', name: 'Swift', icon: 'rune-swift', rarity: 1, desc: '-20% cooldown.', mods: [{ p: 'cooldown', mul: 0.8 }] },
+  heavy: { id: 'heavy', name: 'Heavy', icon: 'rune-heavy', rarity: 1, desc: '+35% damage, +15% cooldown.', exprs: ALL_DMG,
     mods: [{ p: 'damage', mul: 1.35 }, { p: 'cooldown', mul: 1.15 }] },
-  wide: { id: 'wide', name: 'Wide', icon: '⭕', rarity: 1, desc: '+30% area.', exprs: ['nova', 'meteor', 'orbit', 'barrier', 'trail', 'cloud', 'slam'],
+  wide: { id: 'wide', name: 'Wide', icon: 'rune-wide', rarity: 1, desc: '+30% area.', exprs: ['nova', 'meteor', 'orbit', 'barrier', 'trail', 'cloud', 'slam'],
     mods: [{ p: 'radius', mul: 1.3 }] },
-  chaining: { id: 'chaining', name: 'Chaining', icon: '🔗', rarity: 2, desc: '+2 chain jumps.', exprs: ['chain'],
+  chaining: { id: 'chaining', name: 'Chaining', icon: 'rune-chaining', rarity: 2, desc: '+2 chain jumps.', exprs: ['chain'],
     mods: [{ p: 'jumps', add: 2 }] },
-  frostbite: { id: 'frostbite', name: 'Frostbite', icon: '🧊', rarity: 2, desc: 'Hits slow enemies by 30%.', exprs: ALL_DMG, notCores: ['fire'],
+  frostbite: { id: 'frostbite', name: 'Frostbite', icon: 'rune-frostbite', rarity: 2, desc: 'Hits slow enemies by 30%.', exprs: ALL_DMG, notCores: ['fire'],
     mods: [{ p: 'slow', add: 0.3 }] },
-  ignite: { id: 'ignite', name: 'Ignite', icon: '🔥', rarity: 2, desc: 'Hits burn for 8 damage/s.', exprs: ALL_DMG, notCores: ['frost'],
+  ignite: { id: 'ignite', name: 'Ignite', icon: 'rune-ignite', rarity: 2, desc: 'Hits burn for 8 damage/s.', exprs: ALL_DMG, notCores: ['frost'],
     mods: [{ p: 'burn', add: 8 }] },
-  shove: { id: 'shove', name: 'Shove', icon: '👊', rarity: 1, desc: '+80% knock-back.', exprs: ALL_DMG, mods: [{ p: 'knock', add: 0.8 }] },
-  spark: { id: 'spark', name: 'Spark', icon: '✴️', rarity: 3, desc: '20% on hit: a spark zaps another enemy for 60% damage.', exprs: ['bolt', 'orbit', 'meteor', 'nova', 'wisp', 'glaive', 'slam'], notCores: ['lightning'],
+  shove: { id: 'shove', name: 'Shove', icon: 'rune-shove', rarity: 1, desc: '+80% knock-back.', exprs: ALL_DMG, mods: [{ p: 'knock', add: 0.8 }] },
+  spark: { id: 'spark', name: 'Spark', icon: 'rune-spark', rarity: 3, desc: '20% on hit: a spark zaps another enemy for 60% damage.', exprs: ['bolt', 'orbit', 'meteor', 'nova', 'wisp', 'glaive', 'slam'], notCores: ['lightning'],
     mods: [], trigger: { on: 'hit', payload: 'spark', chance: 0.2, power: 0.6 } },
-  echo: { id: 'echo', name: 'Death Echo', icon: '💥', rarity: 3, desc: 'Enemies killed by this spell explode for 70% damage.', exprs: ALL_DMG,
+  echo: { id: 'echo', name: 'Death Echo', icon: 'rune-echo', rarity: 3, desc: 'Enemies killed by this spell explode for 70% damage.', exprs: ALL_DMG,
     mods: [], trigger: { on: 'kill', payload: 'burst', chance: 1, power: 0.7 } },
-  vampiric: { id: 'vampiric', name: 'Vampiric', icon: '🩸', rarity: 3, desc: 'Each kill heals 1 HP.', exprs: ALL_DMG, mods: [{ p: 'leech', add: 1 }] },
-  efficient: { id: 'efficient', name: 'Efficient', icon: '💧', rarity: 1, desc: '-30% mana cost.', mode: 'active', mods: [{ p: 'mana', mul: 0.7 }] },
-  reach: { id: 'reach', name: 'Far Reach', icon: '↗️', rarity: 2, desc: '+40% distance.', exprs: ['dash', 'blink'], mods: [{ p: 'range', mul: 1.4 }] },
-  lingering: { id: 'lingering', name: 'Lingering', icon: '⏳', rarity: 2, desc: '+50% duration.', exprs: ['barrier', 'dash', 'trail', 'cloud', 'heal'], mods: [{ p: 'duration', mul: 1.5 }] },
-  keen: { id: 'keen', name: 'Keen Edge', icon: '🎯', rarity: 1, desc: '+12% critical-hit chance.', exprs: ALL_DMG, mods: [{ p: 'crit', add: 0.12 }] },
-  colossal: { id: 'colossal', name: 'Colossal', icon: '🗿', rarity: 2, desc: '+30% area, +15% damage, +20% cooldown.', exprs: ['nova', 'meteor', 'orbit', 'cloud', 'slam', 'trail'],
+  vampiric: { id: 'vampiric', name: 'Vampiric', icon: 'rune-vampiric', rarity: 3, desc: 'Each kill heals 1 HP.', exprs: ALL_DMG, mods: [{ p: 'leech', add: 1 }] },
+  efficient: { id: 'efficient', name: 'Efficient', icon: 'rune-efficient', rarity: 1, desc: '-30% mana cost.', mode: 'active', mods: [{ p: 'mana', mul: 0.7 }] },
+  reach: { id: 'reach', name: 'Far Reach', icon: 'rune-reach', rarity: 2, desc: '+40% distance.', exprs: ['dash', 'blink'], mods: [{ p: 'range', mul: 1.4 }] },
+  lingering: { id: 'lingering', name: 'Lingering', icon: 'rune-lingering', rarity: 2, desc: '+50% duration.', exprs: ['barrier', 'dash', 'trail', 'cloud', 'heal'], mods: [{ p: 'duration', mul: 1.5 }] },
+  keen: { id: 'keen', name: 'Keen Edge', icon: 'rune-keen', rarity: 1, desc: '+12% critical-hit chance.', exprs: ALL_DMG, mods: [{ p: 'crit', add: 0.12 }] },
+  colossal: { id: 'colossal', name: 'Colossal', icon: 'rune-colossal', rarity: 2, desc: '+30% area, +15% damage, +20% cooldown.', exprs: ['nova', 'meteor', 'orbit', 'cloud', 'slam', 'trail'],
     mods: [{ p: 'radius', mul: 1.3 }, { p: 'damage', mul: 1.15 }, { p: 'cooldown', mul: 1.2 }] },
-  ricochet: { id: 'ricochet', name: 'Ricochet', icon: '↩️', rarity: 2, desc: 'Bolts bounce to 2 more enemies.', exprs: ['bolt', 'wisp'], mods: [{ p: 'jumps', add: 2 }] },
-  seeking: { id: 'seeking', name: 'Seeking', icon: '🧲', rarity: 1, desc: 'Projectiles curve toward enemies.', exprs: ['bolt', 'glaive'], mods: [{ p: 'homing', add: 1 }] },
-  siphon: { id: 'siphon', name: 'Mana Siphon', icon: '💧', rarity: 2, desc: 'Kills with this spell restore 2 mana.', exprs: ALL_DMG, mods: [{ p: 'manaLeech', add: 2 }] },
-  splinter: { id: 'splinter', name: 'Splinter', icon: '💎', rarity: 3, desc: 'Kills burst into 3 shards for 40% damage.', exprs: ['bolt', 'glaive', 'chain', 'meteor', 'wisp'],
+  ricochet: { id: 'ricochet', name: 'Ricochet', icon: 'rune-ricochet', rarity: 2, desc: 'Bolts bounce to 2 more enemies.', exprs: ['bolt', 'wisp'], mods: [{ p: 'jumps', add: 2 }] },
+  seeking: { id: 'seeking', name: 'Seeking', icon: 'rune-seeking', rarity: 1, desc: 'Projectiles curve toward enemies.', exprs: ['bolt', 'glaive'], mods: [{ p: 'homing', add: 1 }] },
+  siphon: { id: 'siphon', name: 'Mana Siphon', icon: 'rune-siphon', rarity: 2, desc: 'Kills with this spell restore 2 mana.', exprs: ALL_DMG, mods: [{ p: 'manaLeech', add: 2 }] },
+  splinter: { id: 'splinter', name: 'Splinter', icon: 'rune-splinter', rarity: 3, desc: 'Kills burst into 3 shards for 40% damage.', exprs: ['bolt', 'glaive', 'chain', 'meteor', 'wisp'],
     mods: [], trigger: { on: 'kill', payload: 'shards', chance: 1, power: 0.4 } },
-  overcharge: { id: 'overcharge', name: 'Overcharge', icon: '🔋', rarity: 2, desc: '+60% power, +30% mana cost.', mode: 'active',
+  overcharge: { id: 'overcharge', name: 'Overcharge', icon: 'rune-overcharge', rarity: 2, desc: '+60% power, +30% mana cost.', mode: 'active',
     mods: [{ p: 'damage', mul: 1.6 }, { p: 'heal', mul: 1.6 }, { p: 'range', mul: 1.25 }, { p: 'mana', mul: 1.3 }] },
-  aftershock: { id: 'aftershock', name: 'Aftershock', icon: '〰️', rarity: 3, desc: 'A second pulse follows at 60% damage.', exprs: ['nova', 'slam', 'meteor'], mods: [{ p: 'echo', add: 1 }] }
+  aftershock: { id: 'aftershock', name: 'Aftershock', icon: 'rune-aftershock', rarity: 3, desc: 'A second pulse follows at 60% damage.', exprs: ['nova', 'slam', 'meteor'], mods: [{ p: 'echo', add: 1 }] }
 };
 
 export interface ResolvedSpell {

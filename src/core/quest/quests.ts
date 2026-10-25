@@ -241,9 +241,9 @@ export function describeObjective(o: ObjectiveDef, names: TextNames, resolved: s
   }
 }
 
-/** "7 / 20" for counted objectives, a tick for the rest. */
+/** "7 / 20" for counted objectives; empty once done or when there is nothing to count. */
 export function progressText(o: ObjectiveDef, value: number): string {
   const goal = goalOf(o);
-  if (value >= goal) return '✔';
+  if (value >= goal) return '';
   return goal > 1 ? `${Math.floor(value)} / ${goal}` : '';
 }

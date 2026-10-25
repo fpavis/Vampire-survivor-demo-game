@@ -2,6 +2,8 @@
 import { WORLD_CONFIG } from '../core/config';
 import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf } from '../core/world/biomes';
 import { SURFACE_NUM } from '../core/world/surfaces';
+import { drawIcon } from './icons';
+import { FONT_UI, FONT_DISPLAY } from '../ui/fonts';
 
 const ROAD = SURFACE_NUM.road;
 
@@ -127,10 +129,9 @@ export class MapView {
                 if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
                 ctx.fillStyle = 'rgba(0,0,0,0.55)';
                 ctx.beginPath(); ctx.arc(x, y, iconSize * 0.62, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#fff';
-                ctx.fillText(p.dungeon ? '🗝️' : POI_INFO[p.type].icon, x, y + 1);
+                drawIcon(ctx, p.dungeon ? 'dungeon' : POI_INFO[p.type].icon, x, y, iconSize * 0.95);
                 if (opts.big) {
-                    ctx.font = 'bold 12px sans-serif';
+                    ctx.font = `800 12px ${FONT_UI}`;
                     ctx.fillStyle = '#fff';
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 3;
@@ -147,10 +148,9 @@ export class MapView {
                 if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
                 ctx.fillStyle = 'rgba(80,0,0,0.65)';
                 ctx.beginPath(); ctx.arc(x, y, iconSize * 0.62, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#fff';
-                ctx.fillText('💀', x, y + 1);
+                drawIcon(ctx, 'lair', x, y, iconSize * 0.95);
                 if (opts.big) {
-                    ctx.font = 'bold 12px sans-serif';
+                    ctx.font = `800 12px ${FONT_UI}`;
                     ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
                     ctx.strokeText(`Lv ${l.level}`, x, y + 24);
                     ctx.fillStyle = '#ffb0b0';
@@ -174,7 +174,7 @@ export class MapView {
                 else ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
                 ctx.fill(); ctx.stroke();
                 if (opts.big) {
-                    ctx.font = 'bold 11px sans-serif';
+                    ctx.font = `800 11px ${FONT_UI}`;
                     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
                     const label = st.kind === 'claim' ? (done ? 'Claimed' : 'Zone') : 'Ambush';
                     ctx.strokeText(label, x, y + r + 12); ctx.fillText(label, x, y + r + 12);
@@ -188,13 +188,18 @@ export class MapView {
             for (const r of this.regions()) {
                 const x = ox + r.tx * ppt, y = oy + r.ty * ppt;
                 if (x < -200 || y < -60 || x > w + 200 || y > h + 60) continue;
-                ctx.font = 'italic bold 20px Georgia, serif';
+                ctx.font = `bold 20px ${FONT_DISPLAY}`;
                 ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,8,4,0.75)'; ctx.fillStyle = 'rgba(255,236,190,0.9)';
                 ctx.strokeText(r.name.toUpperCase(), x, y - 10); ctx.fillText(r.name.toUpperCase(), x, y - 10);
-                ctx.font = 'italic 12px Georgia, serif';
+                ctx.font = `italic 600 12px ${FONT_UI}`;
                 ctx.lineWidth = 3; ctx.fillStyle = 'rgba(232,220,190,0.85)';
-                const sub = r.capital ? `${r.title} · 👑 ${r.capital}` : r.title;
-                ctx.strokeText(sub, x, y + 10); ctx.fillText(sub, x, y + 10);
+                ctx.strokeText(r.title, x, y + 10); ctx.fillText(r.title, x, y + 10);
+                if (r.capital) {
+                    // the capital under the title, behind a crown
+                    const cw = ctx.measureText(r.capital).width;
+                    drawIcon(ctx, 'crown', x - cw / 2 - 9, y + 26, 13);
+                    ctx.strokeText(r.capital, x + 8, y + 26); ctx.fillText(r.capital, x + 8, y + 26);
+                }
             }
             ctx.restore();
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -207,10 +212,9 @@ export class MapView {
                 ctx.fillStyle = 'rgba(0,0,0,0.6)';
                 ctx.beginPath(); ctx.arc(x, y, iconSize * 0.58, 0, Math.PI * 2); ctx.fill();
                 ctx.strokeStyle = ex.color || '#ffd070'; ctx.lineWidth = 2; ctx.stroke();
-                ctx.fillStyle = '#fff';
-                ctx.fillText(ex.icon, x, y + 1);
+                drawIcon(ctx, ex.icon, x, y, iconSize * 0.85, ex.color ? parseInt(ex.color.slice(1), 16) : undefined);
                 if (opts.big && ex.label) {
-                    ctx.font = 'bold 11px sans-serif';
+                    ctx.font = `800 11px ${FONT_UI}`;
                     ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
                     ctx.strokeText(ex.label, x, y + iconSize * 0.6 + 11); ctx.fillStyle = '#ffe9a8'; ctx.fillText(ex.label, x, y + iconSize * 0.6 + 11);
                     ctx.font = `${iconSize}px sans-serif`;
@@ -219,8 +223,7 @@ export class MapView {
         }
         for (const m of this.markers) {
             const x = ox + m.tx * ppt, y = oy + m.ty * ppt;
-            ctx.fillStyle = '#fff';
-            ctx.fillText(m.icon, x, y + 1);
+            drawIcon(ctx, m.icon, x, y, iconSize);
         }
         return { ox, oy };
     }
