@@ -32,7 +32,7 @@ export class PartyRuntime {
             g.spells.setInventory(inv.spells, inv.runes);
             g.state.wallet = { gold: 0, wood: 0, stone: 0, iron: 0, ...inv.wallet };
             g.state.lootFilter = inv.lootFilter || 'off';
-            this.heroes = save.party.heroes.map((h) => ({ ...h, picks: { ...h.picks }, auto: [...h.auto], active: [...h.active] }));
+            this.heroes = save.party.heroes.map((h) => ({ ...h, picks: { ...h.picks }, auto: [...h.auto], active: [...h.active], presets: h.presets ? h.presets.map((p) => (p ? { auto: [...p.auto], active: [...p.active] } : null)) : [null, null, null], assist: h.assist ?? null }));
             // heroes the save does not know yet (future roster growth) start fresh
             this.active = Math.min(save.party.active, this.heroes.length - 1);
         } else {
@@ -227,7 +227,8 @@ export class PartyRuntime {
             active: this.active,
             heroes: this.heroes.map((h) => ({
                 id: h.id, level: h.level, experience: h.experience, nextLevel: h.nextLevel, health: Math.round(h.health * 10) / 10,
-                mana: Math.round(h.mana), pending: h.pending, picks: { ...h.picks }, auto: [...h.auto], active: [...h.active], dead: !!h.dead
+                mana: Math.round(h.mana), pending: h.pending, picks: { ...h.picks }, auto: [...h.auto], active: [...h.active], dead: !!h.dead,
+                presets: (h.presets || [null, null, null]).map((p) => (p ? { auto: [...p.auto], active: [...p.active] } : null)), assist: h.assist ?? null
             }))
         };
     }

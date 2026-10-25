@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals';
 import type { OfferedCard } from '../core/hero/stats';
 import type { PadKind } from '../core/input/gamepad';
+import { DEFAULT_SETTINGS, type Settings } from '../core/settings/settings';
 
 export type InputDevice = 'key' | 'mouse' | 'pad' | 'touch';
 
@@ -34,6 +35,8 @@ export interface ActiveSlotView {
   uid: string; icon: string; name: string; key: string;
   cost: number; cdFrac: number; affordable: boolean; color: number;
 }
+
+export interface LogEntry { t: number; text: string; icon: string; big: boolean }
 
 /** Everything the DOM UI reads. The game pushes into these signals a few times per second. */
 export const ui = {
@@ -84,6 +87,13 @@ export const ui = {
   rebindOpen: signal(false),
   tip: signal<{ id: string; icon: string; text: string } | null>(null),
   tipsOn: signal(true),
+  settings: signal<Settings>({ ...DEFAULT_SETTINGS }),
+  title: signal(false),                       // the title screen is up (its DOM parts show)
+  slotsOpen: signal<'load' | 'save' | null>(null),
+  optionsOpen: signal(false),                 // the settings panel opened from the title
+  creditsOpen: signal(false),
+  newGameSeed: signal(''),                    // seed for the next new game ('' = random)
+  log: signal<LogEntry[]>([]),                // recent toasts and banners, newest last
   game: null as any
 };
 
@@ -91,6 +101,6 @@ export const ui = {
 export const panelOpen = () =>
   ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
   ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
-  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value;
+  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value || !!ui.slotsOpen.value || ui.optionsOpen.value || ui.creditsOpen.value;
 
 export const PICK_KEYS = ['1', '2', '3'];

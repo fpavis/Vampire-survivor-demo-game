@@ -5,7 +5,7 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 
 const TILT = WORLD_CONFIG.tilt;
-const SCALE = 0.5;              // light map resolution relative to the screen
+let SCALE = 0.5;                // light map resolution relative to the screen (set by the quality setting)
 const MAX_LIGHTS = 140;
 
 export interface Light { x: number; y: number; z?: number; r: number; color: number; i?: number }
@@ -63,6 +63,13 @@ export class Lighting {
         this.resize();
     }
 
+    /** Light map resolution relative to the screen (quality setting). */
+    setScale(k: number) {
+        if (Math.abs(k - SCALE) < 1e-3) return;
+        SCALE = k;
+        this.resize();
+    }
+
     resize() {
         const { width, height } = this.app.screen;
         this.rt.resize(Math.max(16, Math.ceil(width * SCALE)), Math.max(16, Math.ceil(height * SCALE)));
@@ -103,12 +110,12 @@ export class Lighting {
     render(worldContainer) {
         if (!this.enabled) { this.lights.length = 0; return; }
         this.bg.tint = this.ambient;
-        const ox = worldContainer.x, oy = worldContainer.y;
+        const ox = worldContainer.x, oy = worldContainer.y, z = worldContainer.scale.x;
         const w = this.rt.width / SCALE, h = this.rt.height / SCALE;
         let n = 0;
         for (const l of this.lights) {
-            const sx = l.x + ox, sy = l.y * TILT - (l.z || 0) + oy;
-            if (sx < -l.r || sy < -l.r || sx > w + l.r || sy > h + l.r) continue;
+            const sx = l.x * z + ox, sy = (l.y * TILT - (l.z || 0)) * z + oy, lr = l.r * z;
+            if (sx < -lr || sy < -lr || sx > w + lr || sy > h + lr) continue;
             let s = this.pool[n];
             if (!s) {
                 s = new PIXI.Sprite(this.tex);
@@ -119,8 +126,8 @@ export class Lighting {
             }
             s.visible = true;
             s.position.set(sx * SCALE, sy * SCALE);
-            s.width = l.r * 2 * SCALE;
-            s.height = l.r * 2 * SCALE * 0.82;
+            s.width = lr * 2 * SCALE;
+            s.height = lr * 2 * SCALE * 0.82;
             s.tint = l.color;
             s.alpha = Math.min(1, l.i ?? 1);
             n++;

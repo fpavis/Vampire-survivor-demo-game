@@ -9,6 +9,9 @@ import {
 import { runeValue, spellValue } from '../core/loot/loot';
 import { Icon } from './Icon';
 
+/** The salvage waiting for a second press (confirm before salvaging). */
+const salvageAsk = { key: '', at: 0 };
+
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 /** Rarity colour in the player's colour palette. */
 const RC = (tier: number) => hexCss(rarityColor(ui.palette.value, tier));
@@ -59,6 +62,16 @@ function useDndWiring() {
     };
     const commit = (p: Payload, t: DropTarget) => {
       const s = sp();
+      if (t.type === 'salvage' && ui.settings.value.confirmSalvage) {
+        const key = p.kind === 'rune' ? 'r:' + p.id : 's:' + p.uid;
+        const now = performance.now();
+        if (salvageAsk.key !== key || now - salvageAsk.at > 4000) {
+          salvageAsk.key = key; salvageAsk.at = now;
+          game.ui.toast('Salvage again to confirm', 'recycle');
+          return;
+        }
+        salvageAsk.key = '';
+      }
       if (p.kind === 'rune') {
         if (typeof p.from === 'object') s.unsocket(p.from.uid, p.from.slot);
         if (t.type === 'socket') s.socket(t.uid!, p.id, t.slot!);

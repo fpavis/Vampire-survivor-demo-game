@@ -217,10 +217,12 @@ await waitOutside();
 await ev(() => { const g = window.game; delete g.visited[window.__poi.id]; });
 
 // discover: seeing the place on the map completes the objective
-const disc0 = await ev(() => window.game.quests.questView('m1_hollow').objectives[0].done);
+// (places seen before the quest count too: the party stood at this dungeon's door earlier in the test, so the
+// objective may already be done when the map knows the place; otherwise revealing it must complete it)
+const disc0 = await ev((id) => ({ done: window.game.quests.questView('m1_hollow').objectives[0].done, seen: window.game.map.discoveredPois().some((p) => p.id === id) }), dun.id);
 await ev((id) => { const g = window.game; const poi = window.__poi; g.fog.revealCircle(poi.tx, poi.ty, 6); g.syncMap(); g.quests.scanTimer = 0; for (let i = 0; i < 4; i++) g.gameLoop(1); }, dun.id);
 const disc1 = await ev(() => window.game.quests.questView('m1_hollow').objectives[0].done);
-check('seeing the dungeon completes the discover objective', disc0 === false && disc1 === true, `${disc0} -> ${disc1}`);
+check('seeing the dungeon completes the discover objective', disc1 === true && (disc0.seen || disc0.done === false), `${JSON.stringify(disc0)} -> ${disc1}`);
 
 // clear: the lord of the fields sits in that dungeon
 await ev(() => { window.game.enterPlace(window.__poi); });

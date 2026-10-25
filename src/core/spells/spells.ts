@@ -53,6 +53,8 @@ export interface SpellItem {
   xp: number;
   runes: (string | null)[];
   locked?: boolean;
+  fav?: boolean;      // starred: listed first
+  isNew?: boolean;    // found this session and not yet looked at
 }
 
 export interface RuneDef {

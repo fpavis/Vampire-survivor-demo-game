@@ -12,6 +12,7 @@ import { WORLD_CONFIG } from '../core/config';
 import { IconLabel, iconSprite } from '../render/icons';
 const WORLD_T = WORLD_CONFIG.tile;
 import { FONT_UI as FONT, FONT_DISPLAY as DISPLAY } from '../ui/fonts';
+import { settings } from './settings';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function formatTime(seconds) {
@@ -149,7 +150,7 @@ export class UIManager {
 
     layoutHUD() {
         const w = this.app.screen.width, h = this.app.screen.height;
-        const k = (this.compact ? 0.8 : 1) * Math.min(1.3, access.textScale);
+        const k = (this.compact ? 0.8 : 1) * Math.min(1.3, access.textScale) * settings.hudScale;
         this.hudScale = k;
         this.toastText.scale.set(access.textScale);
         this.prompt.scale.set(access.textScale);
@@ -197,11 +198,12 @@ export class UIManager {
     }
 
     flashDamage() {
-        this.damageFlash = access.reducedMotion ? 0.35 : 1;
+        this.damageFlash = (access.reducedMotion ? 0.35 : 1) * settings.flash;
     }
 
     /** A big centred announcement, with an optional icon before it. */
     banner(text, color = 0xffffff, icon = '') {
+        this.logMessage(text, icon, true);
         const b = this.elements.banner;
         b.text.style.fill = color;
         b.set(icon, text);
@@ -425,10 +427,20 @@ export class UIManager {
 
     /** A small message at the bottom left, with an optional icon. */
     toast(text, icon = '') {
+        this.logMessage(text, icon, false);
         this.toastText.set(icon, text);
         this.toastText.visible = true;
         this.toastText.alpha = 1;
         this.toastTimer = 150;
+    }
+
+    /** Keep the last 50 messages for the journal's log (a repeat within two seconds is not logged again). */
+    logMessage(text, icon, big) {
+        const log = uiBridge.log.value;
+        const t = gameState.time || 0;
+        const last = log[log.length - 1];
+        if (last && last.text === text && t - last.t < 2) return;
+        uiBridge.log.value = [...log.slice(-49), { t, text, icon, big }];
     }
 
     /** Where the DOM column (tracker, party) may start: just below the canvas health panel and spell slots. */
@@ -443,7 +455,7 @@ export class UIManager {
 
     layoutExtras() {
         const w = this.app.screen.width, h = this.app.screen.height;
-        const mk = this.compact ? 0.62 : 1;
+        const mk = (this.compact ? 0.62 : 1) * (this.minimapScale || 1);
         this.mapBox.scale.set(mk);
         this.mapBox.position.set(w - 12 - 177 * mk, mk < 1 ? 76 : 92);
         // the zone name stays readable: keep its size and right-align it under the map so it never runs off screen

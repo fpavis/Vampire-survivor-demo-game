@@ -39,12 +39,12 @@ import { updateEnemy, SpatialHash } from '../core/ai/ai';
 import { GROUP_INFO, POI_INFO, WARLORDS, groupOf } from '../core/world/biomes';
 import { FogOfWar } from '../core/world/fog';
 import { EventBus } from '../core/sim/events';
-import { randomSeed } from '../core/sim/rng';
+import { randomSeed, seedFromText } from '../core/sim/rng';
 import {
     enemyDamageScale, enemyHealthScale, enemySpeedScale, enemyXpScale, threatBand, tierName, tierOf
 } from '../core/world/difficulty';
 import { createSaveStore } from '../core/save/store';
-import { buildSave } from './saveManager';
+import { buildSave, captureThumb } from './saveManager';
 import { PopulationRuntime } from './populationRuntime';
 import { perceptionOf } from '../core/config';
 import { engage } from '../core/ai/ai';
@@ -62,6 +62,10 @@ import { quickGlyph } from '../ui/hints';
 const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
 import { FONT_UI as FONT, FONT_DISPLAY as SERIF } from '../ui/fonts';
+import { settings, loadSettings, applySettings, setSettings } from './settings';
+import { showDamageNumber } from '../core/settings/settings';
+import { formatPlayTime, listSlots, newestSlot, shouldRotate, slotLabel, writeSlot } from '../core/save/slots';
+import { discover, emptyCodex } from '../core/codex/codex';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 class Game {
@@ -127,9 +131,19 @@ class Game {
         loadAccess();
         applyAccess(this);
         this.perf = new PerfOverlay(this);
+        loadSettings();
+        applySettings(this);
+        this.ui.game = this;
+        mountUi(this);
 
         // persistent-world plumbing
         this.events = new EventBus();
+        // statistics
+        this.events.on('EnemyKilled', (e) => { const by = gameState.byType; by[e.type] = (by[e.type] || 0) + 1; });
+        this.events.on('HeroDied', () => { gameState.deaths++; });
+        this.codex = emptyCodex();
+        this.events.on('EnemyKilled', (e) => this.codexFound('monsters', e.type));
+        this.lastBackupAt = {};
         this.quests = new QuestSystem(this);
         this.tips = new TipSystem(this);
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
@@ -156,7 +170,7 @@ class Game {
 
         this.world.setSource(new OverworldSource(randomSeed()));
         this.applyCamera();
-        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+        this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH, true);
 
         this.menuTicker = (delta) => this.menuLoop(delta);
         this.app.ticker.add(this.menuTicker);
@@ -220,9 +234,21 @@ class Game {
         const s = this.fx.shake;
         const sx = s ? (Math.random() - 0.5) * s : 0;
         const sy = s ? (Math.random() - 0.5) * s : 0;
-        this.worldContainer.x = Math.round(width / 2 - this.cam.x + sx);
-        this.worldContainer.y = Math.round(height / 2 - this.cam.y * TILT + sy);
+        const z = this.zoom || 1;
+        this.worldContainer.scale.set(z);
+        this.worldContainer.x = Math.round(width / 2 - this.cam.x * z + sx);
+        this.worldContainer.y = Math.round(height / 2 - this.cam.y * TILT * z + sy);
     }
+
+    /** World position (ground plane) under a screen point. */
+    screenToWorld(px, py) {
+        const z = this.zoom || 1;
+        return { x: (px - this.worldContainer.x) / z, y: (py - this.worldContainer.y) / z / TILT };
+    }
+
+    /** The screen size in world units, for loading chunks (larger when zoomed out). */
+    get viewW() { return this.app.screen.width / (this.zoom || 1); }
+    get viewH() { return this.app.screen.height / (this.zoom || 1); }
 
     menuLoop(delta) {
         this.input.poll();
@@ -231,7 +257,7 @@ class Game {
         this.cam.x += 0.7 * delta;
         this.cam.y += Math.sin(this.frame * 0.004) * 0.5 * delta;
         this.applyCamera();
-        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
+        this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH);
         this.world.animate(delta);
     }
 
@@ -267,10 +293,11 @@ class Game {
         });
         label.anchor.set(0.5);
         button.addChild(bg, label);
-        button.on('pointerover', () => { draw(true); button.scale.set(1.05); if (button.onHover) button.onHover(); });
-        button.on('pointerout', () => { draw(!!button.selected); button.scale.set(button.selected ? 1.05 : 1); });
+        const base = () => button.baseScale || 1;
+        button.on('pointerover', () => { draw(true); button.scale.set(base() * 1.05); if (button.onHover) button.onHover(); });
+        button.on('pointerout', () => { draw(!!button.selected); button.scale.set(base() * (button.selected ? 1.05 : 1)); });
         // the keyboard and controller highlight a button the same way the mouse does
-        button.setSelected = (v) => { button.selected = v; draw(v); button.scale.set(v ? 1.05 : 1); };
+        button.setSelected = (v) => { button.selected = v; draw(v); button.scale.set(base() * (v ? 1.05 : 1)); };
         button.label = label;
         return button;
     }
@@ -281,6 +308,8 @@ class Game {
         screen.zIndex = 3000;
         screen.eventMode = 'static';
         app.stage.addChild(screen);
+        uiBridge.title.value = true;
+        this.audio.music.setTrack('title');
 
         // dark at the top and bottom, the world still visible through the middle
         const gc = document.createElement('canvas');
@@ -289,8 +318,8 @@ class Game {
         const grad = gctx.createLinearGradient(0, 0, 0, 256);
         grad.addColorStop(0, 'rgba(4,6,12,0.88)');
         grad.addColorStop(0.45, 'rgba(4,6,12,0.55)');
-        grad.addColorStop(0.62, 'rgba(4,6,12,0.4)');
-        grad.addColorStop(1, 'rgba(4,6,12,0.85)');
+        grad.addColorStop(0.62, 'rgba(4,6,12,0.45)');
+        grad.addColorStop(1, 'rgba(4,6,12,0.88)');
         gctx.fillStyle = grad;
         gctx.fillRect(0, 0, 2, 256);
         const dim = new PIXI.Sprite(PIXI.Texture.from(gc));
@@ -301,7 +330,7 @@ class Game {
         });
         title.anchor.set(0.5);
         const subtitle = new PIXI.Text('THREE HEROES  ·  ONE ENDLESS, DEMON-HAUNTED WORLD', {
-            fontFamily: SERIF, fontSize: 17, fill: 0xf0e2b8, letterSpacing: 4, dropShadow: true, dropShadowDistance: 2, dropShadowAlpha: 0.8
+            fontFamily: SERIF, fontSize: 15, fill: 0xf0e2b8, letterSpacing: 3, dropShadow: true, dropShadowDistance: 2, dropShadowAlpha: 0.8
         });
         subtitle.anchor.set(0.5);
         // ornamental divider
@@ -311,56 +340,62 @@ class Game {
         orn.lineStyle(0);
         orn.beginFill(0xf3c75a); orn.drawPolygon([0, -8, 9, 0, 0, 8, -9, 0]); orn.endFill();
         orn.beginFill(0xd9a440); orn.drawCircle(-196, 0, 3); orn.drawCircle(196, 0, 3); orn.endFill();
-        const infoBox = new PIXI.Graphics();
-        const info = new PIXI.Text(
-            'WASD / mouse / touch / left stick to move  ·  E or A to interact  ·  M or View for the map\nSpells fire on their own  ·  Space Q R or X Y RT for skills  ·  1 2 3 or LB RB switch heroes\nI or D-pad ↑ spells  ·  B or D-pad ← build  ·  Esc or Start to pause and see every control\nThe farther you travel, the deadlier it gets  ·  Progress is saved automatically', {
-            fontFamily: FONT, fontSize: 18, fill: 0xd8deef, align: 'center', lineHeight: 28
-        });
-        info.anchor.set(0.5);
         const note = new PIXI.Text('', { fontFamily: FONT, fontSize: 14, fill: 0xffc98a, align: 'center' });
         note.anchor.set(0.5);
 
         const green = { base: 0x3fcf6a, hover: 0x5fe28a, text: 0x0b2a14 };
         const blue = { base: 0x4a7fe0, hover: 0x6a9aff, text: 0x061233 };
+        const slate = { base: 0x3a4766, hover: 0x56658c, text: 0x0b1020 };
         const continueBtn = this.makeMenuButton('CONTINUE', green, 340);
         const newBtn = this.makeMenuButton('NEW GAME', blue, 340);
+        const loadBtn = this.makeMenuButton('LOAD GAME', slate, 340);
+        const optionsBtn = this.makeMenuButton('OPTIONS', slate, 340);
+        const creditsBtn = this.makeMenuButton('CREDITS', slate, 340);
         const summary = new PIXI.Text('', { fontFamily: FONT, fontSize: 14, fill: 0xb8c4e0 });
         summary.anchor.set(0.5);
         continueBtn.visible = false;
         summary.visible = false;
-        screen.addChild(dim, title, orn, subtitle, infoBox, info, continueBtn, summary, newBtn, note);
+        screen.addChild(dim, title, orn, subtitle, continueBtn, summary, newBtn, loadBtn, optionsBtn, creditsBtn, note);
 
         const layout = () => {
             const w = app.screen.width, h = app.screen.height;
             dim.width = w; dim.height = h;
-            const s = clamp(w / 900, 0.55, 1);
+            const s = clamp(Math.min(w / 900, h / 760), 0.5, 1);
             title.scale.set(s);
-            title.position.set(w / 2, h * 0.2);
+            title.position.set(w / 2, h * 0.17);
             orn.scale.set(s);
-            orn.position.set(w / 2, h * 0.2 + 64 * s);
-            subtitle.scale.set(clamp(w / 820, 0.6, 1));
-            subtitle.position.set(w / 2, h * 0.2 + 92 * s);
-            info.scale.set(clamp(w / 760, 0.62, 1));
-            info.position.set(w / 2, h * 0.43);
-            infoBox.clear();
-            infoBox.beginFill(0x0a0e18, 0.55);
-            infoBox.lineStyle(1, 0xd9a440, 0.35);
-            infoBox.drawRoundedRect(w / 2 - info.width / 2 - 26, h * 0.43 - info.height / 2 - 16, info.width + 52, info.height + 32, 14);
-            infoBox.endFill();
-            continueBtn.position.set(w / 2, h * 0.62);
-            summary.position.set(w / 2, h * 0.62 + 40);
-            newBtn.position.set(w / 2, continueBtn.visible ? h * 0.62 + 90 : h * 0.66);
-            note.position.set(w / 2, h * 0.9);
+            orn.position.set(w / 2, h * 0.17 + 64 * s);
+            subtitle.scale.set(clamp(w / 820, 0.6, 1) * Math.max(0.75, s));
+            subtitle.position.set(w / 2, h * 0.17 + 92 * s);
+            // the menu: Continue (with what it continues) on top, then the rest at an even step
+            const bs = clamp(Math.min(w / 520, h / 720), 0.62, 1);
+            const step = 64 * bs;
+            let y = h * 0.17 + 140 * s;
+            for (const b of [continueBtn, newBtn, loadBtn, optionsBtn, creditsBtn]) {
+                if (!b.visible) continue;
+                b.scale.set(b.selected ? bs * 1.05 : bs);
+                b.baseScale = bs;
+                b.position.set(w / 2, y);
+                if (b === continueBtn) { summary.scale.set(bs); summary.position.set(w / 2, y + 40 * bs); y += 22 * bs; }
+                y += step;
+            }
+            note.position.set(w / 2, h * 0.93);
         };
         layout();
         window.addEventListener('resize', layout);
 
         let started = false;
-        let save = null;
+        let save = null;          // the newest readable save (Continue)
+        let autosave = false;     // New Game overwrites the autosave: ask first
         let confirmNew = false;
         const begin = (data) => {
             if (started) return;
             started = true;
+            this.titleBegin = null;
+            uiBridge.title.value = false;
+            uiBridge.optionsOpen.value = false;
+            uiBridge.slotsOpen.value = null;
+            uiBridge.creditsOpen.value = false;
             window.removeEventListener('resize', layout);
             menuNav.remove();
             app.stage.removeChild(screen);
@@ -368,50 +403,63 @@ class Game {
             this.bindEvents();
             this.init(data);
         };
+        this.titleBegin = begin;
         const startNew = () => {
-            if (save && !confirmNew) {
+            if (autosave && !confirmNew) {
                 confirmNew = true;
-                newBtn.label.text = 'OVERWRITE SAVE?';
+                newBtn.label.text = 'OVERWRITE AUTOSAVE?';
                 setTimeout(() => { confirmNew = false; if (!started) newBtn.label.text = 'NEW GAME'; }, 3500);
                 return;
             }
+            const seedText = uiBridge.newGameSeed.value;
+            this.pendingSeed = seedText ? seedFromText(seedText) : null;
             begin(null);
         };
+        const items = [
+            { btn: continueBtn, run: () => { if (save) begin(save); } },
+            { btn: newBtn, run: startNew },
+            { btn: loadBtn, run: () => (uiBridge.slotsOpen.value = 'load') },
+            { btn: optionsBtn, run: () => (uiBridge.optionsOpen.value = true) },
+            { btn: creditsBtn, run: () => (uiBridge.creditsOpen.value = true) }
+        ];
         // arrows, W / S, the d-pad and the stick move the highlight; Enter, Space and A press it
-        const menuNav = this.input.pushMenu({
-            items: () => [
-                ...(continueBtn.visible ? [{ btn: continueBtn, run: () => { if (save) begin(save); } }] : []),
-                { btn: newBtn, run: startNew }
-            ]
-        });
-        continueBtn.onHover = () => menuNav.menu.select(continueBtn);
-        newBtn.onHover = () => menuNav.menu.select(newBtn);
-        continueBtn.on('pointerdown', (e) => { e.stopPropagation(); if (save) begin(save); });
-        newBtn.on('pointerdown', (e) => { e.stopPropagation(); startNew(); });
+        const menuNav = this.input.pushMenu({ items: () => items.filter((it) => it.btn.visible) });
+        for (const it of items) {
+            it.btn.onHover = () => menuNav.menu.select(it.btn);
+            it.btn.on('pointerdown', (e) => { e.stopPropagation(); it.run(); });
+        }
 
-        // look for an existing save once the store is ready
+        // find the saves once the store is ready
         this.storeReady.then(async (store) => {
             if (!store.persistent) note.text = 'Progress cannot be saved in this environment (no browser storage available).';
             try {
-                const data = await store.load(this.saveSlot);
-                if (data && !started) {
-                    save = data;
-                    const mins = Math.floor(data.playSeconds / 60);
-                    summary.text = `Level ${data.party.heroes[data.party.active].level}  ·  ${mins} min played  ·  ${Object.keys(data.world.clearedCamps).length} camps cleared  ·  ${data.world.cities.length} towns visited`;
+                const slots = await listSlots(store);
+                if (started) return;
+                autosave = !!slots[0].data;
+                const newest = newestSlot(slots);
+                if (slots.some((x) => x.data === 'corrupt')) note.text = 'A saved game could not be read. Load Game lists its backups.';
+                if (newest) {
+                    save = newest.data;
+                    const lead = save.party.heroes[save.party.active];
+                    summary.text = [newest.label + (save.name ? `: ${save.name}` : ''), `Level ${lead.level}`, formatPlayTime(save.playSeconds), save.meta?.place || save.meta?.region].filter(Boolean).join('  ·  ');
                     continueBtn.visible = true;
                     summary.visible = true;
                     layout();
                     menuNav.menu.refresh();
                 }
             } catch (err) {
-                note.text = `Could not read the saved game (${err && err.message ? err.message : err}). You can start a new game.`;
+                note.text = `Could not read the saved games (${err && err.message ? err.message : err}). You can start a new game.`;
             }
         });
 
         // gentle idle animation
         const idle = () => {
             if (started) { app.ticker.remove(idle); return; }
-            title.y = app.screen.height * 0.2 + Math.sin(this.frame * 0.03) * 4;
+            title.y = app.screen.height * 0.17 + Math.sin(this.frame * 0.03) * 4;
+            // a panel opened from the menu (Options, Load Game, Credits) gets the stage: the menu fades back
+            const panel = !!uiBridge.slotsOpen.value || uiBridge.optionsOpen.value || uiBridge.creditsOpen.value || uiBridge.rebindOpen.value;
+            const a = panel ? 0.12 : 1;
+            for (const c of screen.children) if (c !== dim) c.alpha += (a - c.alpha) * 0.25;
         };
         app.ticker.add(idle);
     }
@@ -433,7 +481,11 @@ class Game {
             else if (act === 'map') this.toggleMap();
         });
         window.addEventListener('keyup', (e) => { gameState.keys[normKey(e.key)] = false; });
-        window.addEventListener('blur', () => { gameState.keys = {}; });
+        window.addEventListener('blur', () => {
+            gameState.keys = {};
+            // leaving the window pauses the game (setting)
+            if (settings.pauseOnBlur && gameState.player && !gameState.gameOver && !uiBridge.pauseOpen.value && !this.busy) this.ui.toggleSettings();
+        });
 
         this.app.stage.eventMode = 'static';
         this.app.stage.hitArea = this.app.screen;
@@ -448,6 +500,8 @@ class Game {
             if (this.towers.build && !gameState.gameOver && !gameState.paused) { if (this.pointerKind === 'mouse') { this.towers.updateBuild(); this.towers.confirmBuild(); } return; }
             if (gameState.levelUp || gameState.gameOver || gameState.paused) return;
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
+            // click to move: walk to the clicked spot; otherwise the hero follows the held pointer
+            if (settings.clickToMove && this.pointerKind === 'mouse') { this.moveTarget = this.screenToWorld(e.global.x, e.global.y); return; }
             gameState.pointerDown = true;
         });
         this.app.stage.on('pointerup', () => { gameState.pointerDown = false; });
@@ -504,8 +558,10 @@ class Game {
         this.zoneGroup = null;
         this.zoneLabel = '';
         this.zoneIcon = '';
+        this.moveTarget = null;
         this.regionId = null;
         this.regionsSeen = new Set(save && save.regions ? save.regions : []);
+        this.codex = save && save.codex ? { monsters: [...save.codex.monsters], spells: [...save.codex.spells], runes: [...save.codex.runes] } : emptyCodex();
         this.interior = null;
         this.interiorPoi = null;
         this.autosaveTimer = 1800;
@@ -517,7 +573,8 @@ class Game {
         if (this.gameTicker) this.app.ticker.remove(this.gameTicker);
 
         // the world: seed + saved deltas
-        this.overworld = new OverworldSource(save ? save.seed : (window.__forceSeed ?? randomSeed()));
+        this.overworld = new OverworldSource(save ? save.seed : (window.__forceSeed ?? this.pendingSeed ?? randomSeed()));
+        this.pendingSeed = null;
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
@@ -575,6 +632,10 @@ class Game {
             gameState.kills = save.stats.kills;
             gameState.score = save.stats.score;
             gameState.bossesDefeated = save.stats.bossesDefeated;
+            gameState.byType = { ...(save.stats.byType || {}) };
+            gameState.distance = save.stats.distance || 0;
+            gameState.goldEarned = save.stats.goldEarned || 0;
+            gameState.deaths = save.stats.deaths || 0;
             gameState.time = save.playSeconds;
             this.session.lastCity = save.world.lastCity || null;
             this.session.claimed = { ...save.world.claimed };
@@ -597,7 +658,7 @@ class Game {
         this.cam.x = player.wx;
         this.cam.y = player.wy;
         this.applyCamera();
-        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+        this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH, true);
         this.updateFog();
         this.syncMap();
 
@@ -623,7 +684,9 @@ class Game {
         this.ui.displayHp = gameState.health;
         this.ui.displayXp = gameState.experience;
         this.ui.fadeAlpha = 0; this.ui.fadeTarget = 0;
+        applySettings(this);
 
+        this.lastGold = gameState.wallet.gold;
         this.gameTicker = (delta) => this.gameLoop(delta);
         this.app.ticker.add(this.gameTicker);
         this.tips.reset(save && save.tips ? save.tips : []);
@@ -632,19 +695,62 @@ class Game {
     }
 
     // ------------------------------------------------------------- saving
-    async requestSave(reason, force = false) {
-        if (!this.store || !this.state.player || this.state.gameOver) return;
+    async requestSave(reason, force = false, slot = this.saveSlot) {
+        if (!this.store || !this.state.player || this.state.gameOver) return false;
         const now = performance.now();
-        if (!force && now - this.lastSaveAt < 3000) return;
+        if (!force && now - this.lastSaveAt < 3000) return false;
         this.lastSaveAt = now;
+        const quiet = reason === 'auto' || reason === 'hidden' || reason === 'new';
         try {
-            await this.store.save(this.saveSlot, buildSave(this));
-            this.events.emit('GameSaved', { slot: this.saveSlot });
-            if (reason !== 'auto' && reason !== 'hidden' && reason !== 'new') this.ui.toast('Game saved');
+            // a fresh picture for the slot list: on every manual save, otherwise every few minutes
+            if (!quiet || !this.lastThumb || now - (this.lastThumbAt || 0) > 300000) { this.lastThumb = captureThumb(this) || this.lastThumb; this.lastThumbAt = now; }
+            const wall = Date.now();
+            const rotate = shouldRotate(this.lastBackupAt[slot] ?? null, wall, !quiet);
+            await writeSlot(this.store, slot, buildSave(this), rotate);
+            if (rotate) this.lastBackupAt[slot] = wall;
+            this.events.emit('GameSaved', { slot });
+            if (!quiet) this.ui.toast(slot === this.saveSlot ? 'Game saved' : `Saved to ${slotLabel(slot)}`, 'save');
+            return true;
         } catch (err) {
             console.warn('save failed', err);
-            this.ui.toast('Saving failed');
+            this.ui.toast('Saving failed: the browser storage may be full or blocked', 'alert');
+            return false;
         }
+    }
+
+    /** The codex learns of a monster, spell or rune (the first time only). */
+    codexFound(kind, id) {
+        if (this.codex && discover(this.codex[kind], id)) uiBridge.version.value++;
+    }
+
+    /** Start the given save in place of the running session (Load from the pause menu or the title). */
+    loadSave(data) {
+        uiBridge.pauseOpen.value = false;
+        uiBridge.slotsOpen.value = null;
+        this.state.paused = false;
+        this.closeNpcPanels();
+        this.ui.fade(1, 0.12, () => { this.state.gameOver = false; this.init(data); this.ui.fade(0, 0.06); });
+    }
+
+    /** Save, end the session and go back to the title screen. */
+    async quitToTitle() {
+        await this.requestSave('quit', true);
+        uiBridge.pauseOpen.value = false;
+        this.closeNpcPanels();
+        this.state.paused = false;
+        if (this.gameTicker) this.app.ticker.remove(this.gameTicker);
+        this.gameTicker = null;
+        this.clearEntities();
+        gameState.reset();
+        this.mode = null;
+        this.boat = null;
+        uiBridge.visible.value = false;
+        this.ui.setHUDVisible(false);
+        this.world.setSource(new OverworldSource(randomSeed()));
+        this.cam.x = 0; this.cam.y = 0;
+        this.applyCamera();
+        this.app.ticker.add(this.menuTicker);
+        this.showStartScreen();
     }
 
     // reveal the map around the player (called whenever they enter a new tile)
@@ -771,7 +877,7 @@ class Game {
         this.reap();
         this.syncVisuals(delta);
         this.updateCamera(delta);
-        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
+        this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH);
         this.world.animate(delta);
         this.updateZone();
         this.updateMusic(delta);
@@ -810,11 +916,19 @@ class Game {
             analog = true;
         } else if (this.state.pointerDown && this.state.pointerPosition) {
             const p = this.state.pointerPosition;
-            const tx = p.x - this.worldContainer.x;
-            const ty = (p.y - this.worldContainer.y) / TILT;
+            const { x: tx, y: ty } = this.screenToWorld(p.x, p.y);
             const ddx = tx - player.wx, ddy = ty - player.wy;
             const dist = Math.hypot(ddx, ddy);
             if (dist > 8) { dx = ddx / dist; dy = ddy / dist; }
+        }
+        // click to move: walk to the clicked spot until any other movement takes over
+        if (this.moveTarget) {
+            if (dx || dy) this.moveTarget = null;
+            else {
+                const ddx = this.moveTarget.x - player.wx, ddy = this.moveTarget.y - player.wy;
+                const dist = Math.hypot(ddx, ddy);
+                if (dist > 10) { dx = ddx / dist; dy = ddy / dist; } else this.moveTarget = null;
+            }
         }
 
         const ox = player.wx, oy = player.wy;
@@ -828,6 +942,7 @@ class Game {
             mul *= this.surfaces.fx.speed;
             const speed = this.state.playerSpeed * this.stats.speed * delta * mul;
             this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius, !!this.boat);
+            this.state.distance += Math.hypot(player.wx - ox, player.wy - oy);
             moving = true;
             this.lastMove = { x: dx / (Math.hypot(dx, dy) || 1), y: dy / (Math.hypot(dx, dy) || 1) };
             if (Math.abs(dx) > 0.15) player.facing = dx > 0 ? 1 : -1;
@@ -1016,7 +1131,7 @@ class Game {
         e.health -= dmg;
         if (!opts.quiet) {
             e.hitFlash = 6;
-            this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
+            if (showDamageNumber(settings.damageNumbers, crit)) this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
             this.audio.play(crit ? 'crit' : 'hit', { x: e.wx, y: e.wy });
         }
 
@@ -1125,6 +1240,7 @@ class Game {
         const regionId = this.overworld.regionId(tx, ty);
         const region = this.overworld.region(regionId);
         this.zoneIcon = info.icon;
+        this.regionName = region.name;
         this.zoneLabel = `${region.name} · ${info.name} · Lv ${level}`;
         const newRegion = regionId !== this.regionId;
         if (newRegion) {
@@ -1315,7 +1431,7 @@ class Game {
         if (src.dungeon) this.events.emit('FloorEntered', { id: poi.id, floor, floors: src.floors });
 
         this.applyCamera();
-        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+        this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH, true);
     }
 
     /** Take the stairs: +1 goes down, -1 goes up. */
@@ -1655,7 +1771,7 @@ class Game {
         p.wx = spot.x; p.wy = spot.y;
         this.cam.x = p.wx; this.cam.y = p.wy;
         this.applyCamera();
-        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+        this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH, true);
         this.updateFog();
         this.map.dirty = true;
     }
@@ -1824,6 +1940,10 @@ class Game {
     }
 
     syncUi() {
+        // gold earned: every rise of the purse counts, whatever paid it
+        const gold = this.state.wallet.gold;
+        if (gold > this.lastGold) this.state.goldEarned += gold - this.lastGold;
+        this.lastGold = gold;
         if ((this.frame | 0) % 6 !== 0) return;
         const b = uiBridge;
         const sp = this.spells;

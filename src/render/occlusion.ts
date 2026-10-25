@@ -55,6 +55,7 @@ export class Occlusion {
     update(delta = 1) {
         const g = this.game;
         this.layer.position.copyFrom(g.worldContainer.position);
+        this.layer.scale.copyFrom(g.worldContainer.scale);
         this.layer.visible = g.worldContainer.visible;
         this.syncFloats();
         const p = g.state.player;

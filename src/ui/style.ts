@@ -11,7 +11,7 @@ export const CSS = `
 .ic>.vs-icon,.pi>.vs-icon{width:1em;height:1em;vertical-align:middle}
 #ui-root *{box-sizing:border-box}
 #ui-root .hit{pointer-events:auto}
-.vs-bar{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.vs-bar{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;transform:scale(var(--hs,1));transform-origin:bottom right}
 .vs-mana{width:190px;height:16px;border-radius:8px;background:rgba(8,12,24,.78);border:2px solid #2d4a7a;overflow:hidden;position:relative}
 .vs-mana>i{position:absolute;inset:0 auto 0 0;background:linear-gradient(#6ab8ff,#2f77d6);transition:width .12s}
 .vs-mana>b{position:absolute;inset:0;text-align:center;font-size:11px;line-height:12px;text-shadow:0 1px 2px #000}
@@ -150,7 +150,60 @@ html[data-input="key"] #ui-root :focus:not(.vs-x):not(.vs-tracker),html[data-inp
 html[data-input="key"] #ui-root .vs-card:focus,html[data-input="pad"] #ui-root .vs-card:focus{background:#1c2644;transform:translateX(-3px)}
 html[data-input="pad"] #ui-root input[type=range]:focus{outline-offset:6px}
 .vs-pause{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:20}
-.vs-pause .vs-btn{display:block;margin:4px 0;width:100%;text-align:left}
+.vs-pause .vs-btn{display:flex;justify-content:flex-start;margin:4px 0;width:100%;text-align:left}
+.vs-pause .vs-pacts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 10px}
+.vs-pause .vs-pacts .vs-btn{margin:0;justify-content:center;font-size:12px}
+.vs-btn.warn{border-color:#ff8a6a;color:#ffd0c0;background:rgba(120,40,30,.55)}
+.vs-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 6px;padding-bottom:6px;border-bottom:1px solid var(--c-line)}
+.vs-pause .vs-tabs .vs-btn.vs-tab,.vs-tabs .vs-btn.vs-tab{width:auto;margin:0;padding:5px 9px;font-size:12px;border-radius:var(--r-s);opacity:.8;justify-content:center}
+.vs-tabs .vs-btn.vs-tab.on{opacity:1;border-color:var(--c-gold);color:#fff3cc;background:rgba(90,70,20,.45)}
+.vs-tabbody{min-height:120px}
+.vs-btn.vs-toggle .lb{flex:1}
+.vs-btn.vs-toggle .st{font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px;background:#2a3150;color:var(--c-muted)}
+.vs-btn.vs-toggle.on .st{background:rgba(255,216,74,.18);color:var(--c-gold)}
+.vs-row select.vs-in{flex:1;min-width:0}
+.vs-options{z-index:24}
+.vs-slots{left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:26}
+.vs-slots.busy{opacity:.7;pointer-events:none}
+.vs-slot{display:flex;gap:12px;padding:10px;margin-bottom:8px;border:1px solid var(--c-line);border-radius:var(--r-m);background:var(--c-panel)}
+.vs-slot.empty{opacity:.85}
+.vs-thumb{flex:0 0 120px;height:68px;border-radius:6px;overflow:hidden;background:#0b0f1c;display:grid;place-items:center;font-size:28px;color:var(--c-line-3);border:1px solid var(--c-line)}
+.vs-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vs-slotbody{flex:1;min-width:0}
+.vs-slotbody .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.vs-slotbody .when{font-size:11px;color:var(--c-dim)}
+.vs-slotbody .d{font-size:12px;color:var(--c-soft);margin-top:2px}
+.vs-slotbody .d.bad,.vs-import .d{color:var(--c-bad)}
+.vs-backups{border-left:2px solid var(--c-line);padding-left:8px}
+.vs-backups .vs-acts{align-items:center;margin:4px 0}
+.vs-export textarea,.vs-import textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:11px;resize:vertical}
+.vs-import .vs-row{margin:0}
+.vs-import .vs-row>span{flex:0 0 auto}
+.vs-file{position:relative;overflow:hidden}
+.vs-file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.vs-version{position:absolute;right:12px;bottom:8px;font-size:11px;color:rgba(220,228,255,.55);text-shadow:0 1px 2px #000}
+.vs-seed{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;font-size:12px;color:var(--c-soft)}
+.vs-seed .vs-in{width:150px}
+.vs-btn.vs-link{background:none;border-color:transparent;color:var(--c-soft);font-size:12px}
+.vs-btn.vs-link:hover{border-color:var(--c-line-2)}
+.vs-news{position:absolute;left:16px;bottom:16px;width:min(340px,calc(100vw - 32px));padding:12px 30px 10px 14px;border-radius:var(--r-m);background:rgba(18,24,44,.92);border:1px solid rgba(217,164,64,.5);font-size:12px;color:var(--c-soft)}
+.vs-news .h{font-family:var(--font-display);font-weight:700;color:#f3e6c4;font-size:13px;margin-bottom:4px}
+.vs-news ul{margin:4px 0 0;padding-left:18px}
+.vs-news .vs-x{position:absolute;right:4px;top:4px;padding:1px 6px}
+.vs-credits{left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:25}
+.vs-credits p{margin:2px 0 4px;font-size:13px;color:var(--c-soft)}
+.vs-credits .vs-btn.big{width:100%;margin-top:12px}
+.vs-stats .vs-stat{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid rgba(46,58,98,.5);font-size:13px}
+.vs-stats .vs-stat span{flex:1;color:var(--c-soft)}
+.vs-stats .vs-stat b{color:var(--c-gold)}
+.vs-kinds{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--c-soft)}
+.vs-kinds b{color:var(--c-text)}
+.vs-log{list-style:none;margin:0;padding:0;font-size:12px}
+.vs-log li{display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid rgba(46,58,98,.45);color:var(--c-soft)}
+.vs-log li.big{color:#f3e6c4;font-weight:800}
+.vs-log .t{flex:0 0 54px;color:var(--c-dim);font-size:11px}
+.vs-log .x{flex:1;min-width:0}
+.vs-log .dot{display:inline-block;width:1.15em}
 .vs-pause .vs-btn.vs-x{width:auto;margin:0}
 .vs-pause .vs-btn.big{font-size:16px;text-align:center;padding:10px;border-color:#6aa8ff;background:rgba(40,70,140,.55)}
 .vs-row{display:flex;align-items:center;gap:12px;margin:8px 0;font-size:13px}
@@ -225,13 +278,13 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-pick small.pv{color:var(--c-good)}
 
 /* left HUD column: sits under the canvas health panel and spell slots (ui.ts sets --hud-top) */
-.vs-left{position:absolute;left:12px;top:var(--hud-top,190px);display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-height:calc(100vh - var(--hud-top,190px) - 12px)}
+.vs-left{position:absolute;left:12px;top:var(--hud-top,190px);display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-height:calc((100vh - var(--hud-top,190px) - 12px) / var(--hs,1));transform:scale(var(--hs,1));transform-origin:top left}
 
 /* small screens: phones and small windows */
 @media (max-width:899px),(max-height:599px){
   html.vs-modal #ui-root .vs-hud{display:none}
   .vs-panel{padding:10px;border-radius:12px}
-  .vs-load,.vs-build,.vs-tpanel,.vs-shop,.vs-journal,.vs-board,.vs-pause,.vs-heal,.vs-inn{width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}
+  .vs-load,.vs-build,.vs-tpanel,.vs-shop,.vs-journal,.vs-board,.vs-pause,.vs-heal,.vs-inn,.vs-slots,.vs-credits{width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}
   .vs-dialog{bottom:8px;max-height:calc(100vh - 16px);overflow:auto}
   .vs-cards{top:8px;bottom:auto;right:8px;max-height:calc(100vh - 16px)}
   .vs-load .sub{display:none}

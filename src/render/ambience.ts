@@ -87,6 +87,8 @@ export class Ambience {
     }
 
     update(delta, cam, world) {
+        this.layer.visible = this.enabled !== false;
+        if (this.enabled === false) return;
         const { width: w, height: h } = this.app.screen;
         const st = this.style;
         this.layer.position.set(world.x, world.y);

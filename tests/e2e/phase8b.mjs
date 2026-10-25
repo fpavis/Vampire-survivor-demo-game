@@ -99,6 +99,8 @@ if (want('audio')) {
   check('volumes are remembered', Math.abs(prefs.music - 0.25) < 1e-6, JSON.stringify(prefs));
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
+  await ev(() => document.querySelector('.vs-pause [data-tab="audio"]').click());
+  await page.waitForTimeout(150);
   const sliders = await ev(() => [...document.querySelectorAll('.vs-pause .vs-row span')].map((x) => x.innerText));
   check('the pause menu has volume sliders', ['Master volume', 'Music', 'Effects'].every((l) => sliders.includes(l)), JSON.stringify(sliders));
   await page.keyboard.press('Escape');
@@ -232,9 +234,11 @@ if (want('access')) {
   const before = await ev(() => parseFloat(getComputedStyle(document.querySelector('.vs-wallet')).fontSize));
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
-  const labels = await ev(() => [...document.querySelectorAll('.vs-pause .vs-btn, .vs-pause .vs-row span')].map((b) => b.innerText));
+  const tabLabels = async (tab) => { await ev((t) => document.querySelector(`.vs-pause [data-tab="${t}"]`).click(), tab); await page.waitForTimeout(150); return ev(() => [...document.querySelectorAll('.vs-pause .vs-tabbody .vs-btn, .vs-pause .vs-tabbody .vs-row span')].map((b) => b.innerText)); };
+  const rebindLabels = await tabLabels('controls');
+  const labels = await tabLabels('access');
   check('the pause menu offers text size, colours, reduced motion and rebinding',
-    labels.includes('Text size') && labels.some((t) => /Colours/.test(t)) && labels.some((t) => /Reduced motion/.test(t)) && labels.some((t) => /Rebind/.test(t)), JSON.stringify(labels));
+    labels.includes('Text size') && labels.some((t) => /Colours/.test(t)) && labels.some((t) => /Reduced motion/.test(t)) && rebindLabels.some((t) => /Rebind/.test(t)), JSON.stringify({ labels, rebindLabels }));
   const applied = await ev(() => {
     const btn = [...document.querySelectorAll('.vs-pause .vs-btn')];
     // one click on the colours button picks the red-green palette
@@ -263,6 +267,8 @@ if (want('access')) {
   // rebind the first skill to X with the keyboard, through the panel
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
+  await ev(() => document.querySelector('.vs-pause [data-tab="controls"]').click());
+  await page.waitForTimeout(150);
   await ev(() => [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Rebind/.test(b.innerText)).click());
   await page.waitForTimeout(200);
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/rebind.png` });
@@ -330,11 +336,11 @@ if (want('tips')) {
   // tips can be switched off from the pause menu
   await p2.keyboard.press('Escape');
   await p2.waitForTimeout(200);
+  await p2.evaluate(() => document.querySelector('.vs-pause [data-tab="help"]').click());
+  await p2.waitForTimeout(150);
   const off = await p2.evaluate(() => {
     const btn = [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Tips are on/.test(b.innerText));
     btn.click();
-    const how = [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /How to play/.test(b.innerText));
-    how.click();
     return { pref: JSON.parse(localStorage.getItem('vs.access.v1') || '{}').tips };
   });
   await p2.waitForTimeout(150);

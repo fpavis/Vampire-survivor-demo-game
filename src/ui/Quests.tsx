@@ -1,6 +1,8 @@
 import { ui, type QuestView } from './bridge';
 import { glyph, quickGlyph } from './hints';
 import { Icon } from './Icon';
+import { useState } from 'preact/hooks';
+import { formatPlayTime } from '../core/save/slots';
 
 function Objectives({ q }: { q: QuestView }) {
   return (
@@ -28,7 +30,53 @@ function QuestCard({ q, children }: { q: QuestView; children?: any }) {
   );
 }
 
+type JTab = 'quests' | 'log' | 'stats';
+
+/** Kills, distance, gold and the rest, read from the running game. */
+function Stats() {
+  const g = ui.game;
+  ui.version.value;                       // refresh while open
+  const s = g.state;
+  const byType = Object.entries(s.byType as Record<string, number>).sort((a, b) => b[1] - a[1]);
+  const name = (k: string) => g.enemyTypes?.[k]?.name ?? k;
+  const rows: [string, string, string][] = [
+    ['timer', 'Play time', formatPlayTime(s.time)],
+    ['skull', 'Monsters defeated', String(s.kills)],
+    ['lair', 'Warlords and bosses defeated', String(s.bossesDefeated)],
+    ['road', 'Distance travelled', `${(s.distance / 48 / 1000).toFixed(2)} km`],
+    ['res-gold', 'Gold earned', String(Math.round(s.goldEarned))],
+    ['place-town', 'Places discovered', String(g.map?.discoveredPois?.().length ?? 0)],
+    ['map', 'Regions discovered', String(g.regionsSeen?.size ?? 0)],
+    ['heart', 'Party wipes', String(s.deaths)]
+  ];
+  return (
+    <div class="vs-stats">
+      {rows.map(([icon, label, value]) => <div key={label} class="vs-stat"><Icon name={icon} /><span>{label}</span><b>{value}</b></div>)}
+      <div class="vs-sec">MONSTERS BY KIND</div>
+      {!byType.length && <div class="vs-empty">None yet.</div>}
+      <div class="vs-kinds">{byType.slice(0, 24).map(([k, n]) => <span key={k}>{name(k)} <b>{n}</b></span>)}</div>
+    </div>
+  );
+}
+
+function Log() {
+  const log = ui.log.value;
+  if (!log.length) return <div class="vs-empty">Nothing yet. Discoveries, loot, quests and level-ups are listed here.</div>;
+  return (
+    <ul class="vs-log">
+      {[...log].reverse().map((e, i) => (
+        <li key={log.length - i} class={e.big ? 'big' : ''}>
+          <span class="t">{formatPlayTime(e.t).replace('under a minute', '0 min')}</span>
+          {e.icon ? <Icon name={e.icon} /> : <i class="dot" />}
+          <span class="x">{e.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Journal() {
+  const [tab, setTab] = useState<JTab>('quests');
   const v = ui.quests.value;
   const game = ui.game;
   if (!ui.journalOpen.value || !game || !v) return null;
@@ -36,6 +84,17 @@ export function Journal() {
     <div class="vs-panel vs-journal hit">
       <button class="vs-btn vs-x" onClick={() => (ui.journalOpen.value = false)}><Icon name="close" /> ({quickGlyph('journal')})</button>
       <h2><Icon name="journal" /> Journal</h2>
+      <div class="vs-tabs" role="tablist">
+        {([['quests', 'Quests', 'scroll'], ['log', 'Log', 'journal'], ['stats', 'Statistics', 'gauge']] as const).map(([id, label, icon]) => (
+          <button key={id} class={`vs-btn vs-tab${tab === id ? ' on' : ''}`} role="tab" aria-selected={tab === id} data-jtab={id} onClick={() => setTab(id)}>
+            <Icon name={icon} /><span class="tl">{label}</span>
+          </button>
+        ))}
+      </div>
+      {tab === 'log' && <Log />}
+      {tab === 'stats' && <Stats />}
+      {tab === 'quests' && (
+        <>
       {!v.begun && <div class="sub">Find the Elder in a town: the old stories say someone should speak with you. Nothing here is required, ever.</div>}
       {v.chapter && <div class="vs-sec">{v.chapter.title.toUpperCase()}</div>}
       {v.chapter && <div class="sub">{v.chapter.blurb}</div>}
@@ -65,6 +124,8 @@ export function Journal() {
         <span class={`vs-lord sov${v.sovereign.dead ? ' dead' : ''}`}><Icon name={v.sovereign.dead ? 'skull' : 'crown'} /> {v.sovereign.name}, {v.sovereign.title}</span>
       </div>
       <div class="sub">{v.done} quest{v.done === 1 ? '' : 's'} finished.</div>
+        </>
+      )}
     </div>
   );
 }
@@ -109,7 +170,7 @@ export function BoardPanel() {
 /** The tracked quest in one or two lines: its title and the next thing to do. Tap it for the journal. */
 export function Tracker() {
   const q = ui.tracker.value;
-  if (!q) return null;
+  if (!q || !ui.settings.value.tracker) return null;
   const next = q.objectives.find((o) => !o.done);
   const left = q.objectives.filter((o) => !o.done).length;
   return (

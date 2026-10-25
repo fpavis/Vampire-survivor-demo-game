@@ -15,16 +15,16 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
     party: {
       active: 0,
       heroes: [
-        { id: 'aria', level: 7, experience: 33, nextLevel: 120, health: 80, mana: 40, pending: 1, picks: { might: 2 }, auto: ['a'], active: ['b', null, null], dead: false },
-        { id: 'brann', level: 3, experience: 1, nextLevel: 60, health: 100, mana: 60, pending: 0, picks: {}, auto: [], active: [null, null, null], dead: true },
-        { id: 'cyra', level: 1, experience: 0, nextLevel: 40, health: 100, mana: 60, pending: 0, picks: { reservoir: 1 }, auto: [], active: [null, null, null], dead: false }
+        { id: 'aria', level: 7, experience: 33, nextLevel: 120, health: 80, mana: 40, pending: 1, picks: { might: 2 }, auto: ['a'], active: ['b', null, null], dead: false, presets: [{ auto: ['a'], active: [null, null, null] }, null, null], assist: null },
+        { id: 'brann', level: 3, experience: 1, nextLevel: 60, health: 100, mana: 60, pending: 0, picks: {}, auto: [], active: [null, null, null], dead: true, presets: [null, null, null], assist: null },
+        { id: 'cyra', level: 1, experience: 0, nextLevel: 40, health: 100, mana: 60, pending: 0, picks: { reservoir: 1 }, auto: [], active: [null, null, null], dead: false, presets: [null, null, null], assist: 'a' }
       ]
     },
     inventory: {
       spells: [{ uid: 'a', tpl: 'bolt', level: 3, xp: 5, runes: ['swift', null] }, { uid: 'b', tpl: 'dash', level: 1, xp: 0, runes: [null] }],
       runes: ['piercing'], wallet: { gold: 5, wood: 1, stone: 2, iron: 0 }, lootFilter: 'off'
     },
-    stats: { kills: 321, score: 4000, bossesDefeated: 1 },
+    stats: { kills: 321, score: 4000, bossesDefeated: 1, byType: { SLIME: 300, WOLF: 21 }, distance: 12345, goldEarned: 900, deaths: 2 },
     world: {
       clearedCamps: { '3,4,0': 120 }, defeatedLairs: { '1,1': 300 },
       places: { '5,5': { opened: [0, 2], cleared: true, altarUsed: false }, '-1,-4': { opened: [1], cleared: false, altarUsed: false, unsealed: true, floors: { '1': { opened: [], cleared: true, altarUsed: false, unsealed: true } }, bossDead: true, bossChestOpened: false } },
@@ -38,6 +38,7 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
       },
       done: ['m0_omen'], flags: { begun: true, 'lord.field': true }, tracked: 'm1_hollow', bounties: { '5,5': { epoch: 3, taken: [0, 2] } }
     },
+    codex: { monsters: ['SLIME', 'WOLF'], spells: ['bolt'], runes: ['swift'] },
     tips: ['welcome', 'gems'], regions: ['r0,0', 'r1,-1'],
     ...over
   };
@@ -95,16 +96,16 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[8] = (raw) => ({ ...raw, version: 9, party: { ...raw.party, extra: 5 } });
-    MIGRATIONS[9] = (raw) => ({ ...raw, version: 10, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[9] = (raw) => ({ ...raw, version: 10, party: { ...raw.party, extra: 5 } });
+    MIGRATIONS[10] = (raw) => ({ ...raw, version: 11, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 10);
-      expect(out.version).toBe(10);
+      const out: any = migrate(sampleSave(), 11);
+      expect(out.version).toBe(11);
       expect(out.party.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[8];
       delete MIGRATIONS[9];
+      delete MIGRATIONS[10];
     }
   });
 
@@ -176,6 +177,22 @@ describe('save validation and migration', () => {
     expect(out.tips).toEqual([]);
     expect(out.regions).toEqual([]);
     expect(out.quests.tracked).toBe('m1_hollow');
+    expect(validateSave(out)).toEqual([]);
+  });
+
+  it('migrates a v8 save: statistics start at zero, the kill count stays', () => {
+    const v8: any = sampleSave();
+    v8.version = 8;
+    v8.stats = { kills: 50, score: 10, bossesDefeated: 0 };
+    delete v8.codex;
+    v8.party.heroes.forEach((h: any) => { delete h.presets; delete h.assist; });
+    expect(validateSave(v8)).toContain('statistics missing');
+    const out = migrate(v8);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.stats).toEqual({ kills: 50, score: 10, bossesDefeated: 0, byType: {}, distance: 0, goldEarned: 0, deaths: 0 });
+    expect(out.codex.spells).toEqual(['bolt', 'dash']);
+    expect(out.codex.runes).toEqual(['piercing']);
+    expect(out.party.heroes.every((h) => h.presets.length === 3 && h.assist === null)).toBe(true);
     expect(validateSave(out)).toEqual([]);
   });
 

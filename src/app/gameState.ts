@@ -15,6 +15,10 @@ class GameState {
         this.time = 0;       // seconds survived
         this.kills = 0;
         this.bossesDefeated = 0;
+        this.byType = {};    // kills per monster type
+        this.distance = 0;   // world units walked
+        this.goldEarned = 0;
+        this.deaths = 0;     // party wipes
         this.picks = {};     // stat card id -> level
         this.wallet = { gold: 0, wood: 0, stone: 0, iron: 0 };
         this.lootFilter = 'off';

@@ -5,6 +5,12 @@ import { EntityManager } from '../render/entities';
 import { addSpellXp, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES } from '../core/spells/spells';
 import { spendMana, regenMana } from '../core/hero/stats';
 import { buildHero } from '../render/heroArt';
+import { settings } from './settings';
+
+/** Triggers may set off one more trigger (a spark that splinters, shards that spark), never more. */
+const MAX_TRIGGER_DEPTH = 2;
+/** A resting hero's assist spell: cast less often and softer than by the hero in front. */
+export const ASSIST = { power: 0.6, cooldown: 1.6 };
 
 const TILT = WORLD_CONFIG.tilt;
 const msToFrames = (ms) => ms * 0.06;
@@ -78,14 +84,41 @@ export class SpellSystem {
         this.touch();
     }
 
+    /** The hero whose loadout the spell panel shows and edits (null: the active hero). */
+    viewIndex() {
+        const p = this.game.party;
+        return p && this.viewHero != null && this.viewHero !== p.active && p.heroes[this.viewHero] ? this.viewHero : (p ? p.active : 0);
+    }
+
+    /** The loadout being edited: the live one for the active hero, the hero's own record for a resting hero. */
+    target() {
+        const p = this.game.party;
+        return p && this.viewIndex() !== p.active ? p.heroes[this.viewIndex()] : this;
+    }
+
+    /** Show (and edit) another hero's loadout in the spell panel without switching to them. */
+    setView(i) {
+        const p = this.game.party;
+        this.viewHero = p && i != null && i !== p.active ? i : null;
+        this.touch();
+    }
+
+    cycleView(dir) {
+        const p = this.game.party;
+        if (!p) return;
+        const n = p.heroes.length;
+        this.setView((this.viewIndex() + dir + n) % n);
+    }
+
     /** Name of another hero who has this spell equipped (a spell can only be used by one hero at a time). */
     heldBy(uid) {
         const party = this.game.party;
         if (!party) return null;
         if (this.game.towers && this.game.towers.holderOf(uid)) return 'A tower';
         party.commit();
+        const me = this.viewIndex();
         for (let i = 0; i < party.heroes.length; i++) {
-            if (i === party.active) continue;
+            if (i === me) continue;
             const h = party.heroes[i];
             if (h.auto.includes(uid) || h.active.includes(uid)) return party.def(i).name;
         }
@@ -94,7 +127,7 @@ export class SpellSystem {
 
     serialize() {
         return {
-            spells: this.spells.map((s) => ({ uid: s.uid, tpl: s.tpl, level: s.level, xp: s.xp, runes: [...s.runes], locked: !!s.locked })),
+            spells: this.spells.map((s) => ({ uid: s.uid, tpl: s.tpl, level: s.level, xp: s.xp, runes: [...s.runes], locked: !!s.locked, ...(s.fav ? { fav: true } : {}) })),
             runes: [...this.runes]
         };
     }
@@ -113,35 +146,79 @@ export class SpellSystem {
     // New finds go to the shared bag; the player decides which hero equips them.
     addSpell(tplId, level = 1) {
         const s = makeSpell(tplId, level);
+        s.isNew = true;                               // marked in the spell panel until it has been looked at
         this.spells.push(s);
+        this.game.codexFound?.('spells', tplId);
         this.touch();
         return s;
     }
-    addRune(id) { this.runes.push(id); this.touch(); }
-    equipped(uid) { return this.auto.includes(uid) || this.active.includes(uid); }
+    addRune(id) {
+        this.runes.push(id);
+        (this.newRunes || (this.newRunes = new Set())).add(id);
+        this.game.codexFound?.('runes', id);
+        this.touch();
+    }
+    /** The spell panel was looked at: nothing in it is new any more. */
+    clearNew() {
+        let changed = false;
+        for (const s of this.spells) if (s.isNew) { s.isNew = false; changed = true; }
+        if (this.newRunes && this.newRunes.size) { this.newRunes.clear(); changed = true; }
+        if (changed) this.touch();
+    }
+    /** Equipped by the hero shown in the spell panel (the active hero unless another one is being viewed). */
+    equipped(uid) { const t = this.target(); return t.auto.includes(uid) || t.active.includes(uid); }
 
     equip(uid, slot = -1) {
         const it = this.item(uid);
         if (!it || this.heldBy(uid)) return false;
+        const t = this.target();
         const mode = TEMPLATES[it.tpl].mode;
         if (mode === 'auto') {
-            if (this.auto.includes(uid)) return true;
-            if (this.auto.length >= MAX_AUTO) return false;
-            this.auto.push(uid);
+            if (t.auto.includes(uid)) return true;
+            if (t.auto.length >= MAX_AUTO) return false;
+            t.auto.push(uid);
         } else {
-            const cur = this.active.indexOf(uid);
-            if (cur >= 0) this.active[cur] = null;
-            const i = slot >= 0 ? slot : this.active.indexOf(null);
+            const cur = t.active.indexOf(uid);
+            if (cur >= 0) t.active[cur] = null;
+            const i = slot >= 0 ? slot : t.active.indexOf(null);
             if (i < 0) return false;
-            this.active[i] = uid;
+            t.active[i] = uid;
         }
         this.touch();
         return true;
     }
     unequip(uid) {
-        this.auto = this.auto.filter((u) => u !== uid);
-        this.active = this.active.map((u) => (u === uid ? null : u));
+        const t = this.target();
+        t.auto = t.auto.filter((u) => u !== uid);
+        t.active = t.active.map((u) => (u === uid ? null : u));
+        for (const h of this.game.party?.heroes || []) if (h.assist === uid && !h.auto.includes(uid)) h.assist = null;
         this.touch();
+    }
+
+    // ------------------------------------------------------ loadout sets
+    /** Keep the shown hero's loadout in set `n` (0..2). */
+    storePreset(n) {
+        const p = this.game.party;
+        if (!p) return;
+        const h = p.heroes[this.viewIndex()], t = this.target();
+        h.presets = h.presets || [null, null, null];
+        h.presets[n] = { auto: [...t.auto], active: [...t.active] };
+        this.touch();
+    }
+
+    /** Equip set `n` on the shown hero; spells another hero or a tower holds, or that were salvaged, are skipped. */
+    loadPreset(n) {
+        const p = this.game.party;
+        const h = p && p.heroes[this.viewIndex()];
+        const set = h && h.presets && h.presets[n];
+        if (!set) return { ok: false, skipped: 0 };
+        const t = this.target();
+        for (const u of [...t.auto, ...t.active]) if (u) this.unequip(u);
+        let skipped = 0;
+        for (const u of set.auto) if (!this.item(u) || !this.equip(u)) skipped++;
+        set.active.forEach((u, i) => { if (u && (!this.item(u) || !this.equip(u, i))) skipped++; });
+        this.touch();
+        return { ok: true, skipped };
     }
     socket(uid, runeId, slot) {
         const it = this.item(uid);
@@ -176,20 +253,11 @@ export class SpellSystem {
             if (r.tpl.expr === 'orbit') { wanted.add(uid); this.updateOrbit(r, delta); continue; }
             this.timers[uid] = (this.timers[uid] ?? 20) - delta * (sfx ? sfx.haste : 1);
             if (this.timers[uid] > 0) continue;
-            let fired = false;
-            switch (r.tpl.expr) {
-                case 'bolt': fired = this.fireBolt(r); break;
-                case 'chain': fired = this.fireLightning(r); break;
-                case 'nova': fired = this.fireNova(r); break;
-                case 'meteor': fired = this.fireMeteor(r); break;
-                case 'trail': fired = this.dropEmber(r); break;
-                case 'wisp': fired = this.fireWisps(r); break;
-                case 'glaive': fired = this.fireGlaive(r); break;
-                case 'cloud': fired = this.fireCloud(r); break;
-            }
+            const fired = this.fireAuto(r);
             // stay "ready" until a target shows up
             this.timers[uid] = fired ? msToFrames(r.p.cooldown) * g.stats.cooldown : 0;
         }
+        this.updateAssists(delta * (sfx ? sfx.haste : 1));
         for (const [uid, o] of Object.entries(this.orbits)) {
             if (!wanted.has(uid)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); delete this.orbits[uid]; }
         }
@@ -204,6 +272,58 @@ export class SpellSystem {
         this.updateZones(delta);
         this.updateLater(delta);
         this.updateHeal(delta);
+    }
+
+    /** Fire an auto-cast spell once; false when there was nothing to aim at. */
+    fireAuto(r) {
+        switch (r.tpl.expr) {
+            case 'bolt': return this.fireBolt(r);
+            case 'chain': return this.fireLightning(r);
+            case 'nova': return this.fireNova(r);
+            case 'meteor': return this.fireMeteor(r);
+            case 'trail': return this.dropEmber(r);
+            case 'wisp': return this.fireWisps(r);
+            case 'glaive': return this.fireGlaive(r);
+            case 'cloud': return this.fireCloud(r);
+        }
+        return false;
+    }
+
+    /** A copy of a resolved spell with its damage scaled (assists and linked casts hit softer). */
+    scaled(r, k) { return { ...r, p: { ...r.p, damage: r.p.damage * k, burn: r.p.burn * k } }; }
+
+    /**
+     * ASSIST: each resting hero (alive) may lend one of their own auto spells, cast from the party at a lower
+     * rate (cooldown x ASSIST.cooldown) and power (x ASSIST.power). Orbiting blades cannot assist.
+     */
+    updateAssists(step) {
+        const p = this.game.party;
+        if (!p) return;
+        for (let i = 0; i < p.heroes.length; i++) {
+            const h = p.heroes[i];
+            if (i === p.active || h.dead || !h.assist || !h.auto.includes(h.assist)) continue;
+            const it = this.item(h.assist);
+            if (!it) continue;
+            const r = this.resolved(it);
+            if (r.tpl.expr === 'orbit') continue;
+            const key = 'assist:' + h.assist;
+            this.timers[key] = (this.timers[key] ?? 60) - step;
+            if (this.timers[key] > 0) continue;
+            const fired = this.fireAuto(this.scaled(r, ASSIST.power));
+            this.timers[key] = fired ? msToFrames(r.p.cooldown) * ASSIST.cooldown : 0;
+        }
+    }
+
+    /** Resonance: a kill casts the hero's next auto spell at reduced power (at most twice a second). */
+    castLinked(r, power) {
+        const g = this.game;
+        if (g.frame < (this.linkedAt || 0)) return;
+        const list = this.auto.filter((u) => u !== r.item.uid && this.item(u) && this.resolved(this.item(u)).tpl.expr !== 'orbit');
+        if (!list.length) return;
+        const i = this.auto.indexOf(r.item.uid);
+        const next = list.find((u) => this.auto.indexOf(u) > i) || list[0];
+        this.linkedAt = g.frame + 30;
+        this.fireAuto(this.scaled(this.resolved(this.item(next)), power));
     }
 
     /** Active skills (dash, blink, aegis) count their cooldown down here; auto-cast spells do it as they fire. */
@@ -227,7 +347,7 @@ export class SpellSystem {
         if (e.dead) return;
         if (p.slow > 0) { e.slowUntil = Math.max(e.slowUntil || 0, g.frame + 150); e.slowAmount = Math.max(e.slowAmount || 0, p.slow); }
         if (p.burn > 0) { e.burnUntil = g.frame + 180; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; this.burning.add(e); }
-        if (this.depth === 0) {
+        if (this.depth < MAX_TRIGGER_DEPTH) {
             for (const t of r.triggers) {
                 if (t.on !== 'hit' || Math.random() > t.chance) continue;
                 this.depth++;
@@ -284,13 +404,16 @@ export class SpellSystem {
         }
         if (r.p.leech) g.state.health = Math.min(g.state.maxHealth, g.state.health + r.p.leech);
         if (r.p.manaLeech) this.mana.value = Math.min(g.stats.maxMana, this.mana.value + r.p.manaLeech);
-        if (this.depth > 0) return;
+        if (this.depth >= MAX_TRIGGER_DEPTH) return;
+        // a trigger set off by another trigger hits softer: its power multiplies again
+        const soft = this.depth > 0 ? 0.6 : 1;
         for (const t of r.triggers) {
             if (t.on !== 'kill' || Math.random() > t.chance) continue;
             this.depth++;
             try {
-                if (t.payload === 'shards') this.shards(e.wx, e.wy, this.dmg(r) * t.power, r);
-                else this.burst(e.wx, e.wy, 90, this.dmg(r) * t.power, r);
+                if (t.payload === 'shards') this.shards(e.wx, e.wy, this.dmg(r) * t.power * soft, r);
+                else if (t.payload === 'cast') this.castLinked(r, t.power * soft);
+                else this.burst(e.wx, e.wy, 90, this.dmg(r) * t.power * soft, r);
             } finally { this.depth--; }
         }
     }
@@ -995,8 +1118,8 @@ export class SpellSystem {
         const stick = g.input && g.input.aim();
         if (stick) return stick;                      // right stick aims dashes and blinks
         const ptr = g.state.pointerPosition;
-        if (g.state.pointerDown && ptr) {
-            const tx = ptr.x - g.worldContainer.x, ty = (ptr.y - g.worldContainer.y) / TILT;
+        if (ptr && (g.state.pointerDown || (settings.aimAtCursor && g.pointerKind === 'mouse'))) {
+            const { x: tx, y: ty } = g.screenToWorld(ptr.x, ptr.y);
             const d = Math.hypot(tx - p.wx, ty - p.wy);
             if (d > 8) return { x: (tx - p.wx) / d, y: (ty - p.wy) / d };
         }

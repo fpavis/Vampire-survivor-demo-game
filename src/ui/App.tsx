@@ -3,10 +3,13 @@ import { Loadout } from './Loadout';
 import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
 import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './Build';
-import { PauseMenu } from './Pause';
+import { OptionsPanel, PauseMenu } from './Pause';
+import { SlotsPanel } from './Slots';
+import { CreditsPanel, TitleExtras } from './Front';
 import { RebindPanel } from './Rebind';
 import { TipCard } from './Tips';
 import { Icon } from './Icon';
+import { setSettings } from '../app/settings';
 import { BoardPanel, Journal, Tracker } from './Quests';
 import { glyph, onPad, quickGlyph } from './hints';
 import { isTyping } from './nav';
@@ -85,7 +88,7 @@ function CardsPanel() {
           </button>
         );
       })}
-      <label class="vs-check"><input type="checkbox" checked={ui.autoPick.value} onChange={(e) => (ui.autoPick.value = (e.target as HTMLInputElement).checked)} />
+      <label class="vs-check"><input type="checkbox" checked={ui.autoPick.value} onChange={(e) => setSettings(ui.game, { autoPick: (e.target as HTMLInputElement).checked })} />
         Auto-pick for me (favours your strongest path)</label>
     </div>
   );
@@ -134,7 +137,17 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  if (!ui.visible.value) return null;
+  // shown on the title screen and in the game alike
+  const front = (
+    <>
+      <TitleExtras />
+      <OptionsPanel />
+      <SlotsPanel />
+      <CreditsPanel />
+      <RebindPanel />
+    </>
+  );
+  if (!ui.visible.value) return front;
   return (
     <>
       <HoldBar />
@@ -158,8 +171,8 @@ export function App() {
       <WaypointPanel />
       <SailingHint />
       <PauseMenu />
-      <RebindPanel />
       <ActiveBar />
+      {front}
     </>
   );
 }

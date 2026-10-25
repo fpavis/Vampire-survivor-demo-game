@@ -29,6 +29,8 @@ export interface HeroState {
   auto: string[];                 // spell uids
   active: (string | null)[];
   dead: boolean;
+  presets?: ({ auto: string[]; active: (string | null)[] } | null)[];   // three stored loadouts
+  assist?: string | null;         // the auto spell this hero lends while resting
 }
 
 export function newHero(def: HeroDef, auto: string[], active: (string | null)[]): HeroState {

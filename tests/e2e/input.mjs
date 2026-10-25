@@ -157,6 +157,8 @@ check('Start pauses and focuses the menu', paused.paused && /Resume/.test(paused
 await pad({ axes: [0, 1, 0, 0] }); await step(1); await pad(); await step(1);
 const stickNav = await focusInfo();
 check('the stick moves through the pause menu', stickNav && !/Resume/.test(stickNav.text), JSON.stringify(stickNav));
+await ev(() => document.querySelector('.vs-pause [data-tab="audio"]').click());
+await step(2);
 let reached = null;
 for (let i = 0; i < 12; i++) { const f = await focusInfo(); if (f && /Sound/.test(f.text)) { reached = f; break; } await tap(B.DOWN); }
 const m0 = await ev(() => document.activeElement.innerText);
@@ -164,6 +166,9 @@ await tap(B.A);
 const m1 = await ev(() => document.activeElement.innerText);
 check('A presses the focused button (sound toggles)', reached && m0 !== m1, `${m0} -> ${m1}`);
 await tap(B.A);
+await tap(B.RB);
+await step(2);
+check('RB steps to the next settings tab', await ev(() => document.querySelector('.vs-pause .vs-tab.on')?.dataset.tab === 'controls'), await ev(() => document.querySelector('.vs-pause .vs-tab.on')?.dataset.tab));
 let slider = null;
 for (let i = 0; i < 20; i++) {
   const f = await ev(() => { const a = document.activeElement; return a && a.type === 'range' && /dead zone/i.test(a.closest('label')?.innerText || '') ? { type: 'range' } : null; });

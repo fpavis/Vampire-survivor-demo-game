@@ -72,7 +72,7 @@ export class TowerSystem {
             w.invalidateTiles(x0, y0, x1, y1);
         } else w.invalidateTiles(-1e5, -1e5, 1e5, 1e5);
         const g = this.game, p = g.state.player;
-        w.update(g.cam.x, g.cam.y, g.app.screen.width, g.app.screen.height, true);
+        w.update(g.cam.x, g.cam.y, g.viewW, g.viewH, true);
         g.flow.centerTx = NaN;
         void p;
     }
@@ -135,7 +135,8 @@ export class TowerSystem {
         const p = g.state.player;
         if (g.pointerKind === 'mouse' && g.state.pointerPosition) {
             const ptr = g.state.pointerPosition;
-            return { tx: Math.floor((ptr.x - g.worldContainer.x) / T), ty: Math.floor(((ptr.y - g.worldContainer.y) / TILT) / T) };
+            const w = g.screenToWorld(ptr.x, ptr.y);
+            return { tx: Math.floor(w.x / T), ty: Math.floor(w.y / T) };
         }
         const d = g.lastMove && (g.lastMove.x || g.lastMove.y) ? g.lastMove : { x: p.facing || 1, y: 0 };
         return { tx: Math.floor((p.wx + d.x * T * 3.4) / T), ty: Math.floor((p.wy + d.y * T * 3.4) / T) };
@@ -318,7 +319,7 @@ export class TowerSystem {
             g.popRuntime.clearActive();
             g.sites.clearDisplays();
             g.lastFogTx = null;
-            g.world.update(g.cam.x, g.cam.y, g.app.screen.width, g.app.screen.height, true);
+            g.world.update(g.cam.x, g.cam.y, g.viewW, g.viewH, true);
             g.flow.centerTx = NaN;
             g.fx.pillar(p.wx, p.wy, 0xb06af0, 60, 60, 220);
             g.audio.play('warp');

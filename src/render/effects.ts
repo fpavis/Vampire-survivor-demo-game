@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { access } from '../app/access';
 import { WORLD_CONFIG } from '../core/config';
 import { FONT_UI } from '../ui/fonts';
+import { settings } from '../app/settings';
 
 const TILT = WORLD_CONFIG.tilt;
 const MAX_PARTICLES = 450;
@@ -98,7 +99,7 @@ export class Effects {
         if (access.reducedMotion) count = Math.ceil(count * 0.5);
         const { size = 1, life = 30, gravity = 0.22, up = 2.5, glow = false } = opts;
         for (let i = 0; i < count; i++) {
-            if (this.particles.length >= MAX_PARTICLES) return;
+            if (this.particles.length >= (this.maxParticles ?? MAX_PARTICLES)) return;
             const s = new PIXI.Sprite(glow ? this.spark : this.dot);
             if (glow) s.blendMode = PIXI.BLEND_MODES.ADD;
             s.anchor.set(0.5);
@@ -157,8 +158,8 @@ export class Effects {
     }
 
     addShake(amount) {
-        if (access.reducedMotion) return;
-        this.shake = Math.min(14, Math.max(this.shake, amount));
+        if (access.reducedMotion || !settings.shake) return;
+        this.shake = Math.min(14, Math.max(this.shake, amount * settings.shake));
     }
 
     update(delta) {

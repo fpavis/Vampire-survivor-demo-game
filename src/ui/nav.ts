@@ -151,6 +151,16 @@ export function navAction(button: PadFace): boolean {
 /** Panels that sit beside the action (level-up cards) let unhandled skill buttons through; the others do not. */
 export const navModal = () => { const s = navScope(); return !!s && !s.classList.contains('vs-cards'); };
 
+/** Step the tabs of the top panel (settings): LB / RB on a controller. */
+export function navTab(dir: number): boolean {
+  const scope = navScope();
+  const tabs = scope?.querySelector('.vs-settings');
+  if (!tabs) return false;
+  uiSound('uiMove');
+  tabs.dispatchEvent(new CustomEvent<number>('vs-tab', { detail: dir }));
+  return true;
+}
+
 /** Close the top-most panel (or leave a text field). */
 export function navBack(): boolean {
   const a = document.activeElement as HTMLElement | null;

@@ -4,7 +4,7 @@
 import { DEFAULT_BINDINGS, DIRS, PadMapper, QUICK_PANELS, assignPad, emptyFrame, padKind } from '../core/input/gamepad';
 import { KeyMap } from '../core/input/bindings';
 import { ui as uiBridge } from '../ui/bridge';
-import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navWantsArrows } from '../ui/nav';
+import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navWantsArrows, navTab } from '../ui/nav';
 
 const PREFS_KEY = 'vs.input.v1';
 const ARROW_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
@@ -96,7 +96,9 @@ export class InputSystem {
                 return;
             }
             if (!MODIFIERS.has(e.key)) this.setDevice('key');
-            const menu = this.menus[this.menus.length - 1];
+            // a DOM panel over a canvas menu (Options or Load on the title) takes the keys
+            const menu = navActive() ? null : this.menus[this.menus.length - 1];
+            if (!menu && this.menus.length && e.key === 'Escape' && navBack()) { e.preventDefault(); e.stopImmediatePropagation(); return; }
             if (menu) {
                 const k = e.key;
                 if (k === 'ArrowUp' || k === 'w' || k === 'W') menu.move(-1);
@@ -235,7 +237,7 @@ export class InputSystem {
     dispatch(f) {
         const g = this.game, s = g.state;
         const has = (a) => f.pressed.has(a);
-        const menu = this.menus[this.menus.length - 1];
+        const menu = navActive() ? null : this.menus[this.menus.length - 1];
         if (menu) {
             const dir = f.stick || DIRS.find((d) => has(d));
             if (dir === 'up' || dir === 'left') menu.move(-1);
@@ -244,7 +246,18 @@ export class InputSystem {
             if (has('cancel') && menu.back) menu.back();
             return;
         }
-        if (!s.player || s.gameOver || g.busy) return;
+        if (!s.player || s.gameOver || g.busy) {
+            // panels opened from the title screen (Options, Load Game, Credits)
+            if (navActive()) {
+                const dir = f.stick || DIRS.find((d) => has(d));
+                if (dir) navMove(dir);
+                if (has('interact')) navConfirm();
+                if (has('cancel')) navBack();
+                if (has('prevHero')) navTab(-1);
+                if (has('nextHero')) navTab(1);
+            }
+            return;
+        }
 
         if (g.ui.mapOverlay) { if (has('map') || has('cancel') || has('interact') || has('menu')) g.ui.toggleMap(g); return; }
         if (has('menu')) { g.ui.toggleSettings(); return; }
@@ -253,6 +266,8 @@ export class InputSystem {
             if (dir) navMove(dir);
             if (has('interact')) navConfirm();
             if (has('cancel')) navBack() || g.ui.toggleSettings();
+            if (has('prevHero')) navTab(-1);
+            if (has('nextHero')) navTab(1);
             return;
         }
         if (s.paused) return;

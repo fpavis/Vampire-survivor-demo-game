@@ -1,11 +1,11 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
 
-export interface SpellSave { uid: string; tpl: string; level: number; xp: number; runes: (string | null)[]; locked?: boolean }
+export interface SpellSave { uid: string; tpl: string; level: number; xp: number; runes: (string | null)[]; locked?: boolean; fav?: boolean }
 
 export interface HeroSave {
   id: string;
@@ -19,7 +19,11 @@ export interface HeroSave {
   auto: string[];                  // uids of equipped auto-cast spells
   active: (string | null)[];       // uids bound to the active skill slots
   dead: boolean;
+  presets: (LoadoutSet | null)[];  // three stored loadouts
+  assist: string | null;           // the auto spell this hero lends while resting
 }
+
+export interface LoadoutSet { auto: string[]; active: (string | null)[] }
 
 export interface InventorySave {
   spells: SpellSave[];             // every spell item the party owns (a spell is equipped by at most one hero)
@@ -72,7 +76,13 @@ export interface SaveData {
   player: { x: number; y: number; boat?: string | null };
   party: { active: number; heroes: HeroSave[] };
   inventory: InventorySave;
-  stats: { kills: number; score: number; bossesDefeated: number };
+  stats: {
+    kills: number; score: number; bossesDefeated: number;
+    byType: Record<string, number>;          // kills per monster type
+    distance: number;                        // world units walked
+    goldEarned: number;
+    deaths: number;                          // party wipes
+  };
   world: {
     clearedCamps: Record<string, number>;   // camp id -> play seconds when cleared
     defeatedLairs: Record<string, number>;  // lair id -> play seconds when defeated
@@ -89,8 +99,12 @@ export interface SaveData {
     caches: string[];                       // island treasure already opened
   };
   quests: QuestSave;                        // story progress, active quests, bounty board rotations
+  codex: { monsters: string[]; spells: string[]; runes: string[] };   // what the party has met and found
   tips: string[];                           // onboarding tips already shown
   regions: string[];                        // named regions discovered
+  name?: string;                            // a name the player gave the save
+  thumb?: string;                           // small JPEG of the screen when saved (data URL)
+  meta?: { region?: string; place?: string };   // where the party was, for the slot list
 }
 
 export interface SaveSummary {
@@ -132,6 +146,7 @@ export function validateSave(data: unknown): string[] {
   }
   const stats = data.stats;
   if (!isObj(stats) || !isNum(stats.kills) || !isNum(stats.score)) errs.push('stats missing');
+  else if (!isObj(stats.byType) || !isNum(stats.distance) || !isNum(stats.goldEarned) || !isNum(stats.deaths)) errs.push('statistics missing');
   const world = data.world;
   if (!isObj(world)) errs.push('world missing');
   else {
@@ -144,6 +159,8 @@ export function validateSave(data: unknown): string[] {
   const q = data.quests;
   if (!isObj(q) || !isObj(q.active) || !Array.isArray(q.done) || !isObj(q.flags) || !isObj(q.bounties)) errs.push('quests missing');
   if (!Array.isArray(data.tips)) errs.push('tips missing');
+  const cx = data.codex;
+  if (!isObj(cx) || !Array.isArray(cx.monsters) || !Array.isArray(cx.spells) || !Array.isArray(cx.runes)) errs.push('codex missing');
   if (!Array.isArray(data.regions)) errs.push('regions missing');
   return errs;
 }

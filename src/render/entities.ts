@@ -8,6 +8,8 @@ import { softGlow } from './glow';
 import { access } from '../app/access';
 import { threatColor, threatMark } from '../core/access/palettes';
 import { FONT_UI } from '../ui/fonts';
+import { settings } from '../app/settings';
+import { showHealthBar } from '../core/settings/settings';
 
 
 const TILT = WORLD_CONFIG.tilt;
@@ -181,8 +183,9 @@ export class EntityManager {
         const hurt = e.health < e.maxHealth && !e.dead;
         const band = e.level ? threatBand(e.level, EntityManager.heroLevel) : 'even';
         const tagged = !e.dead && !!e.level && (e.isBoss || e.elite || band === 'high' || band === 'deadly');
-        hp.bar.visible = hurt || tagged;
-        hp.bg.visible = hp.fg.visible = hurt;
+        const bar = !e.dead && showHealthBar(settings.healthBars, hurt);
+        hp.bar.visible = bar || tagged;
+        hp.bg.visible = hp.fg.visible = bar;
         if (hurt) {
             const frac = Math.max(0, e.health / e.maxHealth);
             hp.fg.scale.x = frac;

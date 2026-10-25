@@ -80,7 +80,20 @@ export const MIGRATIONS: Record<number, Migration> = {
     quests: { active: {}, done: [], flags: {}, tracked: null, bounties: {} }
   }),
   // v7 -> v8: onboarding tips already shown and named regions discovered
-  7: (raw) => ({ ...raw, version: 8, tips: [], regions: [] })
+  7: (raw) => ({ ...raw, version: 8, tips: [], regions: [] }),
+  // v8 -> v9: statistics (kills per monster, distance walked, gold earned, party wipes), the codex, and per hero
+  // three loadout sets and the spell lent while resting
+  8: (raw) => ({
+    ...raw,
+    version: 9,
+    stats: { ...raw.stats, byType: {}, distance: 0, goldEarned: 0, deaths: 0 },
+    codex: {
+      monsters: Object.keys(raw.stats?.byType ?? {}),
+      spells: [...new Set<string>((raw.inventory?.spells ?? []).map((s: { tpl: string }) => s.tpl))],
+      runes: [...new Set<string>(raw.inventory?.runes ?? [])]
+    },
+    party: { ...raw.party, heroes: raw.party.heroes.map((h: object) => ({ ...h, presets: [null, null, null], assist: null })) }
+  })
 };
 
 export class SaveError extends Error {
