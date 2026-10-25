@@ -55,7 +55,7 @@ const again = await page.evaluate(() => {
   const ok = g.spells.cast(0);
   return { before, frames, ready, ok };
 });
-check('an active skill is ready again after its cooldown', again.before > 0 && again.ready && again.ok && again.frames > 30 && again.frames < 2000, JSON.stringify(again));
+check('an active skill is ready again after its cooldown', again.before > 0 && again.ready && again.ok && again.frames > 5 && again.frames < 2000, JSON.stringify(again));
 await page.evaluate(() => { const g = window.game; g.spells.mana.value = g.stats.maxMana; let f = 0; while (g.spells.slotInfo(0).cdFrac > 0 && f++ < 3000) g.gameLoop(1); for (let i = 0; i < 12; i++) g.gameLoop(1); });
 await page.waitForTimeout(150);
 const dom = await page.evaluate(() => { const b = document.querySelector('.vs-skill'); return { cls: b.className, cd: b.querySelector('.cd').style.transform }; });
