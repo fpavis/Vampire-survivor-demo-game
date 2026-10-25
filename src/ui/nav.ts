@@ -100,9 +100,12 @@ function adjust(el: HTMLElement, dir: Dir, wrap = false): boolean {
   return false;
 }
 
+const uiSound = (name: string) => { if (ui.device.value === 'key' || ui.device.value === 'pad') ui.game?.audio?.play(name); };
+
 export function navMove(dir: Dir): boolean {
   const scope = navScope();
   if (!scope) return false;
+  uiSound('uiMove');
   const items = candidates(scope);
   if (!items.length) return true;
   const cur = current(scope);
@@ -117,6 +120,7 @@ export function navMove(dir: Dir): boolean {
 export function navConfirm(): boolean {
   const scope = navScope();
   if (!scope) return false;
+  uiSound('uiOk');
   const cur = current(scope);
   if (!cur) { navFocusFirst(scope); return true; }
   if (cur instanceof HTMLSelectElement) adjust(cur, 'right', true);
@@ -154,7 +158,7 @@ export function navBack(): boolean {
   const scope = navScope();
   if (!scope) return false;
   const close = scope.querySelector<HTMLElement>('.vs-x');
-  if (close) { close.click(); return true; }
+  if (close) { uiSound('uiBack'); close.click(); return true; }
   return false;
 }
 

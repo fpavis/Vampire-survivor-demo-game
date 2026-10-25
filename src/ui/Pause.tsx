@@ -57,6 +57,10 @@ export function PauseMenu() {
       <button class="vs-btn big" onClick={close}>▶ Resume</button>
       <div class="vs-sec">SOUND</div>
       <button class="vs-btn" onClick={() => { ui.muted.value = !ui.muted.value; game.audio.setMuted(ui.muted.value); }}>{ui.muted.value ? '🔇 Sound is off' : '🔊 Sound is on'}</button>
+      {([['master', 'Master volume'], ['music', 'Music'], ['sfx', 'Effects'], ['ui', 'Menu sounds']] as const).map(([bus, label]) => (
+        <Slider key={bus} label={label} min={0} max={1} step={0.05} value={game.audio.volumes[bus]} fmt={(v) => `${Math.round(v * 100)}%`}
+          onInput={(v) => { game.audio.setVolume(bus, v); if (bus !== 'music') game.audio.play(bus === 'ui' ? 'uiMove' : 'pickup'); bump((n) => n + 1); }} />
+      ))}
       <div class="vs-sec">CONTROLLER{ui.padName.value ? ` — ${ui.padName.value}` : ' — none detected (press any button on it)'}</div>
       <button class="vs-btn" onClick={() => { ui.vibration.value = !ui.vibration.value; game.input.savePrefs(); game.input.rumble(0.6, 0.6, 200); }}>{ui.vibration.value ? '📳 Vibration is on' : '📴 Vibration is off'}</button>
       <Slider label="Stick dead zone" min={0.05} max={0.6} step={0.05} value={ui.deadzone.value} fmt={(v) => `${Math.round(v * 100)}%`}

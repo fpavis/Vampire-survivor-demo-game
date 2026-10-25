@@ -272,7 +272,7 @@ export class SitesRuntime {
         g.fx.pillar(site.x, site.y, 0xf3c75a, 80, 90, 320);
         g.fx.shockwave(site.x, site.y, CLAIM_RADIUS * 1.5, 0xf3c75a, 36, 8);
         g.fx.addShake(5);
-        g.audio.play('levelup');
+        g.audio.play('fanfare');
         g.fog.revealCircle(site.tx, site.ty, 26);
         g.syncMap();
         g.grantLoot(1);

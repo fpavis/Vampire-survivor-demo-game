@@ -516,8 +516,34 @@ Acceptance
   shown hero without touching the mouse, and X does not cast while the loadout is open; a hero standing
   behind a wall or tree stays visible; ordinary monsters at the hero's level show no label until hurt.
 
-**8b and later**: music manager and tracks, remaining SFX, regions and roads, more archetypes and runes,
-accessibility options (text size, colour-blind palettes, reduced motion), performance pass, onboarding.
+**8b Audio**: a mixer with master, music, effects and UI buses, voice limits and stereo position by distance;
+about 40 synthesized effects as data (hits, deaths, every spell, pickups, bosses, chests, stairs, seals,
+building, quests, UI); procedural music as data (a track per region group, town, cave and ruins, dungeon,
+boss and title, with a combat layer and darker variants far out) played by a look-ahead scheduler with
+crossfades; volume sliders.
+
+**8c Regions and roads**: named regions (seeded Voronoi cells with a name, a level band and a capital town),
+region banners and names on the world map; roads between neighbouring towns and from the start to the
+nearest town, routed around water and walls, drawn into the ground, faster to walk on, kept free of decor
+and camps, with signposts.
+
+**8d Archetypes and runes**: Ember Trail, Seeker Wisps, Returning Glaive, Spore Cloud (auto), Earthshatter
+and Mending Light (active); crit, homing, mana-on-kill and echo parameters; eight runes (Keen Edge,
+Colossal, Ricochet, Seeking, Mana Siphon, Splinter, Overcharge, Aftershock).
+
+**8e Accessibility**: text size, colour-blind palettes with shape cues, reduced motion, keyboard and
+controller rebinding.
+
+**8f Performance**: a benchmark script (150 monsters, ~200 spell objects), culling, caps, spatial queries,
+fewer per-frame allocations, an FPS overlay; measured numbers recorded here.
+
+**8g Onboarding**: contextual, non-blocking tips that follow the input device, a How to play page, a tips
+switch; save v8 keeps seen tips and discovered regions.
+
+Acceptance: the music follows region, town, dungeon and boss; every common action makes a sound; a road
+leads from the start to a town and the hero walks faster on it; regions are named on the map; the new
+spells and runes work in loadouts, shops and loot; each accessibility option visibly takes effect and
+persists; the benchmark meets the frame budget on the reference run; a new player gets each tip once.
 
 ## 7. What happens to the current code
 

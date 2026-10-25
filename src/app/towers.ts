@@ -188,7 +188,7 @@ export class TowerSystem {
         this.cancelBuild();
         this.rebuildWorld(true, rec);
         const g = this.game;
-        g.audio.play('buy');
+        g.audio.play('place');
         g.fx.burst((rec.tx + 0.5) * T, (rec.ty + 0.5) * T, 20, 0xffe27a, 18, 3, { size: 0.9, life: 28, glow: true });
         g.ui.toast(`Construction site laid: ${TOWER_DEFS[rec.kind].name}. Bring ${costText(TOWER_DEFS[rec.kind].cost)} and press E`);
         g.map.dirty = true;
@@ -241,7 +241,7 @@ export class TowerSystem {
             return;
         }
         uiBridge.wallet.value = { ...w };
-        g.audio.play('buy');
+        g.audio.play('build');
         const c = centreOf(rec);
         g.fx.popup(c.x, c.y, Object.entries(given).filter(([, n]) => n > 0).map(([k, n]) => `-${n} ${k}`).join('  '), 0xffe9a8, 16, 90);
         g.fx.burst(c.x, c.y, 24, 0xd8c088, 10, 2, { size: 0.8, life: 24, up: 2 });
@@ -262,7 +262,7 @@ export class TowerSystem {
         g.fx.addShake(7);
         this.ceremony = { rec, t: 110 };
         g.ui.banner(`${def.name.toUpperCase()} COMPLETE`, def.color);
-        g.audio.play('levelup');
+        g.audio.play('fanfare');
         g.events.emit('TowerBuilt', { kind: rec.kind, id: rec.id });
         if (rec.kind === 'beacon') g.fog.revealCircle(rec.tx, rec.ty, 44);
         if (rec.kind === 'climb') { const pc = { tx: rec.tx + DIRS[rec.dir][0] * rec.len, ty: rec.ty + DIRS[rec.dir][1] * rec.len }; g.fog.revealCircle(pc.tx, pc.ty, 14); }
@@ -321,7 +321,7 @@ export class TowerSystem {
             g.world.update(g.cam.x, g.cam.y, g.app.screen.width, g.app.screen.height, true);
             g.flow.centerTx = NaN;
             g.fx.pillar(p.wx, p.wy, 0xb06af0, 60, 60, 220);
-            g.audio.play('switch');
+            g.audio.play('warp');
             g.requestSave('travel', true);
             g.ui.fade(0, 0.07, () => { g.busy = false; });
         });

@@ -25,6 +25,7 @@ import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet } from '.
 import { STOCK_EPOCH_SECONDS, epochOf, innCost, rumorFor, stockFor } from '../core/economy/shop';
 import { createBoard, createNpc } from '../render/npcArt';
 import { AudioManager } from './audio';
+import { pickTrack } from '../core/audio/music';
 import { mountUi } from '../ui/mount';
 import { ui as uiBridge } from '../ui/bridge';
 import { OverworldSource } from '../core/world/terrain';
@@ -212,6 +213,7 @@ class Game {
 
     menuLoop(delta) {
         this.input.poll();
+        this.audio.music.setTrack('title');
         this.frame += delta;
         this.cam.x += 0.7 * delta;
         this.cam.y += Math.sin(this.frame * 0.004) * 0.5 * delta;
@@ -748,6 +750,7 @@ class Game {
         this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height);
         this.world.animate(delta);
         this.updateZone();
+        this.updateMusic(delta);
         this.syncMap();
         this.ui.update(this, delta);
 
@@ -847,6 +850,7 @@ class Game {
             this.ui.flashDamage();
             this.fx.addShake(3);
             this.input.rumble(0.55, 0.3, 150);
+            this.audio.play('hurt');
         }
     }
 
@@ -871,11 +875,20 @@ class Game {
         this.counts.lunging = 0;
         this.flow.update(p.wx, p.wy);
 
+        let engaged = 0;
         for (let i = 0; i < list.length; i++) {
             const e = list[i];
             if (e.dead) continue;
             updateEnemy(this, e, delta);
+            // a warning sound when a big hitter starts to wind up (charges, slams, dives, boss abilities)
+            const st = e.ai && e.ai.state;
+            if (st !== e.lastAiState) {
+                if (st === 'windup' && (e.isBoss || e.elite || e.radius >= 18)) this.audio.play('warn', { x: e.wx, y: e.wy });
+                e.lastAiState = st;
+            }
+            if (!e.dormant && (!e.home || e.shell === 'engaged') && Math.abs(e.wx - p.wx) < 520 && Math.abs(e.wy - p.wy) < 420) engaged++;
         }
+        this.engagedNear = engaged;
 
         // clearing every monster of a place pays out once
         if (this.mode === 'interior' && this.interiorState && !this.interiorState.cleared && this.interiorHostiles > 0) {
@@ -919,6 +932,7 @@ class Game {
         if (opts.elite && !type.boss) {
             const m = SPAWN_CONFIG.eliteModifiers;
             EntityManager.markElite(e);
+            this.audio.play('elite', { x: x, y: y });
             e.health = e.maxHealth = e.health * m.health;
             e.experienceValue = Math.round(e.experienceValue * m.experience);
             e.speed *= m.speed;
@@ -966,6 +980,7 @@ class Game {
         e.shell = 'engaged'; e.ai = null;
         this.ui.banner(`⚠  ${type.name.toUpperCase()} APPROACHES  ⚠`, 0xff5a5a);
         this.fx.addShake(6);
+        this.audio.play('roar');
     }
 
     damageEnemy(e, amount, opts = {}) {
@@ -976,6 +991,7 @@ class Game {
         if (!opts.quiet) {
             e.hitFlash = 6;
             this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
+            this.audio.play(crit ? 'crit' : 'hit', { x: e.wx, y: e.wy });
         }
 
         const k = opts.knock;
@@ -999,6 +1015,7 @@ class Game {
         s.kills++;
         s.score += e.experienceValue * 2;
         this.fx.death(e.wx, e.wy, type.color, e.isBoss);
+        this.audio.play(e.isBoss ? 'bossDown' : e.radius > 22 || e.elite ? 'killBig' : 'kill', { x: e.wx, y: e.wy });
 
         if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy, e.level);
         this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss, group: this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.group : this.zoneGroup, dungeon: !!e.dungeonBoss });
@@ -1050,6 +1067,21 @@ class Game {
     }
 
     // ------------------------------------------------- zones & places of interest
+    /** Music follows the place, the region, a nearby boss and how many monsters are on you. */
+    updateMusic(delta) {
+        const s = this.state, p = s.player, a = this.audio;
+        a.listener.x = this.cam.x; a.listener.y = this.cam.y;
+        this.musicHeat = (this.musicHeat || 0) + ((Math.min(1, (this.engagedNear || 0) / 7)) - (this.musicHeat || 0)) * Math.min(1, 0.02 * delta);
+        if ((this.frame | 0) % 30 !== 0) return;
+        if (!p || s.gameOver) { a.music.setTrack('title'); return; }
+        const boss = s.enemies.some((e) => e.isBoss && !e.dead && Math.abs(e.wx - p.wx) < 1100 && Math.abs(e.wy - p.wy) < 900);
+        const inside = this.mode === 'interior' && this.interiorPoi;
+        const id = pickTrack({ boss, place: inside ? this.interiorPoi.type : null, dungeon: !!(inside && this.interior && this.interior.dungeon), sailing: !!this.boat, group: this.zoneGroup });
+        a.music.setTrack(id, !inside && (this.zoneTier || 0) >= 2);
+        a.music.setIntensity(boss ? 1 : this.musicHeat);
+        if (s.health > 0 && s.health / s.maxHealth < 0.25) a.play('heartbeat');
+    }
+
     updateZone() {
         if ((this.frame | 0) % 20 !== 0) return;
         if (this.mode !== 'overworld') return;
@@ -1060,6 +1092,7 @@ class Game {
         const tier = tierOf(level);
         const info = GROUP_INFO[group];
         this.zoneLevelNow = level;
+        this.zoneTier = tier;
         this.zoneThreat = threatBand(level, this.state.level);
         this.lighting.setAmbient(this.regionAmbient(), false);
         this.ambience.setRegion(group, tier >= 2);
@@ -1170,6 +1203,7 @@ class Game {
     enterPlace(poi) {
         if (this.busy) return;
         this.busy = true;
+        this.audio.play('door');
         this.state.pointerDown = false;
         this.state.keys = {};
         this.ui.fade(1, 0.09, () => {
@@ -1238,7 +1272,7 @@ class Game {
         this.busy = true;
         this.state.pointerDown = false;
         this.state.keys = {};
-        this.audio.play('switch');
+        this.audio.play('stairs');
         this.ui.fade(1, 0.09, () => {
             let banked = 0;
             this.state.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
@@ -1458,6 +1492,7 @@ class Game {
         const set = this.world.decorTextures.chest;
         it.sprite.texture = set[1].texture;
         this.fx.burst(it.x, it.y, 28, 0xffd84a, 30, 3.2, { size: 0.9, life: 40, up: 4.2 });
+        this.audio.play('chest');
         this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== '🎁');
         this.map.dirty = true;
         if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); return; }
@@ -1517,7 +1552,7 @@ class Game {
         else if (w[g.kind] !== undefined) w[g.kind] += g.value;
         else return;
         this.events.emit('Collected', { resource: g.kind === 'coin' ? 'gold' : g.kind, count: g.value });
-        this.audio.play('pickup');
+        this.audio.play(g.kind === 'coin' ? 'coin' : 'pickup');
         uiBridge.wallet.value = { ...w };
     }
 
@@ -1574,6 +1609,7 @@ class Game {
     exitPlace() {
         if (this.busy) return;
         this.busy = true;
+        this.audio.play('door');
         this.state.pointerDown = false;
         this.state.keys = {};
         this.ui.fade(1, 0.09, () => {
@@ -1619,6 +1655,7 @@ class Game {
                     this.collect(g);
                     this.fx.popup(p.wx, p.wy, `+${g.value} ${g.kind === 'coin' ? 'gold' : g.kind}`, g.kind === 'coin' ? 0xffd84a : 0xcfd8e8, 16, 60);
                 } else if (g.kind === 'heart') {
+                    this.audio.play('heal');
                     const heal = s.maxHealth * 0.25;
                     s.health = Math.min(s.maxHealth, s.health + heal);
                     this.fx.popup(p.wx, p.wy, `+${Math.round(heal)}`, 0xff7a94, 20, 60);
@@ -1626,6 +1663,9 @@ class Game {
                 } else {
                     this.gainExp(g.value);
                     this.fx.burst(g.wx, g.wy, 12, EntityManager.gemTier(g.value).color, 4, 1.8, { size: 0.5, life: 16 });
+                    this.gemStreak = this.frame - (this.lastGemAt || -999) < 40 ? Math.min(12, (this.gemStreak || 0) + 1) : 0;
+                    this.lastGemAt = this.frame;
+                    this.audio.play('gem', { pitch: Math.pow(2, this.gemStreak / 12) });
                 }
                 EntityManager.cleanup(g);
                 s.gems.splice(i, 1);
@@ -1791,6 +1831,7 @@ class Game {
     }
 
     showGameOver() {
+        this.audio.music.setTrack('title');
         const s = this.state;
         if (s.gameOver) return;
         s.gameOver = true;

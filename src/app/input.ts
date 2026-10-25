@@ -55,6 +55,7 @@ export class InputSystem {
         const g = this.game;
         window.addEventListener('keydown', (e) => {
             if (!e.isTrusted) return;
+            g.audio?.unlock();                                     // any real key press may start the sound
             if (!MODIFIERS.has(e.key)) this.setDevice('key');
             const menu = this.menus[this.menus.length - 1];
             if (menu) {
@@ -72,6 +73,7 @@ export class InputSystem {
             if (dir && navWantsArrows()) { e.preventDefault(); e.stopImmediatePropagation(); navMove(dir); }
         }, true);
         const pointer = (e) => { if (e.isTrusted) this.setDevice(e.pointerType === 'touch' ? 'touch' : 'mouse'); };
+        window.addEventListener('pointerdown', (e) => { if (e.isTrusted) g.audio?.unlock(); }, true);
         window.addEventListener('pointerdown', pointer, true);
         window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && (Math.abs(e.movementX) + Math.abs(e.movementY) > 1)) pointer(e); }, true);
         window.addEventListener('gamepadconnected', (e) => {
@@ -100,8 +102,8 @@ export class InputSystem {
                 this.index = Math.max(0, Math.min(list.length - 1, this.index));
                 list.forEach((it, i) => it.btn.setSelected && it.btn.setSelected(i === this.index));
             },
-            move(d) { this.index += d; this.refresh(); },
-            confirm() { const it = this.items()[this.index]; if (it) it.run(); },
+            move: (d) => { menu.index += d; menu.refresh(); this.game.audio?.play('uiMove'); },
+            confirm: () => { const it = menu.items()[menu.index]; if (it) { this.game.audio?.play('uiOk'); it.run(); } },
             select(btn) { const i = this.items().findIndex((it) => it.btn === btn); if (i >= 0) { this.index = i; this.refresh(); } }
         };
         this.menus.push(menu);
@@ -132,7 +134,7 @@ export class InputSystem {
         const f = this.mapper.update(pad, performance.now());
         this.frame = f;
         if (!pad) return;
-        if (f.active) this.setDevice('pad');
+        if (f.active) { this.setDevice('pad'); if (f.pressed.size) this.game.audio?.unlock(); }
         if (f.pressed.size || f.stick) this.dispatch(f);
     }
 

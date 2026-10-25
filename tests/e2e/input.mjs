@@ -165,7 +165,11 @@ const m1 = await ev(() => document.activeElement.innerText);
 check('A presses the focused button (sound toggles)', reached && m0 !== m1, `${m0} -> ${m1}`);
 await tap(B.A);
 let slider = null;
-for (let i = 0; i < 12; i++) { const f = await focusInfo(); if (f && f.type === 'range') { slider = f; break; } await tap(B.DOWN); }
+for (let i = 0; i < 20; i++) {
+  const f = await ev(() => { const a = document.activeElement; return a && a.type === 'range' && /dead zone/i.test(a.closest('label')?.innerText || '') ? { type: 'range' } : null; });
+  if (f) { slider = f; break; }
+  await tap(B.DOWN);
+}
 const dz0 = await ev(() => Number(document.activeElement.value));
 await tap(B.RIGHT); await tap(B.RIGHT);
 const dz1 = await ev(() => Number(document.activeElement.value));

@@ -318,6 +318,7 @@ export class SpellSystem {
             EntityManager.place(sprite);
             this.bullets.push({ sprite, vx, vy, life: 80, damage: this.dmg(r), pierce: s.pierce, hits: new Set(), r });
         }
+        this.game.audio.play('bolt', { x: p.wx, y: p.wy });
         return true;
     }
 
@@ -400,6 +401,7 @@ export class SpellSystem {
                 const rr = e.radius + 14;
                 if (dx * dx + dy * dy < rr * rr) {
                     e.lastOrbit = game.frame;
+                    game.audio.play('blade', { x: e.wx, y: e.wy });
                     this.hit(e, dmg, r, { knock: { x: e.wx - p.wx, y: e.wy - p.wy, force: 3 } });
                 }
             }
@@ -414,6 +416,7 @@ export class SpellSystem {
         for (let i = 0; i < r.p.count; i++) {
             this.chainStrike(candidates[Math.floor(Math.random() * candidates.length)], r);
         }
+        this.game.audio.play('zap', { x: candidates[0].wx, y: candidates[0].wy });
         return true;
     }
 
@@ -502,6 +505,7 @@ export class SpellSystem {
         game.fx.addShake(3);
         game.fx.shockwave(p.wx, p.wy, s.radius * 1.15, 0xe8fbff, 26, 6);
         game.fx.burst(p.wx, p.wy, 10, 0xe8fbff, 18, 4, { size: 0.8, life: 28, gravity: 0.05, up: 1.5, glow: true });
+        game.audio.play('nova', { x: p.wx, y: p.wy });
         return true;
     }
 
@@ -592,6 +596,7 @@ export class SpellSystem {
                 t: -i * 10, delay: 62, radius: r.p.radius, damage: this.dmg(r), tele, rock, r
             });
         }
+        game.audio.play('meteorFall', { x: candidates[0].wx, y: candidates[0].wy });
         return true;
     }
 
@@ -624,6 +629,7 @@ export class SpellSystem {
                 game.fx.burst(m.x, m.y, 6, 0xffe08a, 16, 3, { size: 0.8, life: 24, up: 3 });
                 game.fx.burst(m.x, m.y, 6, 0x333333, 12, 2.5, { size: 1.4, life: 44, up: 2, gravity: 0.05 });
                 game.fx.addShake(8);
+                game.audio.play('boom', { x: m.x, y: m.y });
                 game.fx.flash(m.x, m.y, m.radius * 4, 0xffa040, 26);
                 game.fx.shockwave(m.x, m.y, m.radius * 1.6, 0xffa040, 24, 7);
                 game.fx.burst(m.x, m.y, 8, 0xffd070, 16, 4.5, { size: 1, life: 26, up: 3, glow: true });

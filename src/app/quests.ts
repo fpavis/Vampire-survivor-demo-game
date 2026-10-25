@@ -87,7 +87,7 @@ export class QuestSystem {
     start(def) {
         if (!startQuest(this.state, def, this.game.state.time, this.ctx(), (t) => this.resolve(t))) return false;
         this.game.ui.toast(`Quest started: ${def.title}`);
-        this.game.audio.play('equip');
+        this.game.audio.play('quest');
         this.checkDiscover();
         this.syncVisited();
         this.publish();
@@ -183,7 +183,7 @@ export class QuestSystem {
         const p = g.state.player;
         g.fx.pillar(p.wx, p.wy, 0xffd84a, 60, 70, 260);
         g.ui.banner(`QUEST COMPLETE · ${title.toUpperCase()}`, 0xffd84a);
-        g.audio.play('levelup');
+        g.audio.play('questDone');
         g.input.rumble(0.3, 0.7, 240);
     }
 
@@ -276,7 +276,7 @@ export class QuestSystem {
         this.fire({ type: 'talk', npc: 'elder' });
         this.runner = new DialogueRunner(script, this.dctx);
         this.pushDialog();
-        this.game.audio.play('equip');
+        this.game.audio.play('blip');
     }
 
     pushDialog() {
@@ -286,6 +286,7 @@ export class QuestSystem {
     }
 
     advance(choice) {
+        this.game.audio.play('blip');
         if (!this.runner) return;
         this.runner.advance(choice);
         this.pushDialog();

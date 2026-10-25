@@ -168,7 +168,7 @@ export class DungeonSystem {
         g.ui.banner('THE SEAL BREAKS', 0x7ad8ff);
         g.fx.shockwave(s.x, s.y, 240, 0x7ad8ff, 36, 8);
         g.fx.pillar(s.x, s.y, 0x7ad8ff, 90, 90, 320);
-        g.audio.play('levelup');
+        g.audio.play('seal');
     }
 
     // ------------------------------------------------------------ features
