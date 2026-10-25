@@ -51,6 +51,20 @@ for (const [w, h, name] of [[1280, 720, 'desk'], [820, 460, 'land'], [390, 760, 
     await p.keyboard.press(key); await p.waitForTimeout(200);
   }
   if (name === 'desk') {
+    // the loadout as a controller player sees it: button hints, then the rune picker on an empty socket
+    await p.evaluate(() => {
+      const g = window.game;
+      ['swift', 'heavy', 'multishot', 'frostbite', 'efficient'].forEach((r) => g.spells.addRune(r));
+      g.input.setDevice('pad');
+      g.input.openPanel('spells');
+    });
+    await p.waitForTimeout(400);
+    await p.screenshot({ path: `${OUT}/${TAG}-${name}-pad-loadout.png` });
+    await p.evaluate(() => { const s = document.querySelector('.vs-sock:not(.full)'); s?.focus(); s?.click(); });
+    await p.waitForTimeout(400);
+    await p.screenshot({ path: `${OUT}/${TAG}-${name}-pad-picker.png` });
+    await p.evaluate(() => { window.game.ui && window.game.input.back(); window.game.input.back(); window.game.input.setDevice('mouse'); });
+    await p.waitForTimeout(200);
     // depth: the hero behind a tree, then behind a town wall
     await p.evaluate(() => {
       const g = window.game, p = g.state.player;

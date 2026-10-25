@@ -47,6 +47,20 @@ function focusEl(el: HTMLElement) {
   el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
+/** Focus the element closest to where focus used to be (the focused button was removed by a re-render). */
+function focusNearest(scope: HTMLElement, was: Rect) {
+  const items = candidates(scope).filter((el) => !isText(el) && !el.classList.contains('vs-x'));
+  if (!items.length) { navFocusFirst(scope); return; }
+  const cx = was.x + was.w / 2, cy = was.y + was.h / 2;
+  let best = items[0], bestD = Infinity;
+  for (const el of items) {
+    const r = rectOf(el);
+    const d = Math.hypot(r.x + r.w / 2 - cx, (r.y + r.h / 2 - cy) * 1.5);
+    if (d < bestD) { bestD = d; best = el; }
+  }
+  focusEl(best);
+}
+
 /** Focus the first sensible element (not a text field, which would swallow the hotkeys). */
 export function navFocusFirst(scope = navScope()): boolean {
   if (!scope) return false;
@@ -150,7 +164,16 @@ export function installNav() {
   if (!root || (root as any).__nav) return;
   (root as any).__nav = true;
   let lastScope: HTMLElement | null = null;
+  let lastRect: Rect | null = null;          // where focus was, so a button that vanished hands focus to its neighbour
+  let lastKey: string | null = null;         // or the same item, re-rendered elsewhere (a spell moved to another list)
   let queued = false;
+  root.addEventListener('focusin', (e) => {
+    const el = e.target as HTMLElement;
+    if (!el.closest('.vs-panel')) return;
+    lastRect = rectOf(el);
+    const d = el.dataset;
+    lastKey = d.spell ? `[data-spell="${d.spell}"]` : d.rune ? `[data-rune="${d.rune}"]` : d.drop === 'socket' ? `[data-drop="socket"][data-slot="${d.slot}"]` : null;
+  });
   const check = () => {
     queued = false;
     const scope = navScope();
@@ -159,7 +182,11 @@ export function installNav() {
     if (!scope || ui.device.value === 'mouse' || ui.device.value === 'touch') return;
     if (fresh || !current(scope)) {
       const a = document.activeElement as HTMLElement | null;
-      if (!a || a === document.body || !scope.contains(a)) navFocusFirst(scope);
+      if (a && a !== document.body && scope.contains(a)) return;
+      const same = !fresh && lastKey ? scope.querySelector<HTMLElement>(lastKey) : null;
+      if (same && same.matches(FOCUSABLE) && visible(same)) focusEl(same);
+      else if (!fresh && lastRect) focusNearest(scope, lastRect);
+      else navFocusFirst(scope);
     }
   };
   new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(check); } }).observe(root, { childList: true, subtree: true });

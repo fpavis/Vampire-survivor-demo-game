@@ -47,9 +47,14 @@ function aria(rig) {
     rig.cape = cape;
     const torso = new PIXI.Graphics();
     poly(torso, [-11, 0, 12, 0, 8, -29, -7, -29], robe);
+    poly(torso, [-11, 0, -3, 0, -2, -29, -7, -29], shade(robe, 0.78), false);   // the back of the robe in shadow
     poly(torso, [1, 0, 12, 0, 8, -29, 2, -29], shade(robe, 1.25), false);       // lit front panel
+    torso.lineStyle(1, robeDk, 0.8); torso.moveTo(-4, -12); torso.lineTo(-6, -1); torso.moveTo(5, -11); torso.lineTo(6.5, -1); N(torso);
     N(torso); torso.beginFill(trim); torso.drawRect(-9, -15, 19, 2.6); torso.drawPolygon([-11, 0, 12, 0, 11.4, -2.4, -10.5, -2.4]); torso.endFill();
+    torso.beginFill(shade(trim, 0.7)); for (let x = -8; x <= 9; x += 4) torso.drawPolygon([x, -1.2, x + 1.2, -2.4, x + 2.4, -1.2, x + 1.2, 0]); torso.endFill();
     torso.beginFill(0x9a4ad8); torso.drawCircle(1, -14, 2); torso.endFill();        // belt gem
+    torso.beginFill(0xffffff, 0.7); torso.drawCircle(0.4, -14.6, 0.7); torso.endFill();
+    poly(torso, [-6, -29, 7, -29, 4, -25, 0.5, -27, -3, -25], trim);                // collar
     rig.torso = torso;
     const head = new PIXI.Graphics();
     // long hair behind
@@ -72,8 +77,12 @@ function aria(rig) {
     ell(orb, 0, -59, 5.2, 5.2, 0x7fe9ff);
     N(orb); orb.beginFill(0xffffff, 0.85); orb.drawCircle(-1.5, -60.5, 1.8); orb.endFill();
     const og = glow(13, 0x66ddff, 0.45); og.y = -59;
+    const sleeve = new PIXI.Graphics();
+    poly(sleeve, [-10, -28, -5, -28, 2, -22, 1, -16, -4, -16, -9, -22], robe);
+    poly(sleeve, [-5, -28, 2, -22, 1, -17, -3, -20], shade(robe, 1.25), false);
+    N(sleeve); sleeve.beginFill(trim); sleeve.drawPolygon([-4, -16.4, 1, -16.4, 1.6, -18.2, -3.6, -18.2]); sleeve.endFill();
     const hand = new PIXI.Graphics(); ell(hand, 0, -20, 3, 3, skin);
-    arm.addChild(staff, og, orb, hand);
+    arm.addChild(staff, og, orb, sleeve, hand);
     arm.x = 15;
     rig.weapon = arm; rig.orbGlow = og;
     rig.height = 70;
@@ -90,7 +99,10 @@ function brann(rig) {
     rig.cape = cape;
     const torso = new PIXI.Graphics();
     rrect(torso, -10, -30, 20, 18, 5, steel);                          // breastplate
-    N(torso); torso.beginFill(0xffffff, 0.35); torso.drawRoundedRect(1, -28, 6, 12, 3); torso.endFill();
+    N(torso); torso.beginFill(shade(steel, 0.72)); torso.drawRoundedRect(-9.2, -18.5, 18.4, 5.6, 3); torso.drawPolygon([-9.2, -29, -4, -29, -5, -14, -9.2, -14]); torso.endFill();
+    torso.beginFill(0xffffff, 0.38); torso.drawRoundedRect(1, -28, 6, 11, 3); torso.endFill();
+    torso.lineStyle(1, steelDk, 0.9); torso.moveTo(0, -29); torso.lineTo(0, -14); N(torso);
+    torso.beginFill(0xe8eef6); [[-7, -26], [7, -26], [-7, -17], [7, -17]].forEach(([x, y]) => torso.drawCircle(x, y, 0.8)); torso.endFill();
     poly(torso, [-9, -14, 10, -14, 11, 0, -10, 0], tabard);           // tabard skirt
     poly(torso, [1, -14, 10, -14, 11, 0, 1, 0], shade(tabard, 1.2), false);
     N(torso); torso.beginFill(gold); torso.drawRect(-10, -15.5, 21, 3); torso.endFill();
@@ -120,14 +132,21 @@ function brann(rig) {
     rrect(sword, -6, -19, 12, 3, 1, gold);
     rrect(sword, -1.5, -16, 3, 7, 1, 0x5a3a20);
     const og = glow(8, 0xff8a3a, 0.28); og.y = -46;
+    const gauntlet = new PIXI.Graphics();
+    poly(gauntlet, [-9, -27, -4, -28, 2, -17, -2, -13, -7, -20], steel);
+    poly(gauntlet, [-4, -28, 2, -17, 0, -15, -4, -22], shade(steel, 1.2), false);
+    N(gauntlet); gauntlet.beginFill(gold); gauntlet.drawPolygon([-2.8, -15.6, 1.6, -18.6, 2.2, -17, -1.8, -13.8]); gauntlet.endFill();
     const hand = new PIXI.Graphics(); ell(hand, 0, -14, 3.2, 3.2, steelDk);
-    arm.addChild(og, sword, hand);
+    arm.addChild(og, sword, gauntlet, hand);
     arm.x = 14; arm.rotation = 0.18;
     // round shield on the far arm
     const shield = new PIXI.Graphics();
-    ell(shield, 0, 0, 8, 9, 0x8a3a22);
-    ell(shield, 0, 0, 5.5, 6.5, 0xc8542a, false);
-    N(shield); shield.beginFill(gold); shield.drawCircle(0, 0, 2.2); shield.endFill();
+    ell(shield, 0, 0, 8.4, 9.4, gold);
+    ell(shield, 0, 0, 6.6, 7.6, 0x8a3a22, false);
+    ell(shield, 0.8, -0.8, 4.8, 5.6, 0xc8542a, false);
+    N(shield); shield.beginFill(0xffd070); shield.drawCircle(0, 0, 2.3); shield.endFill();
+    shield.beginFill(0xffffff, 0.8); shield.drawCircle(-0.6, -0.7, 0.8); shield.endFill();
+    shield.beginFill(shade(gold, 0.7)); [[0, -8.4], [7.4, 0], [0, 8.4], [-7.4, 0]].forEach(([x, y]) => shield.drawCircle(x, y, 0.9)); shield.endFill();
     shield.position.set(-11, -18);
     rig.offhand = shield;
     rig.weapon = arm; rig.orbGlow = og;
@@ -145,7 +164,11 @@ function cyra(rig) {
     rig.cape = cape;
     const torso = new PIXI.Graphics();
     poly(torso, [-8, -29, 9, -29, 10, -6, 12, 1, -9, 1, -9, -6], leather);
+    poly(torso, [-8, -29, -3, -29, -3, 1, -9, 1, -9, -6], shade(leather, 0.78), false);
     poly(torso, [2, -29, 9, -29, 10, -6, 12, 1, 2, 1], shade(leather, 1.18), false);
+    torso.lineStyle(0.9, 0x3a2414, 0.9);
+    for (let y = -27; y < -15; y += 3) { torso.moveTo(0.5, y); torso.lineTo(3.5, y + 1.5); torso.moveTo(3.5, y); torso.lineTo(0.5, y + 1.5); }
+    N(torso);
     N(torso); torso.beginFill(0x5a3a20); torso.drawRect(-9, -13, 20, 3); torso.endFill();
     torso.beginFill(0xd8b060); torso.drawRect(0, -13, 3, 3); torso.endFill();
     // leaf sash
@@ -161,6 +184,8 @@ function cyra(rig) {
     poly(hood, [-11, -38, -9, -48, -2, -53, 6, -52, 10, -46, 10, -43, 4, -48, -3, -47, -8, -41, -8, -32], cloak);
     poly(hood, [6, -52, 10, -46, 10, -43, 5, -47], shade(cloak, 1.25), false);
     poly(hood, [-2, -53, -8, -58, -6, -51], cloak);                    // hood tip
+    hood.lineStyle(1.2, cloakDk, 0.95); hood.moveTo(-8, -41); hood.lineTo(-3, -47); hood.lineTo(4, -48); hood.lineTo(10, -43); N(hood);
+    N(hood); hood.beginFill(0x6ac85a); hood.drawPolygon([-9, -36, -7, -38, -5, -36, -7, -34]); hood.endFill();     // leaf clasp
     rig.gear = hood;
     const arm = new PIXI.Container();
     const staff = new PIXI.Graphics();
@@ -172,8 +197,12 @@ function cyra(rig) {
     poly(staff, [0, -47, -6, -45, -3, -50], 0x6ac85a);
     const orb = new PIXI.Graphics(); ell(orb, 0, -55, 3.6, 3.6, 0xc8ffa8);
     const og = glow(11, 0x7bff9a, 0.45); og.y = -55;
+    const bracer = new PIXI.Graphics();
+    poly(bracer, [-9, -27, -4, -28, 2, -20, -1, -15, -6, -20], leather);
+    poly(bracer, [-3.2, -19.6, 1.4, -21.4, 2.2, -18, -1.6, -15.6], 0x5a3a20);
+    N(bracer); bracer.beginFill(0xd8b060); bracer.drawCircle(0, -18.4, 0.8); bracer.endFill();
     const hand = new PIXI.Graphics(); ell(hand, 0, -18, 3, 3, skin);
-    arm.addChild(staff, og, orb, hand);
+    arm.addChild(staff, og, orb, bracer, hand);
     arm.x = 14;
     rig.weapon = arm; rig.orbGlow = og;
     rig.height = 64;

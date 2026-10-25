@@ -139,6 +139,7 @@ export function Loadout() {
   if (!open || !game) return null;
   const sp = game.spells;
   const wallet = ui.wallet.value;
+  const slotKeys = [glyph('skill1'), glyph('skill2'), glyph('skill3')];
   const all: SpellItem[] = sp.spells;
   const item: SpellItem | undefined = all.find((s) => s.uid === selUid) ?? all[0];
   const tpl = item ? TEMPLATES[item.tpl] : null;
@@ -244,7 +245,7 @@ export function Loadout() {
               const s = sp.active[i] ? sp.item(sp.active[i]) : null;
               return (
                 <div key={i} class={`vs-azone${dropClass({ type: 'equip', slot: i })}`} data-drop="equip" data-slot={i}>
-                  <div class="vs-key">{['Space', 'Q', 'R'][i]}</div>
+                  <div class="vs-key">{slotKeys[i]}</div>
                   {s && spellMatches(s) ? <SpellRow it={s} sel={item?.uid === s.uid} onSel={() => setSel(s.uid)} /> : <div class="vs-empty">{s ? '(hidden by search)' : 'empty'}</div>}
                 </div>
               );
@@ -268,7 +269,7 @@ export function Loadout() {
                 )}
                 {tpl.mode === 'active' && [0, 1, 2].map((i) => (
                   <button key={i} class="vs-btn" disabled={sp.active[i] === item.uid} onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'equip', slot: i })}>
-                    {sp.active[i] === item.uid ? '✔' : '→'} {['Space', 'Q', 'R'][i]} slot
+                    {sp.active[i] === item.uid ? '✔' : '→'} {slotKeys[i]} slot
                   </button>
                 ))}
                 {sp.equipped(item.uid) && <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'unequip' })}>Unequip</button>}
