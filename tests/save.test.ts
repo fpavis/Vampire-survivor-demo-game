@@ -38,6 +38,7 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
       },
       done: ['m0_omen'], flags: { begun: true, 'lord.field': true }, tracked: 'm1_hollow', bounties: { '5,5': { epoch: 3, taken: [0, 2] } }
     },
+    tips: ['welcome', 'gems'], regions: ['r0,0', 'r1,-1'],
     ...over
   };
 }
@@ -94,16 +95,16 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[7] = (raw) => ({ ...raw, version: 8, party: { ...raw.party, extra: 5 } });
-    MIGRATIONS[8] = (raw) => ({ ...raw, version: 9, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[8] = (raw) => ({ ...raw, version: 9, party: { ...raw.party, extra: 5 } });
+    MIGRATIONS[9] = (raw) => ({ ...raw, version: 10, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 9);
-      expect(out.version).toBe(9);
+      const out: any = migrate(sampleSave(), 10);
+      expect(out.version).toBe(10);
       expect(out.party.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[7];
       delete MIGRATIONS[8];
+      delete MIGRATIONS[9];
     }
   });
 
@@ -162,6 +163,19 @@ describe('save validation and migration', () => {
     expect(out.quests.done).toEqual([]);
     expect(out.world.towers).toHaveLength(1);
     expect(out.world.places['5,5'].cleared).toBe(true);
+    expect(validateSave(out)).toEqual([]);
+  });
+
+  it('migrates a v7 save: no tips seen and no regions discovered yet', () => {
+    const v7: any = sampleSave();
+    v7.version = 7;
+    delete v7.tips; delete v7.regions;
+    expect(validateSave(v7)).toContain('tips missing');
+    const out = migrate(v7);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.tips).toEqual([]);
+    expect(out.regions).toEqual([]);
+    expect(out.quests.tracked).toBe('m1_hollow');
     expect(validateSave(out)).toEqual([]);
   });
 

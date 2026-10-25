@@ -52,6 +52,7 @@ import { installDevTools } from './devtools';
 import { InputSystem } from './input';
 import { DungeonSystem } from './dungeons';
 import { QuestSystem } from './quests';
+import { TipSystem } from './tips';
 import { isTyping } from '../ui/nav';
 import { normKey } from '../core/input/bindings';
 import { applyAccess, loadAccess } from './access';
@@ -130,6 +131,7 @@ class Game {
         // persistent-world plumbing
         this.events = new EventBus();
         this.quests = new QuestSystem(this);
+        this.tips = new TipSystem(this);
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.gemStash = null;
         this.fog = new FogOfWar();
@@ -624,6 +626,7 @@ class Game {
 
         this.gameTicker = (delta) => this.gameLoop(delta);
         this.app.ticker.add(this.gameTicker);
+        this.tips.reset(save && save.tips ? save.tips : []);
         this.events.emit('GameLoaded', { slot: save ? this.saveSlot : 'new' });
         if (!save) this.requestSave('new', true);
     }
@@ -752,6 +755,7 @@ class Game {
         this.sea.update(delta);
         this.dungeons.update(delta);
         this.quests.update(delta);
+        this.tips.update(delta);
         this.updateShakers(delta);
         this.spells.update(delta);
         this.party.update(delta);

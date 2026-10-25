@@ -78,7 +78,9 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...raw,
     version: 7,
     quests: { active: {}, done: [], flags: {}, tracked: null, bounties: {} }
-  })
+  }),
+  // v7 -> v8: onboarding tips already shown and named regions discovered
+  7: (raw) => ({ ...raw, version: 8, tips: [], regions: [] })
 };
 
 export class SaveError extends Error {

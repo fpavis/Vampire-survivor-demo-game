@@ -82,7 +82,15 @@ export const ui = {
   reducedMotion: signal(false),
   bindVersion: signal(0),          // bumps when keys or buttons are rebound, so hints re-render
   rebindOpen: signal(false),
+  tip: signal<{ id: string; icon: string; text: string } | null>(null),
+  tipsOn: signal(true),
   game: null as any
 };
+
+/** Panels that take the screen: on small screens the HUD steps aside while one is open, and tips wait. */
+export const panelOpen = () =>
+  ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
+  ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
+  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value;
 
 export const PICK_KEYS = ['1', '2', '3'];

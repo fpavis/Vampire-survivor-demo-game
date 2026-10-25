@@ -36,6 +36,25 @@ export function Controls() {
   );
 }
 
+const HOW_TO: [string, string][] = [
+  ['Survive', 'Your spells cast themselves at whatever comes close. Move to stay out of reach, and pick up the gems monsters drop: they are experience.'],
+  ['Grow', 'Each level gives an upgrade card. Spells and runes drop from monsters, chests and bosses; equip them and socket runes in the spell panel.'],
+  ['Explore', 'Regions get harder the further you go from the start. Roads lead between towns; caves, ruins and dungeons hold treasure and bosses.'],
+  ['Towns', 'Healers revive and heal the party, merchants sell spells and runes, the elder gives the story quests and the board gives bounties.'],
+  ['Build', 'Wood, stone and iron from trees, rocks and monsters build towers that cast spells for you, and docks with boats to cross the sea.'],
+  ['Party', 'Three heroes travel together. Switch who fights; the others rest, lend their aura and catch up on experience.']
+];
+
+/** Short sections on how the game works, then every control. */
+function HowToPlay() {
+  return (
+    <div class="vs-howto">
+      {HOW_TO.map(([t, d]) => <p key={t}><b>{t}.</b> {d}</p>)}
+      <Controls />
+    </div>
+  );
+}
+
 function Slider({ label, min, max, step, value, onInput, fmt }: { label: string; min: number; max: number; step: number; value: number; onInput: (v: number) => void; fmt?: (v: number) => string }) {
   return (
     <label class="vs-row">
@@ -91,8 +110,10 @@ export function PauseMenu() {
       <button class="vs-btn" onClick={() => (ui.rebindOpen.value = true)}>⌨ Rebind keys and buttons…</button>
       <button class="vs-btn" onClick={() => { game.perf.toggle(); bump((n) => n + 1); }}>{game.perf.shown ? '📈 Frame rate is shown (F3)' : '📉 Show the frame rate (F3)'}</button>
       <div class="vs-sec">HELP</div>
-      <button class="vs-btn" onClick={() => setHelp(!help)}>{help ? '▾ Hide the controls' : '▸ Show all controls'}</button>
-      {help && <Controls />}
+      <button class="vs-btn" onClick={() => setAccess(game, { tips: !ui.tipsOn.value })}>{ui.tipsOn.value ? '💡 Tips are on' : '💡 Tips are off'}</button>
+      <button class="vs-btn" onClick={() => { game.tips.forget(); setAccess(game, { tips: true }); game.ui.toast('Tips will show again'); }}>↺ Show every tip again</button>
+      <button class="vs-btn" onClick={() => setHelp(!help)}>{help ? '▾ Hide How to play' : '▸ How to play'}</button>
+      {help && <HowToPlay />}
       <div class="vs-sec">GAME</div>
       <button class="vs-btn" onClick={() => { game.requestSave('manual', true); game.ui.toast('Game saved'); }}>💾 Save now</button>
     </div>

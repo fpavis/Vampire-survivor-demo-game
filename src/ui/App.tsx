@@ -5,10 +5,11 @@ import { Dialog, Inn, Shop } from './Town';
 import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './Build';
 import { PauseMenu } from './Pause';
 import { RebindPanel } from './Rebind';
+import { TipCard } from './Tips';
 import { BoardPanel, Journal, Tracker } from './Quests';
 import { glyph, onPad, quickGlyph } from './hints';
 import { isTyping } from './nav';
-import { ui, PICK_KEYS } from './bridge';
+import { ui, PICK_KEYS, panelOpen } from './bridge';
 import { CARDS, PATHS } from '../core/hero/stats';
 import { RARITY } from '../core/config';
 import { hexCss, rarityColor } from '../core/access/palettes';
@@ -110,14 +111,8 @@ function Pill() {
   );
 }
 
-/** Panels that take the screen: on small screens the HUD steps aside while one is open. */
-const modalOpen = () =>
-  ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
-  ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
-  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value;
-
 export function App() {
-  const modal = modalOpen();
+  const modal = panelOpen();
   useEffect(() => { document.documentElement.classList.toggle('vs-modal', modal); }, [modal]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -146,6 +141,7 @@ export function App() {
         <Pill />
         <Tracker />
         <PartyBar />
+        <TipCard />
       </div>
       <CardsPanel />
       <Loadout />

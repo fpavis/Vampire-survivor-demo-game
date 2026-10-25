@@ -282,6 +282,64 @@ if (want('access')) {
   check('reset restores the default keys', await ev(() => window.game.input.keys.actionFor(' ') === 'skill1'));
 }
 
+// ---- onboarding tips
+if (want('tips')) {
+  // a fresh start: the welcome tip comes up on its own and names the movement keys
+  await ev(() => { const g = window.game; g.tips.forget(); g.tips.reset([]); });
+  await loop(120);
+  await page.waitForTimeout(150);
+  const welcome = await ev(() => ({ id: document.querySelector('.vs-coach')?.dataset.tip, text: document.querySelector('.vs-coach .tx')?.innerText }));
+  check('a new game shows the welcome tip with the movement keys', welcome.id === 'welcome' && /WASD|arrow keys/.test(welcome.text || ''), JSON.stringify(welcome));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/tip.png` });
+  await ev(() => document.querySelector('.vs-coach .vs-x').click());
+  await page.waitForTimeout(100);
+  const gone = await ev(() => ({ card: !!document.querySelector('.vs-coach'), seen: window.game.tips.seen.has('welcome') }));
+  check('dismissing a tip hides it and marks it seen', !gone.card && gone.seen, JSON.stringify(gone));
+
+  // a trigger shows its tip once, with the key of the device in use
+  await ev(() => { const g = window.game; g.state.pending = 1; g.ensureCards(); });
+  await loop(300);
+  await page.waitForTimeout(150);
+  const up = await ev(() => ({ id: document.querySelector('.vs-coach')?.dataset.tip, text: document.querySelector('.vs-coach .tx')?.innerText }));
+  check('a pending level-up brings up its tip with the upgrade key', up.id === 'upgrade' && /Press U /.test(up.text || ''), JSON.stringify(up));
+  await ev(() => { const g = window.game; g.tips.dismiss(); g.state.pending = 0; g.ensureCards(); });
+
+  // seen tips are saved and stay seen after loading
+  const saved = await ev(async () => { const g = window.game; await g.requestSave('test', true); return { tips: [...g.tips.seen], regions: g.regionsSeen.size }; });
+  const p2 = await context.newPage();
+  watch(p2);
+  await p2.goto(`http://localhost:${PORT}/`);
+  await p2.waitForFunction(() => !!window.game);
+  await p2.waitForTimeout(1200);
+  await p2.keyboard.press('Enter');     // Continue
+  await p2.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
+  await p2.evaluate(() => { const g = window.game; for (let i = 0; i < 200; i++) g.gameLoop(1); });
+  await p2.waitForTimeout(150);
+  const loaded = await p2.evaluate(() => { const g = window.game; return { seen: [...g.tips.seen], card: document.querySelector('.vs-coach')?.dataset.tip || null, regions: g.regionsSeen.size }; });
+  check('seen tips are saved and not shown again', saved.tips.includes('welcome') && saved.tips.includes('upgrade') && loaded.seen.includes('welcome') && !!loaded.card && loaded.card !== 'welcome' && loaded.card !== 'upgrade', JSON.stringify({ saved, loaded }));
+  check('discovered regions are saved', saved.regions >= 2 && loaded.regions >= saved.regions, JSON.stringify({ saved, loaded }));
+
+  // tips can be switched off from the pause menu
+  await p2.keyboard.press('Escape');
+  await p2.waitForTimeout(200);
+  const off = await p2.evaluate(() => {
+    const btn = [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Tips are on/.test(b.innerText));
+    btn.click();
+    const how = [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /How to play/.test(b.innerText));
+    how.click();
+    return { pref: JSON.parse(localStorage.getItem('vs.access.v1') || '{}').tips };
+  });
+  await p2.waitForTimeout(150);
+  const how = await p2.evaluate(() => ({ sections: document.querySelectorAll('.vs-howto p').length, controls: !!document.querySelector('.vs-howto .vs-keys') }));
+  await p2.keyboard.press('Escape');
+  await p2.waitForTimeout(200);
+  const quiet = await p2.evaluate(() => { const g = window.game; g.tips.forget(); for (let i = 0; i < 200; i++) g.gameLoop(1); return !!document.querySelector('.vs-coach'); });
+  check('tips can be turned off and stay off', off.pref === false && !quiet, JSON.stringify({ off, quiet }));
+  check('the pause menu has a How to play page with the controls', how.sections >= 5 && how.controls, JSON.stringify(how));
+  await p2.evaluate(() => { localStorage.removeItem('vs.access.v1'); });
+  await p2.close();
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 preview.kill();

@@ -267,7 +267,7 @@ export class InputSystem {
         if (has('prevHero')) g.party.cycle(-1);
         if (has('nextHero')) g.party.cycle(1);
         if (has('map')) g.toggleMap();
-        if (has('cancel')) this.back();
+        if (has('cancel')) this.back() || g.tips.dismiss();
         if (has('interact')) {
             if (g.towers.build) g.towers.confirmBuild();
             else if (navActive()) navConfirm();

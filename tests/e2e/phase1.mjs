@@ -151,7 +151,9 @@ const respawn = await page.evaluate(async () => {
   const died = g.state.gameOver;
   const target = g.respawnTarget();
   g.respawn(target);
-  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((r) => setTimeout(r, 300));
+  // the respawn waits for a fade that advances per frame, so step frames rather than wall time (slow machines)
+  for (let i = 0; i < 80 && (g.state.gameOver || g.busy); i++) g.gameLoop(1);
   for (let i = 0; i < 10; i++) g.gameLoop(1);
   return { died, label: target.label, alive: g.state.health > 0 && !g.state.gameOver, near: Math.hypot(g.state.player.wx - 400, g.state.player.wy - 440) < 200 };
 });

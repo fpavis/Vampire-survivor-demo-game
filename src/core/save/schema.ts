@@ -1,7 +1,7 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
 
@@ -89,6 +89,8 @@ export interface SaveData {
     caches: string[];                       // island treasure already opened
   };
   quests: QuestSave;                        // story progress, active quests, bounty board rotations
+  tips: string[];                           // onboarding tips already shown
+  regions: string[];                        // named regions discovered
 }
 
 export interface SaveSummary {
@@ -141,6 +143,8 @@ export function validateSave(data: unknown): string[] {
   }
   const q = data.quests;
   if (!isObj(q) || !isObj(q.active) || !Array.isArray(q.done) || !isObj(q.flags) || !isObj(q.bounties)) errs.push('quests missing');
+  if (!Array.isArray(data.tips)) errs.push('tips missing');
+  if (!Array.isArray(data.regions)) errs.push('regions missing');
   return errs;
 }
 

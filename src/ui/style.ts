@@ -182,6 +182,13 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-tracker .t{font-weight:700;font-size:13px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vs-tracker .o.done{color:#8e97b0;text-decoration:line-through}
 .vs-tracker .r{color:#9be09b;margin-top:2px}
+.vs-coach{position:relative;display:flex;gap:8px;align-items:flex-start;width:min(250px,calc(100vw - 32px));background:rgba(20,16,6,.86);border:1px solid #7a6a3a;border-left:3px solid #ffd84a;border-radius:8px;padding:7px 26px 7px 9px;font-size:12px;line-height:1.4;text-shadow:0 1px 2px #000;animation:vs-coach-in .35s ease-out}
+.vs-coach .ic{font-size:18px;line-height:1}
+.vs-coach .tx{min-width:0}
+.vs-howto p{margin:4px 0 8px;font-size:12.5px;line-height:1.45;color:#c9d1e6}
+.vs-howto b{color:#ffd84a}
+.vs-coach .vs-x{position:absolute;top:3px;right:3px;padding:1px 6px;font-size:11px;min-height:0}
+@keyframes vs-coach-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 .vs-choices{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .vs-choices .vs-btn{text-align:left}
 .vs-perf{position:absolute;right:56px;top:22px;font:11px/1.2 ui-monospace,Consolas,monospace;color:#bfffcf;background:rgba(0,0,0,.6);padding:3px 7px;border-radius:6px;pointer-events:none;z-index:30}

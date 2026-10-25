@@ -35,6 +35,8 @@ export function buildSave(game: any): SaveData {
       boats: JSON.parse(JSON.stringify(game.session.boats)),
       caches: [...game.session.caches]
     },
-    quests: game.quests.serialize()
+    quests: game.quests.serialize(),
+    tips: [...game.tips.seen],
+    regions: [...game.regionsSeen]
   };
 }
