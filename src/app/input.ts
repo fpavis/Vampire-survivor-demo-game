@@ -1,7 +1,8 @@
 // @ts-nocheck -- bound to the game runtime; the rules live in core/input/gamepad
 // One place for every way of playing: keyboard, mouse, touch and controller. It tracks which one the player is
 // using (so prompts and focus rings follow), reads the gamepad, and turns buttons into game actions.
-import { DIRS, PadMapper, QUICK_PANELS, emptyFrame, padKind } from '../core/input/gamepad';
+import { DEFAULT_BINDINGS, DIRS, PadMapper, QUICK_PANELS, assignPad, emptyFrame, padKind } from '../core/input/gamepad';
+import { KeyMap } from '../core/input/bindings';
 import { ui as uiBridge } from '../ui/bridge';
 import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navWantsArrows } from '../ui/nav';
 
@@ -17,6 +18,10 @@ export class InputSystem {
         this.device = 'mouse';
         this.menus = [];                 // Pixi menus (title, game over) that take the directions and confirm
         this.padId = '';
+        this.keys = new KeyMap();
+        this.captureKeyCb = null;        // rebinding: the next key press goes here
+        this.capturePadCb = null;        // rebinding: the next newly pressed button goes here
+        this.captureArmed = false;
         this.loadPrefs();
         this.bind();
     }
@@ -27,13 +32,41 @@ export class InputSystem {
             const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
             if (typeof p.vibration === 'boolean') uiBridge.vibration.value = p.vibration;
             if (typeof p.deadzone === 'number') uiBridge.deadzone.value = Math.min(0.6, Math.max(0.05, p.deadzone));
+            if (p.keys) this.keys = new KeyMap(p.keys);
+            if (p.pad) {
+                const b = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+                for (const k of Object.keys(b)) if (Array.isArray(p.pad[k]) && p.pad[k].length) b[k] = p.pad[k];
+                this.mapper.bindings = b;
+            }
         } catch { /* storage unavailable */ }
         this.mapper.options.deadzone = uiBridge.deadzone.value;
     }
 
     savePrefs() {
         this.mapper.options.deadzone = uiBridge.deadzone.value;
-        try { localStorage.setItem(PREFS_KEY, JSON.stringify({ vibration: uiBridge.vibration.value, deadzone: uiBridge.deadzone.value })); } catch { /* storage unavailable */ }
+        try { localStorage.setItem(PREFS_KEY, JSON.stringify({ vibration: uiBridge.vibration.value, deadzone: uiBridge.deadzone.value, keys: this.keys.toJSON(), pad: this.mapper.bindings })); } catch { /* storage unavailable */ }
+        uiBridge.bindVersion.value++;
+    }
+
+    // ------------------------------------------------------------- rebinding
+    /** The next key press is handed to `cb` (with its lower-cased name) instead of the game. */
+    captureKey(cb) { this.captureKeyCb = cb; this.capturePadCb = null; }
+    /** The next controller button pressed after all are released is handed to `cb`. */
+    capturePad(cb) { this.capturePadCb = cb; this.captureKeyCb = null; this.captureArmed = false; }
+    cancelCapture() { this.captureKeyCb = null; this.capturePadCb = null; }
+
+    rebindPad(action, button) {
+        const b = assignPad(this.mapper.bindings, action, button);
+        if (!b) return false;
+        this.mapper.bindings = b;
+        this.savePrefs();
+        return true;
+    }
+
+    resetBindings() {
+        this.keys.reset();
+        this.mapper.bindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+        this.savePrefs();
     }
 
     // ---------------------------------------------------------------- device
@@ -56,6 +89,12 @@ export class InputSystem {
         window.addEventListener('keydown', (e) => {
             if (!e.isTrusted) return;
             g.audio?.unlock();                                     // any real key press may start the sound
+            if (this.captureKeyCb && !MODIFIERS.has(e.key)) {
+                e.preventDefault(); e.stopImmediatePropagation();
+                const cb = this.captureKeyCb; this.captureKeyCb = null;
+                cb(e.key.toLowerCase() === ' ' ? ' ' : e.key.toLowerCase());
+                return;
+            }
             if (!MODIFIERS.has(e.key)) this.setDevice('key');
             const menu = this.menus[this.menus.length - 1];
             if (menu) {
@@ -131,6 +170,19 @@ export class InputSystem {
     /** Called every frame, also while the game is paused or on the title screen. */
     poll() {
         const pad = this.readPad();
+        if (this.capturePadCb && pad) {
+            // wait until every button is up, then take the first one pressed
+            const down = pad.buttons.map((b, i) => (b.pressed || b.value > 0.5 ? i : -1)).filter((i) => i >= 0);
+            if (!down.length) this.captureArmed = true;
+            else if (this.captureArmed) {
+                const cb = this.capturePadCb; this.capturePadCb = null;
+                this.mapper.update(pad, performance.now());     // swallow this press so it does not also act
+                cb(down[0]);
+                return;
+            }
+            this.frame = this.mapper.update(null, performance.now());
+            return;
+        }
         const f = this.mapper.update(pad, performance.now());
         this.frame = f;
         if (!pad) return;

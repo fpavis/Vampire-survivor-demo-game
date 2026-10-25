@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ui } from './bridge';
 import { glyph, onPad, quickGlyph } from './hints';
+import { hexCss, rarityColor, rarityLetter } from '../core/access/palettes';
 import { applyDrop, beginDrag, checkDrop, configureDnd, dragging, type DropTarget, type Payload } from './dnd';
 import {
   CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES, canSocket, describeSpell, previewRune, resolveSpell, spellXpFor, type SpellItem
@@ -8,7 +9,8 @@ import {
 import { runeValue, spellValue } from '../core/loot/loot';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
-const RC = ['#9aa4b2', '#4aa8ff', '#b765ff', '#ffc233', '#ff7a5a'];
+/** Rarity colour in the player's colour palette. */
+const RC = (tier: number) => hexCss(rarityColor(ui.palette.value, tier));
 const MAX_AUTO = 5;
 
 type SpellSort = 'level' | 'name' | 'type';
@@ -298,11 +300,12 @@ export function Loadout() {
                   const def = RUNES[id];
                   const chk = canSocket(item, id, firstEmpty);
                   return (
-                    <div key={id} class={`vs-rune${selRune === id ? ' sel' : ''}${chk.ok ? '' : ' bad'}`} tabIndex={0} data-rune={id} style={{ touchAction: 'none', borderColor: selRune === id ? undefined : RC[def.rarity] }}
+                    <div key={id} class={`vs-rune${selRune === id ? ' sel' : ''}${chk.ok ? '' : ' bad'}`} tabIndex={0} data-rune={id} style={{ touchAction: 'none', borderColor: selRune === id ? undefined : RC(def.rarity) }}
                       title={`${def.name} (${RARITY_NAMES[def.rarity]}) — ${chk.ok ? def.desc : chk.reason}`}
                       onKeyDown={(e) => { if (e.key === 'Enter') setRune(selRune === id ? null : id); }}
                       onPointerDown={(e) => beginDrag(e as any, { kind: 'rune', id, from: 'bag' }, `${def.icon} ${def.name}`, () => setRune(selRune === id ? null : id))}>
                       <span class="ic">{def.icon}</span>{def.name}{runeCounts[id] > 1 ? ` ×${runeCounts[id]}` : ''}
+                      <i class="vs-rl" style={{ color: RC(def.rarity) }}>{rarityLetter(def.rarity)}</i>
                     </div>
                   );
                 })}
@@ -389,7 +392,7 @@ function RunePicker({ item, slot, close }: { item: SpellItem; slot: number; clos
         const def = RUNES[id];
         const pv = previewRune(item, id, slot);
         return (
-          <button key={id} class="vs-pick" style={{ '--rc': RC[def.rarity] }}
+          <button key={id} class="vs-pick" style={{ '--rc': RC(def.rarity) }}
             onClick={() => { sp.socket(item.uid, id, slot); game.audio.play('equip'); close(); }}>
             <span class="ic">{def.icon}</span>
             <span class="tx">

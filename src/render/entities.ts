@@ -5,8 +5,9 @@ import { ENEMY_ART } from './enemyArt';
 import { threatBand } from '../core/world/difficulty';
 import { buildHero, animateHero } from './heroArt';
 import { softGlow } from './glow';
+import { access } from '../app/access';
+import { threatColor, threatMark } from '../core/access/palettes';
 
-const THREAT_COLORS = { low: 0x9aa4b2, even: 0x8ae08a, high: 0xffc233, deadly: 0xff4a4a };
 
 const TILT = WORLD_CONFIG.tilt;
 
@@ -184,8 +185,12 @@ export class EntityManager {
         }
         if (hp.label) {
             hp.label.visible = tagged;
-            if (tagged && hp.band !== band) { hp.band = band; hp.label.style.fill = THREAT_COLORS[band]; }
-            if (e.isBoss && e.bossName && hp.named !== e.bossName) { hp.named = e.bossName; hp.label.text = `Lv ${e.level} ${e.bossName}`; }
+            const key = band + access.palette + (e.bossName || '');
+            if (tagged && hp.band !== key) {
+                hp.band = key;
+                hp.label.style.fill = threatColor(access.palette, band);
+                hp.label.text = `${threatMark(band)}Lv ${e.level}${e.isBoss && e.bossName ? ' ' + e.bossName : ''}`;
+            }
         }
     }
 

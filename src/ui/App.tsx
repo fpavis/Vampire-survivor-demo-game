@@ -4,12 +4,14 @@ import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
 import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './Build';
 import { PauseMenu } from './Pause';
+import { RebindPanel } from './Rebind';
 import { BoardPanel, Journal, Tracker } from './Quests';
 import { glyph, onPad, quickGlyph } from './hints';
 import { isTyping } from './nav';
 import { ui, PICK_KEYS } from './bridge';
 import { CARDS, PATHS } from '../core/hero/stats';
 import { RARITY } from '../core/config';
+import { hexCss, rarityColor } from '../core/access/palettes';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -70,10 +72,10 @@ function CardsPanel() {
       {cards.map((c, i) => {
         const def = CARDS[c.id], r = RARITY[Math.min(3, c.rarity)], path = PATHS[def.path];
         return (
-          <button key={c.id} class="vs-card" style={{ '--rc': hex(r.color) }} onClick={() => pick(i)}>
+          <button key={c.id} class="vs-card" style={{ '--rc': hexCss(rarityColor(ui.palette.value, Math.min(3, c.rarity))) }} onClick={() => pick(i)}>
             <div class="ic">{def.icon}</div>
             <div>
-              <div class="tg">{path.icon} {path.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
+              <div class="tg">{path.icon} {path.name.toUpperCase()} · {r.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
               <div class="nm">{def.name}</div>
               {c.lines.map((l) => <div class="ln">{l}</div>)}
             </div>
@@ -112,7 +114,7 @@ function Pill() {
 const modalOpen = () =>
   ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
   ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
-  ui.pauseOpen.value || !!ui.dialog.value;
+  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value;
 
 export function App() {
   const modal = modalOpen();
@@ -123,14 +125,15 @@ export function App() {
       const k = e.key.toLowerCase();
       const game = ui.game;
       if (!game) return;
-      if (k === 'u') game.input.openPanel('upgrades');
-      else if (k === 'i') game.input.openPanel('spells');
-      else if (k === 'j') game.input.openPanel('journal');
+      const act = game.input.keys.actionFor(e.key);
+      if (act === 'upgrades') game.input.openPanel('upgrades');
+      else if (act === 'spells') game.input.openPanel('spells');
+      else if (act === 'journal') game.input.openPanel('journal');
       else if (ui.cardsOpen.value && ui.pending.value && PICK_KEYS.includes(k)) game.pickCard(Number(k) - 1);
       else if (PICK_KEYS.includes(k)) game.party.switchTo(Number(k) - 1);
-      else if (k === 'b') game.input.openPanel('build');
+      else if (act === 'build') game.input.openPanel('build');
       else if (k === 'enter' && game.towers.build) { e.preventDefault(); game.towers.confirmBuild(); }
-      else if (k === 'tab') { e.preventDefault(); game.party.cycle(e.shiftKey ? -1 : 1); }
+      else if (act === 'nextHero') { e.preventDefault(); game.party.cycle(e.shiftKey ? -1 : 1); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -158,6 +161,7 @@ export function App() {
       <WaypointPanel />
       <SailingHint />
       <PauseMenu />
+      <RebindPanel />
       <ActiveBar />
     </>
   );

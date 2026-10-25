@@ -227,6 +227,61 @@ if (want('spells')) {
   check('Splinter bursts kills into shards and Mana Siphon refills mana', kills.shards === 1 && kills.spawned === 3 && kills.mana >= 2, JSON.stringify(kills));
 }
 
+// ---- accessibility and rebinding
+if (want('access')) {
+  const before = await ev(() => parseFloat(getComputedStyle(document.querySelector('.vs-wallet')).fontSize));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const labels = await ev(() => [...document.querySelectorAll('.vs-pause .vs-btn, .vs-pause .vs-row span')].map((b) => b.innerText));
+  check('the pause menu offers text size, colours, reduced motion and rebinding',
+    labels.includes('Text size') && labels.some((t) => /Colours/.test(t)) && labels.some((t) => /Reduced motion/.test(t)) && labels.some((t) => /Rebind/.test(t)), JSON.stringify(labels));
+  const applied = await ev(() => {
+    const btn = [...document.querySelectorAll('.vs-pause .vs-btn')];
+    // one click on the colours button picks the red-green palette
+    btn.find((b) => /Colours/.test(b.innerText)).click();
+    btn.find((b) => /Reduced motion/.test(b.innerText)).click();
+    const slider = [...document.querySelectorAll('.vs-pause input[type=range]')].find((r) => /Text size/.test(r.closest('label').innerText));
+    slider.value = '1.3'; slider.dispatchEvent(new Event('input', { bubbles: true }));
+    return { prefs: JSON.parse(localStorage.getItem('vs.access.v1') || '{}'), ts: getComputedStyle(document.documentElement).getPropertyValue('--ts').trim(), reduced: document.documentElement.classList.contains('vs-reduced') };
+  });
+  check('accessibility settings apply and are remembered', applied.prefs.palette === 'redgreen' && applied.prefs.reducedMotion === true && Math.abs(applied.prefs.textScale - 1.3) < 1e-6 && applied.ts === '1.3' && applied.reduced, JSON.stringify(applied));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/access-pause.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const after = await ev(() => parseFloat(getComputedStyle(document.querySelector('.vs-wallet')).fontSize));
+  check('bigger text makes the HUD text bigger', after > before * 1.2, `${before} -> ${after}`);
+  const cues = await ev(() => {
+    const g = window.game, p = g.state.player;
+    g.fx.shake = 0; g.fx.addShake(10);
+    const e = g.makeEnemy('SLIME', p.wx + 150, p.wy, { level: g.state.level + 6 });
+    g.gameLoop(1);
+    return { shake: g.fx.shake, label: e.hpBar.label && e.hpBar.label.text, fill: e.hpBar.label && e.hpBar.label.style.fill };
+  });
+  check('reduced motion stops screen shake', cues.shake === 0, JSON.stringify(cues));
+  check('a strong monster is tagged with a shape and the palette colour', /^▲ Lv/.test(cues.label || '') && (cues.fill === 0xf0e442 || cues.fill === '#f0e442'), JSON.stringify(cues));
+
+  // rebind the first skill to X with the keyboard, through the panel
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  await ev(() => [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Rebind/.test(b.innerText)).click());
+  await page.waitForTimeout(200);
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/rebind.png` });
+  await ev(() => document.querySelector('[data-bind="key:skill1"]').click());
+  await page.keyboard.press('x');
+  await page.waitForTimeout(150);
+  const rb = await ev(() => ({ act: window.game.input.keys.actionFor('x'), swapped: window.game.input.keys.label('skill2'), cell: document.querySelector('[data-bind="key:skill1"]').innerText, saved: (JSON.parse(localStorage.getItem('vs.input.v1') || '{}').keys || {}).skill1 }));
+  check('a key can be rebound from the panel and is remembered', rb.act === 'skill1' && rb.cell === 'X' && JSON.stringify(rb.saved) === '["x"]', JSON.stringify(rb));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  const cast = await ev(() => { const g = window.game; g.spells.setLoadout(g.spells.auto, [g.spells.spells.find((s) => s.tpl === 'dash')?.uid || null, null, null]); g.spells.timers = {}; g.spells.mana.value = 100; return document.querySelector('.vs-skill .k')?.innerText; });
+  await page.keyboard.press('x');
+  await page.waitForTimeout(100);
+  const used = await ev(() => { const g = window.game, uid = g.spells.active[0]; return { cd: g.spells.timers[uid] || 0, mana: g.spells.mana.value }; });
+  check('the rebound key casts the skill and the HUD shows it', cast === 'X' && used.cd > 0, JSON.stringify({ cast, used }));
+  await ev(() => { window.game.input.resetBindings(); });
+  check('reset restores the default keys', await ev(() => window.game.input.keys.actionFor(' ') === 'skill1'));
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 preview.kill();

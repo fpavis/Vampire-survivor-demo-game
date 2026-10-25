@@ -1,5 +1,6 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import * as PIXI from 'pixi.js';
+import { access } from './access';
 import { RARITY, LIMITS } from '../core/config';
 import { gameState } from './gameState';
 import { ui as uiBridge } from '../ui/bridge';
@@ -145,8 +146,10 @@ export class UIManager {
 
     layoutHUD() {
         const w = this.app.screen.width, h = this.app.screen.height;
-        const k = this.compact ? 0.8 : 1;
+        const k = (this.compact ? 0.8 : 1) * Math.min(1.3, access.textScale);
         this.hudScale = k;
+        this.toastText.scale.set(access.textScale);
+        this.prompt.scale.set(access.textScale);
         this.panel.scale.set(k);
         this.panel.position.set(12, k < 1 ? 24 : 26);
         this.slotsContainer.scale.set(k);
@@ -191,7 +194,7 @@ export class UIManager {
     }
 
     flashDamage() {
-        this.damageFlash = 1;
+        this.damageFlash = access.reducedMotion ? 0.35 : 1;
     }
 
     banner(text, color = 0xffffff) {
@@ -200,7 +203,7 @@ export class UIManager {
         b.style.fill = color;
         b.visible = true;
         b.alpha = 1;
-        b.scale.set(0.4);
+        b.scale.set(access.reducedMotion ? 1 : 0.4);
         this.bannerTimer = 150;
     }
 

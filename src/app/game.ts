@@ -52,6 +52,8 @@ import { InputSystem } from './input';
 import { DungeonSystem } from './dungeons';
 import { QuestSystem } from './quests';
 import { isTyping } from '../ui/nav';
+import { normKey } from '../core/input/bindings';
+import { applyAccess, loadAccess } from './access';
 import { quickGlyph } from '../ui/hints';
 
 const TILT = WORLD_CONFIG.tilt;
@@ -115,6 +117,8 @@ class Game {
         this.ambient = 0;
         this.ui = new UIManager(this.app);
         this.input = new InputSystem(this);
+        loadAccess();
+        applyAccess(this);
 
         // persistent-world plumbing
         this.events = new EventBus();
@@ -410,16 +414,17 @@ class Game {
         window.addEventListener('keydown', (e) => {
             if (isTyping(e.target)) return;
             if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
-            gameState.keys[e.key] = true;
+            gameState.keys[normKey(e.key)] = true;
             this.audio.unlock();
             if (!gameState.player || gameState.gameOver) return;
-            if (e.key === ' ' && !e.repeat) this.spells.cast(0);
-            else if ((e.key === 'q' || e.key === 'Q') && !e.repeat) this.spells.cast(1);
-            else if ((e.key === 'r' || e.key === 'R') && !e.repeat) this.spells.cast(2);
-            if (e.key === 'e' || e.key === 'E') this.interact();
-            else if (e.key === 'm' || e.key === 'M') this.toggleMap();
+            const act = this.input.keys.actionFor(e.key);
+            if (act === 'skill1' && !e.repeat) this.spells.cast(0);
+            else if (act === 'skill2' && !e.repeat) this.spells.cast(1);
+            else if (act === 'skill3' && !e.repeat) this.spells.cast(2);
+            else if (act === 'interact') this.interact();
+            else if (act === 'map') this.toggleMap();
         });
-        window.addEventListener('keyup', (e) => { gameState.keys[e.key] = false; });
+        window.addEventListener('keyup', (e) => { gameState.keys[normKey(e.key)] = false; });
         window.addEventListener('blur', () => { gameState.keys = {}; });
 
         this.app.stage.eventMode = 'static';
@@ -773,10 +778,12 @@ class Game {
     movePlayer(delta) {
         const { keys, player } = this.state;
         let dx = 0, dy = 0;
-        if (keys.ArrowLeft || keys.a || keys.A) dx -= 1;
-        if (keys.ArrowRight || keys.d || keys.D) dx += 1;
-        if (keys.ArrowUp || keys.w || keys.W) dy -= 1;
-        if (keys.ArrowDown || keys.s || keys.S) dy += 1;
+        const km = this.input.keys;
+        const held = (a) => km.keysFor(a).some((k) => keys[k]);
+        if (held('left')) dx -= 1;
+        if (held('right')) dx += 1;
+        if (held('up')) dy -= 1;
+        if (held('down')) dy += 1;
 
         const joy = this.ui.joystick;
         let analog = false;

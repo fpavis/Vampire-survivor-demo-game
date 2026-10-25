@@ -1,5 +1,6 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import * as PIXI from 'pixi.js';
+import { access } from '../app/access';
 import { WORLD_CONFIG } from '../core/config';
 
 const TILT = WORLD_CONFIG.tilt;
@@ -93,6 +94,7 @@ export class Effects {
     }
 
     burst(x, y, z, color, count, speed, opts = {}) {
+        if (access.reducedMotion) count = Math.ceil(count * 0.5);
         const { size = 1, life = 30, gravity = 0.22, up = 2.5, glow = false } = opts;
         for (let i = 0; i < count; i++) {
             if (this.particles.length >= MAX_PARTICLES) return;
@@ -153,6 +155,7 @@ export class Effects {
     }
 
     addShake(amount) {
+        if (access.reducedMotion) return;
         this.shake = Math.min(14, Math.max(this.shake, amount));
     }
 

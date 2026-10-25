@@ -2,24 +2,30 @@ import { useState } from 'preact/hooks';
 import { ui } from './bridge';
 import { glyph, onPad, quickGlyph } from './hints';
 import { padGlyph } from '../core/input/gamepad';
+import { PALETTES } from '../core/access/palettes';
+import { setAccess } from '../app/access';
 
 const kind = () => ui.padKind.value;
 
-function Controls() {
-  const pad = (a: Parameters<typeof padGlyph>[1]) => padGlyph(kind(), a);
+export function Controls() {
+  ui.bindVersion.value;
+  const input = ui.game?.input;
+  const pad = (a: Parameters<typeof padGlyph>[1]) => padGlyph(kind(), a, input?.mapper?.bindings);
+  const key = (a: string) => (input?.keys ? input.keys.label(a) : a);
   const rows: [string, string, string][] = [
-    ['Move', 'W A S D', 'Left stick'],
+    ['Move', `${key('up')} ${key('left')} ${key('down')} ${key('right')} · arrows`, 'Left stick'],
     ['Aim dashes and blinks', 'Move direction / hold the mouse', 'Right stick'],
-    ['Interact · confirm', 'E · Enter', pad('interact')],
-    ['Skills (Dash …)', 'Space · Q · R', `${pad('skill1')} · ${pad('skill2')} · ${pad('skill3')}`],
-    ['Switch hero', '1 2 3 · Tab', `${pad('prevHero')} · ${pad('nextHero')}`],
-    ['Spells and runes', 'I', quickGlyph('spells')],
-    ['Level-up cards', 'U', quickGlyph('upgrades')],
-    ['Build menu', 'B', quickGlyph('build')],
-    ['Journal and quests', 'J', quickGlyph('journal')],
-    ['World map', 'M', pad('map')],
+    ['Interact · confirm', `${key('interact')} · Enter`, pad('interact')],
+    ['Skills (Dash …)', `${key('skill1')} · ${key('skill2')} · ${key('skill3')}`, `${pad('skill1')} · ${pad('skill2')} · ${pad('skill3')}`],
+    ['Switch hero', `1 2 3 · ${key('nextHero')}`, `${pad('prevHero')} · ${pad('nextHero')}`],
+    ['Spells and runes', key('spells'), 'D-pad ↑'],
+    ['Level-up cards', key('upgrades'), 'D-pad ↓'],
+    ['Build menu', key('build'), 'D-pad ←'],
+    ['Journal and quests', key('journal'), 'D-pad →'],
+    ['World map', key('map'), pad('map')],
     ['Pause · settings', 'Esc', pad('menu')],
     ['Back · close · cancel', 'Esc', pad('cancel')],
+    ['Equip · lock in the spell panel', 'F · L', `${pad('skill1')} · ${pad('skill2')}`],
     ['Move through a menu', '↑ ↓ ← → (WASD still walks)', 'D-pad']
   ];
   return (
@@ -73,6 +79,16 @@ export function PauseMenu() {
           <Slider label="Joystick opacity" min={0.1} max={1} step={0.1} value={joy.config.opacity} fmt={(v) => `${Math.round(v * 100)}%`} onInput={(v) => setJoy({ opacity: v })} />
         </>
       )}
+      <div class="vs-sec">ACCESSIBILITY</div>
+      <Slider label="Text size" min={0.9} max={1.4} step={0.1} value={ui.textScale.value} fmt={(v) => `${Math.round(v * 100)}%`}
+        onInput={(v) => setAccess(game, { textScale: v })} />
+      <button class="vs-btn" onClick={() => {
+        const i = PALETTES.findIndex((p) => p.id === ui.palette.value);
+        setAccess(game, { palette: PALETTES[(i + 1) % PALETTES.length].id });
+      }}>🎨 Colours: {PALETTES.find((p) => p.id === ui.palette.value)?.label}</button>
+      <button class="vs-btn" onClick={() => setAccess(game, { reducedMotion: !ui.reducedMotion.value })}>
+        {ui.reducedMotion.value ? '🧘 Reduced motion is on (no shaking or flashing)' : '🎢 Reduced motion is off'}</button>
+      <button class="vs-btn" onClick={() => (ui.rebindOpen.value = true)}>⌨ Rebind keys and buttons…</button>
       <div class="vs-sec">HELP</div>
       <button class="vs-btn" onClick={() => setHelp(!help)}>{help ? '▾ Hide the controls' : '▸ Show all controls'}</button>
       {help && <Controls />}

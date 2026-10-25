@@ -160,3 +160,34 @@ describe('spatial navigation', () => {
     expect(pickNeighbor(left[3], all, 'down', 3)).toBe(-1);
   });
 });
+
+describe('rebinding', () => {
+  it('swaps keyboard keys so nothing is left without a key', async () => {
+    const { KeyMap } = await import('../src/core/input/bindings');
+    const km = new KeyMap();
+    expect(km.actionFor(' ')).toBe('skill1');
+    expect(km.assign('skill1', 'Q')).toBe(true);
+    expect(km.actionFor('q')).toBe('skill1');
+    expect(km.primary('skill2')).toBe(' ');
+    expect(km.label('skill2')).toBe('Space');
+    expect(km.assign('interact', 'Escape')).toBe(false);
+    // taking an arrow key from movement leaves the main movement key alone
+    km.assign('map', 'ArrowUp');
+    expect(km.keysFor('up')).toEqual(['w']);
+    expect(km.actionFor('arrowup')).toBe('map');
+    const restored = new KeyMap(JSON.parse(JSON.stringify(km.toJSON())));
+    expect(restored.actionFor('q')).toBe('skill1');
+    restored.reset();
+    expect(restored.actionFor('q')).toBe('skill2');
+  });
+
+  it('swaps controller buttons and keeps the d-pad fixed', async () => {
+    const { DEFAULT_BINDINGS, assignPad, BTN } = await import('../src/core/input/gamepad');
+    const b = assignPad(DEFAULT_BINDINGS, 'skill1', BTN.A)!;
+    expect(b.skill1).toEqual([BTN.A]);
+    expect(b.interact).toEqual([BTN.X]);
+    expect(assignPad(DEFAULT_BINDINGS, 'skill1', BTN.UP)).toBeNull();
+    expect(assignPad(DEFAULT_BINDINGS, 'up', BTN.A)).toBeNull();
+    expect(DEFAULT_BINDINGS.skill1).toEqual([BTN.X]);           // the defaults are never changed
+  });
+});

@@ -137,6 +137,26 @@ export const KEY_GLYPH: Record<PadAction, string> = {
   map: 'M', menu: 'Esc', up: '↑', down: '↓', left: '←', right: '→'
 };
 
+/** Actions a player may move to another button. The d-pad stays fixed: it moves through menus. */
+export const PAD_REBINDABLE: PadAction[] = ['interact', 'cancel', 'skill1', 'skill2', 'skill3', 'prevHero', 'nextHero', 'map', 'menu'];
+export const PAD_ACTION_LABEL: Partial<Record<PadAction, string>> = {
+  interact: 'Interact · confirm', cancel: 'Back · cancel', skill1: 'Skill 1', skill2: 'Skill 2', skill3: 'Skill 3',
+  prevHero: 'Previous hero', nextHero: 'Next hero', map: 'World map', menu: 'Pause'
+};
+
+/**
+ * Move `action` to `button`. Whatever action held that button takes the old button instead (a swap), so no
+ * action is ever left without a button. D-pad buttons and unknown actions are refused (returns null).
+ */
+export function assignPad(bindings: Record<PadAction, number[]>, action: PadAction, button: number): Record<PadAction, number[]> | null {
+  if (!PAD_REBINDABLE.includes(action) || button < 0 || button > 11) return null;
+  const out = JSON.parse(JSON.stringify(bindings)) as Record<PadAction, number[]>;
+  const old = out[action][0];
+  for (const other of PAD_REBINDABLE) if (other !== action && out[other][0] === button) out[other] = [old];
+  out[action] = [button];
+  return out;
+}
+
 /** Panels that the d-pad opens when no menu is up (the buttons are fixed, so they live here as data). */
 export type QuickPanel = 'spells' | 'upgrades' | 'build' | 'journal';
 export const QUICK_PANELS: Record<Dir, QuickPanel | null> = { up: 'spells', down: 'upgrades', left: 'build', right: 'journal' };

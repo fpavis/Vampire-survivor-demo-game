@@ -1,9 +1,11 @@
 import { ui } from './bridge';
+import { hexCss, rarityColor } from '../core/access/palettes';
 import { glyph } from './hints';
 import { CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES, describeSpell, makeSpell, resolveSpell } from '../core/spells/spells';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
-const RC = ['#9aa4b2', '#4aa8ff', '#b765ff', '#ffc233', '#ff7a5a'];
+/** Rarity colour in the player's colour palette. */
+const RC = (tier: number) => hexCss(rarityColor(ui.palette.value, tier));
 
 export function Shop() {
   const s = ui.shop.value;
@@ -22,7 +24,7 @@ export function Shop() {
           const isSpell = it.kind === 'spell';
           const tpl = isSpell ? TEMPLATES[it.tpl] : null;
           const rune = !isSpell ? RUNES[it.id] : null;
-          const color = isSpell ? hex(CORE_INFO[tpl!.core].color) : RC[rune!.rarity];
+          const color = isSpell ? hex(CORE_INFO[tpl!.core].color) : RC(rune!.rarity);
           const detail = isSpell ? describeSpell(resolveSpell(makeSpell(it.tpl))).join(' · ') : rune!.desc;
           return (
             <div key={i} class={`vs-good${it.sold ? ' sold' : ''}`} style={{ '--gc': color }}>

@@ -77,6 +77,11 @@ export const ui = {
   pauseOpen: signal(false),
   vibration: signal(true),
   deadzone: signal(0.2),
+  textScale: signal(1),
+  palette: signal<'default' | 'redgreen' | 'blueyellow'>('default'),
+  reducedMotion: signal(false),
+  bindVersion: signal(0),          // bumps when keys or buttons are rebound, so hints re-render
+  rebindOpen: signal(false),
   game: null as any
 };
 

@@ -46,6 +46,8 @@ export const CSS = `
 .vs-sock.drop{border-color:#7be07b;box-shadow:0 0 10px #7be07b88}
 .vs-rune{display:inline-flex;flex-direction:column;align-items:center;gap:2px;width:68px;margin:0 6px 6px 0;padding:6px 2px;background:#151c33;border:2px solid #2e3a62;border-radius:10px;font-size:11px;color:inherit;font-family:inherit;cursor:pointer;text-align:center}
 .vs-rune .ic{font-size:22px}
+.vs-rune{position:relative}
+.vs-rl{position:absolute;right:4px;top:2px;font-style:normal;font-weight:700;font-size:9px}
 .vs-rune.sel{border-color:#ffd84a}
 .vs-rune.bad{opacity:.35;cursor:not-allowed}
 .vs-tip{min-height:38px;font-size:12.5px;color:#c9d1e6;margin-top:6px}
@@ -182,6 +184,11 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-tracker .r{color:#9be09b;margin-top:2px}
 .vs-choices{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .vs-choices .vs-btn{text-align:left}
+.vs-rebind{background:rgba(12,16,30,.99);left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:22}
+.vs-binds{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 14px}
+.vs-bind{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#c9d1e6}
+.vs-bind .vs-btn{min-width:96px;text-align:center}
+.vs-bind .vs-btn.wait{border-color:#ffd84a;color:#ffd84a;animation:vs-glow 1s infinite}
 
 /* loadout: hero switcher, button hints, rune picker */
 .vs-heroes{display:inline-flex;gap:4px;margin-left:10px;vertical-align:middle}
@@ -239,4 +246,9 @@ html[data-input="pad"] .vs-hint-key{display:none}
   .vs-hold,.vs-buildhud,.vs-sailing{top:26px;width:min(340px,calc(100vw - 500px));white-space:normal}
 }
 @keyframes vs-glow{50%{box-shadow:0 0 16px #ffd84a}}
+html.vs-reduced #ui-root *{animation:none!important;transition:none!important}
+html.vs-reduced #ui-root .vs-card:hover,html.vs-reduced #ui-root .vs-card:focus{transform:none!important}
 `;
+
+/** Text sizes under 20px follow the player's text-size setting (--ts); icons and big numbers keep their size. */
+export const scaledCss = (css: string) => css.replace(/font-size:(\d+(?:\.\d+)?)px/g, (m, n) => (Number(n) < 20 ? `font-size:calc(${n}px * var(--ts, 1))` : m));
