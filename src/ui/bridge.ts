@@ -8,6 +8,26 @@ export interface HeroView {
   id: string; name: string; icon: string; color: number; level: number; dead: boolean; pending: number;
   hp: number; maxHp: number; mana: number; maxMana: number;
 }
+export interface ObjView { text: string; progress: string; done: boolean }
+export interface QuestView {
+  id: string; title: string; summary: string; kind: string; giver: string; level: number;
+  ready: boolean; payable: boolean; tracked: boolean; reward: string; objectives: ObjView[];
+}
+export interface QuestsView {
+  begun: boolean;
+  chapter: { title: string; blurb: string } | null;
+  next: { title: string; summary: string; status: string; level: number } | null;
+  main: QuestView | null;
+  bounties: QuestView[];
+  done: number;
+  lords: { name: string; title: string; group: string; dead: boolean }[];
+  sovereign: { name: string; title: string; dead: boolean };
+}
+export interface BoardView {
+  town: string; nextIn: number;
+  offers: { slot: number; title: string; summary: string; level: number; reward: string; lines: string[]; taken: boolean }[];
+  mine: QuestView[];
+}
 export interface HealQuoteView { id: string; dead: boolean; missing: number; cost: number }
 
 export interface ActiveSlotView {
@@ -39,7 +59,12 @@ export const ui = {
   shopOpen: signal(false),
   innOpen: signal(false),
   shop: signal<{ town: string; nextIn: number; items: ({ kind: 'spell'; tpl: string; price: number; sold: boolean } | { kind: 'rune'; id: string; price: number; sold: boolean })[] } | null>(null),
-  dialog: signal<{ speaker: string; icon: string; text: string } | null>(null),
+  dialog: signal<{ speaker: string; icon: string; text: string; choices?: { text: string; index: number }[]; last?: boolean; script?: boolean } | null>(null),
+  quests: signal<QuestsView | null>(null),
+  tracker: signal<QuestView | null>(null),
+  journalOpen: signal(false),
+  board: signal<BoardView | null>(null),
+  boardOpen: signal(false),
   innCost: signal(0),
   hold: signal<{ progress: number; label: string; wave: number; waves: number; seconds: number } | null>(null),
   surface: signal<{ name: string; desc: string; color: number; bad: boolean } | null>(null),

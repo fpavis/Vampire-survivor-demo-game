@@ -22,7 +22,7 @@ import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stat
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
 import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet } from '../core/loot/loot';
 import { STOCK_EPOCH_SECONDS, epochOf, innCost, rumorFor, stockFor } from '../core/economy/shop';
-import { createNpc } from '../render/npcArt';
+import { createBoard, createNpc } from '../render/npcArt';
 import { AudioManager } from './audio';
 import { mountUi } from '../ui/mount';
 import { ui as uiBridge } from '../ui/bridge';
@@ -47,6 +47,8 @@ import { perceptionOf } from '../core/config';
 import { engage } from '../core/ai/ai';
 import { installDevTools } from './devtools';
 import { InputSystem } from './input';
+import { DungeonSystem } from './dungeons';
+import { QuestSystem } from './quests';
 import { isTyping } from '../ui/nav';
 import { quickGlyph } from '../ui/hints';
 
@@ -87,6 +89,9 @@ class Game {
         this.sites = new SitesRuntime(this);
         this.towers = new TowerSystem(this);
         this.sea = new SeaSystem(this);
+        this.dungeons = new DungeonSystem(this);
+        this.world.extraPois = (cx, cy) => this.dungeons.poisForChunk(cx, cy);   // plateau and island entrances
+        this.floor = 0;
         this.boat = null;           // { dockId } while sailing
         this.pointerKind = 'mouse';
         this.audio = new AudioManager();
@@ -110,6 +115,7 @@ class Game {
 
         // persistent-world plumbing
         this.events = new EventBus();
+        this.quests = new QuestSystem(this);
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.gemStash = null;
         this.fog = new FogOfWar();
@@ -442,6 +448,7 @@ class Game {
         this.interactables = [];
         this.critters.reset();
         this.hazards.reset();
+        this.dungeons.clearFeatures();
         this.spells.clearProjectiles();
         this.fx.clear();
         if (this.ambience) this.ambience.clear();
@@ -454,6 +461,7 @@ class Game {
         this.towers.cancelBuild();
         this.towers.clearDisplays();
         this.sea.reset();
+        this.dungeons.reset();
         this.closeNpcPanels();
         uiBridge.towerPanel.value = null;
         uiBridge.waypointOpen.value = null;
@@ -515,6 +523,7 @@ class Game {
             const out = [];
             for (const r of this.towers.recs) out.push({ tx: r.tx, ty: r.ty, icon: r.built ? { spire: '🗼', ward: '🔰', beacon: '🔥', waypoint: '🌀', climb: '⛰️', bridge: '🌉', dock: '⚓' }[r.kind] : '🚧', label: r.built ? '' : 'Site', color: '#ffd070' });
             for (const c of this.sea.known.values()) if (!this.sea.isOpened(c.id) && this.fog.isRevealed(c.tx, c.ty)) out.push({ tx: c.tx, ty: c.ty, icon: '✖', label: 'Treasure', color: '#ffd84a' });
+            for (const m of this.quests.markers()) out.push(m);
             return out;
         };
         this.map.siteState = (id) => (this.session.claimed[id] !== undefined || this.session.triggered[id] !== undefined ? 'done' : 'open');
@@ -553,8 +562,10 @@ class Game {
             this.session.boats = JSON.parse(JSON.stringify(save.world.boats));
             this.session.caches = [...save.world.caches];
         }
+        this.quests.load(save ? save.quests : null);
         this.towers.load(save ? save.world.towers : []);     // tower sites, edits and sprites reach the world before any chunk is built
         this.sea.reset();
+        this.dungeons.reset();
         this.boat = null;
         uiBridge.sailing.value = false;
         EntityManager.heroLevel = gameState.level;
@@ -662,6 +673,7 @@ class Game {
             }
         });
         this.spells.emitLights(L);
+        this.dungeons.emitLights(L);
         for (const g of this.state.gems) if (g.kind === 'gem') L.add({ x: g.wx, y: g.wy, z: 12, r: 46, color: EntityManager.gemTier(g.value).color, i: 0.6 });
         for (const it of this.interactables) {
             if (it.kind === 'chest' && !it.opened) L.add({ x: it.x, y: it.y, z: 16, r: 90, color: 0xffd060, i: 0.55 });
@@ -713,6 +725,8 @@ class Game {
         this.sites.update(delta);
         this.towers.update(delta);
         this.sea.update(delta);
+        this.dungeons.update(delta);
+        this.quests.update(delta);
         this.updateShakers(delta);
         this.spells.update(delta);
         this.party.update(delta);
@@ -983,7 +997,9 @@ class Game {
         this.fx.death(e.wx, e.wy, type.color, e.isBoss);
 
         if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy, e.level);
-        this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss });
+        this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss, group: this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.group : this.zoneGroup, dungeon: !!e.dungeonBoss });
+        if (e.guardian) this.dungeons.guardianDown();
+        if (e.dungeonBoss) this.dungeons.bossDown(e);
         this.popRuntime.onKill(e);
         this.spells.onKill(e, spell);
         this.dropLoot(e);
@@ -996,7 +1012,7 @@ class Game {
             this.dropGem(e.wx, e.wy + 20, 0, 'heart');
             this.dropGem(e.wx + 30, e.wy, 0, 'heart');
             this.fx.addShake(12);
-            this.ui.banner(`${type.name.toUpperCase()} DEFEATED!`, 0xffd84a);
+            this.ui.banner(`${e.dungeonBoss ? e.bossName : type.name.toUpperCase()} DEFEATED!`, 0xffd84a);
             this.requestSave('boss', true);
         } else {
             this.dropGem(e.wx, e.wy, e.experienceValue);
@@ -1083,7 +1099,7 @@ class Game {
             };
             for (const it of this.interactables) {
                 if (it.kind === 'chest' && !it.opened) consider({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64);
-                if (it.npc) consider({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper' }[it.kind] }, it.x, it.y, 90);
+                if (it.npc) consider({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper', elder: '[E]  Speak with the Elder', board: '[E]  Read the bounty board' }[it.kind] }, it.x, it.y, 90);
             }
             for (const c of this.critters.list) {
                 if (c.kind === 'villager') consider({ kind: 'npc', c, text: '[E]  Talk' }, c.wx, c.wy, 56);
@@ -1091,11 +1107,16 @@ class Game {
             const src = this.interior;
             if (src.fountain) consider({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96);
             if (src.altar) consider({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80);
-            consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
+            if (src.floor > 0) consider({ kind: 'up', text: '[E]  Climb back up' }, src.exit.x, src.exit.y, 74);
+            else consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
+            if (src.stairsDown) {
+                const left = this.dungeons.guardiansLeft();
+                consider({ kind: 'down', sealed: left > 0, text: left > 0 ? `The way down is sealed · ${left} guardian${left > 1 ? 's' : ''} left` : '[E]  Descend' }, src.stairsDown.x, src.stairsDown.y, 80);
+            }
         }
         this.target = target;
         if ((uiBridge.towerPanel.value || uiBridge.waypointOpen.value) && (!target || target.kind !== 'tower')) { uiBridge.towerPanel.value = null; uiBridge.waypointOpen.value = null; }
-        const open = uiBridge.healerOpen.value ? 'healer' : uiBridge.shopOpen.value ? 'merchant' : uiBridge.innOpen.value ? 'innkeeper' : uiBridge.dialog.value ? 'npc' : null;
+        const open = uiBridge.healerOpen.value ? 'healer' : uiBridge.shopOpen.value ? 'merchant' : uiBridge.innOpen.value ? 'innkeeper' : uiBridge.boardOpen.value ? 'board' : uiBridge.dialog.value ? (uiBridge.dialog.value.script ? 'elder' : 'npc') : null;
         if (open && (!target || target.kind !== open)) this.closeNpcPanels();
         this.ui.setPrompt(target ? target.text : null);
     }
@@ -1111,6 +1132,8 @@ class Game {
         switch (t.kind) {
             case 'enter': this.enterPlace(t.poi); break;
             case 'exit': this.exitPlace(); break;
+            case 'up': this.changeFloor(-1); break;
+            case 'down': if (t.sealed) { this.audio.play('deny'); this.ui.toast('Defeat the guardians first: the seal holds until they fall'); } else this.changeFloor(1); break;
             case 'chest': this.openChest(t.it); break;
             case 'gather': this.gatherHit(t.node); break;
             case 'site': case 'tower': this.towers.interact(t); break;
@@ -1118,6 +1141,8 @@ class Game {
             case 'ashore': this.sea.disembark(); break;
             case 'cache': this.sea.open(t.cache); break;
             case 'healer': case 'merchant': case 'innkeeper': this.openNpc(t.kind); break;
+            case 'elder': if (uiBridge.dialog.value && uiBridge.dialog.value.script) this.quests.advance(); else this.quests.talkToElder(); break;
+            case 'board': if (uiBridge.boardOpen.value) this.closeNpcPanels(); else this.quests.openBoard(); break;
             case 'npc': if (uiBridge.dialog.value) uiBridge.dialog.value = null; else this.talkToVillager(t.c); break;
             case 'fountain':
                 if (this.fountainReady()) {
@@ -1152,39 +1177,72 @@ class Game {
             this.popRuntime.clearActive();
             this.clearOverworldDisplays();
 
-            const src = createInterior(poi);
-            this.interior = src;
-            this.interiorPoi = poi;
-            this.interiorName = poi.name;
             this.visited[poi.id] = this.visited[poi.id] || { opened: [], cleared: false, altarUsed: false };
-            this.interiorState = this.visited[poi.id];
             // visited towns become respawn points
             if (poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id)) {
                 this.session.cities.push({ id: poi.id, name: poi.name, ex: poi.ex, ey: poi.ey });
             }
             if (poi.type === 'city') this.session.lastCity = poi.id;
-            this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type });
-
-            this.world.setSource(src);
-            this.interiorFog = new FogOfWar();
-            this.lastFogTx = null;
-            this.map.setMode('interior');
-            this.mode = 'interior';
-            this.flow.centerTx = NaN;
-            this.setAmbient(src.ambient);
-            this.ambience.clear();
-            this.ambience.setRegion(poi.type);
-
-            const spot = this.world.findFree(src.start.x, src.start.y, p.radius + 2);
-            p.wx = spot.x; p.wy = spot.y;
-            this.cam.x = p.wx; this.cam.y = p.wy;
-            this.populateInterior(src, poi);
-            this.zoneLabel = `${POI_INFO[poi.type].icon} ${poi.name}`;
-            this.ui.showZone(poi.name, POI_INFO[poi.type].icon, GROUP_INFO[poi.type].color);
-
-            this.applyCamera();
-            this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+            this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type, dungeon: poi.dungeon ? poi.dungeon.realm : null, group: poi.group });
+            this.loadFloor(poi, 0, 'start');
             this.requestSave('place', true);
+            this.ui.fade(0, 0.06, () => { this.busy = false; this.checkLevelUp(); });
+        });
+    }
+
+    /** Build floor `floor` of a place and put the party on it (the screen is already faded out). */
+    loadFloor(poi, floor, arrive = 'start') {
+        const p = this.state.player;
+        const place = this.visited[poi.id];
+        const src = createInterior(poi, floor);
+        this.interior = src;
+        this.interiorPoi = poi;
+        this.interiorName = poi.name;
+        this.floor = floor;
+        // the ground floor keeps its state on the place itself (as before); deeper floors keep theirs beside it
+        this.interiorState = floor === 0 ? place : ((place.floors ||= {})[floor] ||= { opened: [], cleared: false, altarUsed: false });
+        this.world.setSource(src);
+        this.interiorFog = new FogOfWar();
+        this.lastFogTx = null;
+        this.map.setMode('interior');
+        this.mode = 'interior';
+        this.flow.centerTx = NaN;
+        this.setAmbient(src.ambient);
+        this.ambience.clear();
+        this.ambience.setRegion(poi.type);
+
+        const from = arrive === 'end' && src.stairsDown ? { x: src.stairsDown.x, y: src.stairsDown.y + 1.5 * T } : src.start;
+        const spot = this.world.findFree(from.x, from.y, p.radius + 2);
+        p.wx = spot.x; p.wy = spot.y;
+        this.cam.x = p.wx; this.cam.y = p.wy;
+        this.populateInterior(src, poi);
+        this.dungeons.showFeatures();
+        const label = src.dungeon ? `${poi.name} · floor ${floor + 1} of ${src.floors}` : poi.name;
+        this.zoneLabel = `${POI_INFO[poi.type].icon} ${label}`;
+        this.ui.showZone(label, POI_INFO[poi.type].icon, GROUP_INFO[poi.type].color);
+        if (src.dungeon) this.events.emit('FloorEntered', { id: poi.id, floor, floors: src.floors });
+
+        this.applyCamera();
+        this.world.update(this.cam.x, this.cam.y, this.app.screen.width, this.app.screen.height, true);
+    }
+
+    /** Take the stairs: +1 goes down, -1 goes up. */
+    changeFloor(delta) {
+        if (this.busy || this.mode !== 'interior' || !this.interior || !this.interior.dungeon) return;
+        const next = this.floor + delta;
+        if (next < 0 || next >= this.interior.floors) return;
+        this.busy = true;
+        this.state.pointerDown = false;
+        this.state.keys = {};
+        this.audio.play('switch');
+        this.ui.fade(1, 0.09, () => {
+            let banked = 0;
+            this.state.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
+            if (banked > 0) { this.addXp(banked); this.ui.toast(`Gathered the gems you left behind: +${Math.round(banked * this.stats.growth)} XP`); }
+            const poi = this.interiorPoi;
+            this.clearWorldEntities();
+            this.loadFloor(poi, next, delta > 0 ? 'start' : 'end');
+            this.requestSave('floor', true);
             this.ui.fade(0, 0.06, () => { this.busy = false; this.checkLevelUp(); });
         });
     }
@@ -1194,10 +1252,12 @@ class Game {
         this.interiorHostiles = 0;
         if (!st.cleared) {
             src.spawns.forEach((sp) => {
+                if (poi.dungeon && sp.elite && st.unsealed) return;       // the guardians of an opened floor stay dead
                 const type = ENEMY_TYPES[sp.type];
                 let x = sp.x, y = sp.y;
                 if (!type.flying && this.world.blocked(x, y, type.radius)) { const f = this.world.findFree(x, y, type.radius); x = f.x; y = f.y; }
-                this.makeEnemy(sp.type, x, y, { dormant: true, aggro: 380, elite: !!sp.elite, level: Math.max(1, this.overworld.levelAt(poi.tx, poi.ty)) });
+                const e = this.makeEnemy(sp.type, x, y, { dormant: true, aggro: 380, elite: !!sp.elite, level: this.dungeons.levelOf(poi, src.floor) });
+                if (poi.dungeon && sp.elite) e.guardian = true;
                 this.interiorHostiles++;
             });
         }
@@ -1217,8 +1277,16 @@ class Game {
             this.spawnNpc('healer', src.fountain.x + 120, src.fountain.y + 10);
             this.spawnNpc('merchant', src.fountain.x - 130, src.fountain.y + 20);
             if (src.altar) this.spawnNpc('innkeeper', src.altar.x + 150, src.altar.y + 70);
+            this.spawnNpc('elder', src.fountain.x - 230, src.fountain.y - 150);
+            this.spawnBoard(src.fountain.x + 240, src.fountain.y - 140);
         }
-        this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: '🚪' });
+        this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: src.floor > 0 ? '⬆' : '🚪' });
+        if (src.stairsDown) this.map.markers.push({ tx: src.stairsDown.x / T, ty: src.stairsDown.y / T, icon: '⬇' });
+        if (src.dungeon && src.boss) {
+            const place = this.visited[poi.id];
+            if (!place.bossDead) { this.dungeons.spawnBoss(src, poi, place); this.map.markers.push({ tx: src.boss.x / T, ty: src.boss.y / T, icon: '💀' }); }
+            else if (!place.bossChestOpened) this.dungeons.spawnBossChest(src.boss.x, src.boss.y);
+        }
         src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
     }
 
@@ -1274,16 +1342,28 @@ class Game {
         c.zIndex = spot.y;
         this.objectLayer.addChild(c);
         this.interactables.push({ kind: role, x: spot.x, y: spot.y, sprite: c, npc: true });
-        const icon = { healer: '✚', merchant: '💰', innkeeper: '🛏' }[role];
+        const icon = { healer: '✚', merchant: '💰', innkeeper: '🛏', elder: '📜' }[role];
         this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon });
+        return c;
+    }
+
+    spawnBoard(x, y) {
+        const spot = this.world.findFree(x, y, 16);
+        const c = createBoard();
+        c.position.set(spot.x, spot.y * TILT);
+        c.zIndex = spot.y;
+        this.objectLayer.addChild(c);
+        this.interactables.push({ kind: 'board', x: spot.x, y: spot.y, sprite: c, npc: true });
+        this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon: '📋' });
         return c;
     }
 
     openNpc(kind) {
         const b = uiBridge;
         const was = { healer: b.healerOpen.value, merchant: b.shopOpen.value, innkeeper: b.innOpen.value };
-        b.healerOpen.value = b.shopOpen.value = b.innOpen.value = false;
+        b.healerOpen.value = b.shopOpen.value = b.innOpen.value = b.boardOpen.value = false;
         b.dialog.value = null;
+        this.quests.closeDialogue();
         this.party.commit();
         if (kind === 'healer') b.healerOpen.value = !was.healer;
         else if (kind === 'merchant') { b.shopOpen.value = !was.merchant; this.refreshShop(); }
@@ -1293,8 +1373,9 @@ class Game {
 
     closeNpcPanels() {
         const b = uiBridge;
-        b.healerOpen.value = b.shopOpen.value = b.innOpen.value = false;
+        b.healerOpen.value = b.shopOpen.value = b.innOpen.value = b.boardOpen.value = false;
         b.dialog.value = null;
+        this.quests.closeDialogue();
     }
 
     // ---- merchant
@@ -1367,12 +1448,13 @@ class Game {
     openChest(it) {
         if (it.opened) return;
         it.opened = true;
-        this.interiorState.opened.push(it.idx);
+        if (it.idx !== 'boss') this.interiorState.opened.push(it.idx);
         const set = this.world.decorTextures.chest;
         it.sprite.texture = set[1].texture;
         this.fx.burst(it.x, it.y, 28, 0xffd84a, 30, 3.2, { size: 0.9, life: 40, up: 4.2 });
         this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== '🎁');
         this.map.dirty = true;
+        if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); return; }
         this.grantLoot(it.big ? 1 : 0);
     }
 
@@ -1428,6 +1510,7 @@ class Game {
         if (g.kind === 'coin') w.gold += g.value;
         else if (w[g.kind] !== undefined) w[g.kind] += g.value;
         else return;
+        this.events.emit('Collected', { resource: g.kind === 'coin' ? 'gold' : g.kind, count: g.value });
         this.audio.play('pickup');
         uiBridge.wallet.value = { ...w };
     }

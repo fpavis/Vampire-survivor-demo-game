@@ -4,6 +4,7 @@ import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
 import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './Build';
 import { PauseMenu } from './Pause';
+import { BoardPanel, Journal, Tracker } from './Quests';
 import { glyph, onPad, quickGlyph } from './hints';
 import { isTyping } from './nav';
 import { ui, PICK_KEYS } from './bridge';
@@ -109,6 +110,7 @@ export function App() {
       if (!game) return;
       if (k === 'u') game.input.openPanel('upgrades');
       else if (k === 'i') game.input.openPanel('spells');
+      else if (k === 'j') game.input.openPanel('journal');
       else if (ui.cardsOpen.value && ui.pending.value && PICK_KEYS.includes(k)) game.pickCard(Number(k) - 1);
       else if (PICK_KEYS.includes(k)) game.party.switchTo(Number(k) - 1);
       else if (k === 'b') game.input.openPanel('build');
@@ -122,6 +124,7 @@ export function App() {
   return (
     <>
       <HoldBar />
+      <Tracker />
       <Pill />
       <CardsPanel />
       <Loadout />
@@ -129,6 +132,8 @@ export function App() {
       <Shop />
       <Inn />
       <Dialog />
+      <BoardPanel />
+      <Journal />
       <BuildMenu />
       <BuildHud />
       <TowerPanel />

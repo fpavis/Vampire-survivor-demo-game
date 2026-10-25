@@ -226,7 +226,7 @@ check('the gems left outside are still there after leaving', outside.gems === ou
 await page.evaluate((p) => { window.game.godMode = true; window.game.state.nextLevel = 1e12; window.game.state.gems.length = 0; window.game.enterPlace(p); }, poi);
 await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
 const town = await page.evaluate(() => { const k = window.game.interactables.filter((i) => i.npc).map((i) => i.kind).sort(); return k; });
-check('towns have a healer, a merchant and an innkeeper', JSON.stringify(town) === JSON.stringify(['healer', 'innkeeper', 'merchant']), JSON.stringify(town));
+check('towns have a healer, a merchant, an innkeeper, an elder and a bounty board', JSON.stringify(town) === JSON.stringify(['board', 'elder', 'healer', 'innkeeper', 'merchant']), JSON.stringify(town));
 const near = (kind) => page.evaluate((kind) => { const g = window.game, it = g.interactables.find((i) => i.kind === kind), p = g.state.player; for (const c of g.critters.list) { c.wx = c.tx = it.x + 700; c.wy = c.ty = it.y + 700; c.home = { x: c.wx, y: c.wy, r: 5 }; c.wait = 9999; } p.wx = it.x - 18; p.wy = it.y; g.gameLoop(1); g.updateInteraction(); return g.target && g.target.kind; }, kind);
 const merchantTarget = await near('merchant');
 check('merchant is interactable', merchantTarget === 'merchant', String(merchantTarget));

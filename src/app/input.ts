@@ -172,6 +172,7 @@ export class InputSystem {
         const g = this.game, b = uiBridge;
         if (name === 'spells') b.loadoutOpen.value = !b.loadoutOpen.value;
         else if (name === 'upgrades') b.cardsOpen.value = !b.cardsOpen.value && b.pending.value > 0;
+        else if (name === 'journal') b.journalOpen.value = !b.journalOpen.value;
         else if (name === 'build') {
             if (g.mode === 'overworld' && !g.boat) { if (g.towers.build) g.towers.cancelBuild(); else b.buildMenuOpen.value = !b.buildMenuOpen.value; }
         }

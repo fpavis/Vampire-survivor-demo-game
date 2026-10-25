@@ -72,6 +72,12 @@ export const MIGRATIONS: Record<number, Migration> = {
     ...raw,
     version: 6,
     world: { ...raw.world, towers: [], boats: {}, caches: [] }
+  }),
+  // v6 -> v7: quests, story flags and bounty boards (dungeon progress lives inside each place's state)
+  6: (raw) => ({
+    ...raw,
+    version: 7,
+    quests: { active: {}, done: [], flags: {}, tracked: null, bounties: {} }
   })
 };
 

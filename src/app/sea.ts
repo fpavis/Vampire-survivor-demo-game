@@ -4,6 +4,7 @@ import { WORLD_CONFIG } from '../core/config';
 import { engage } from '../core/ai/ai';
 import { BIOME, isWaterBiome } from '../core/world/biomes';
 import { BOAT_SPEED, CACHE_CELL, boatBlocked, boatSpot, cacheForCell } from '../core/world/towers';
+import { isSeaDungeonCell } from '../core/world/dungeons';
 import { createBoat } from '../render/boatArt';
 import { EntityManager } from '../render/entities';
 import { ui as uiBridge } from '../ui/bridge';
@@ -138,7 +139,7 @@ export class SeaSystem {
             const key = `${cx},${cy}`;
             if (!this.cacheCells.has(key)) this.cacheCells.set(key, cacheForCell(g.overworld.seed, cx, cy, (x, y) => g.overworld.biomeAt(x, y)));
             const c = this.cacheCells.get(key);
-            if (c) out.push(c);
+            if (c && !isSeaDungeonCell(g.overworld.seed, cx, cy)) out.push(c);       // a drowned shrine stands where the treasure would be
         }
         return out;
     }

@@ -16,7 +16,8 @@ const rrect = (g, x, y, w, h, r, c) => { O(g); g.beginFill(c); g.drawRoundedRect
 export const ROLES = {
     healer: { name: 'Healer', color: 0xbfffd0 },
     merchant: { name: 'Merchant', color: 0xffe08a },
-    innkeeper: { name: 'Innkeeper', color: 0xffc8a0 }
+    innkeeper: { name: 'Innkeeper', color: 0xffc8a0 },
+    elder: { name: 'Elder', color: 0xc8d8ff }
 };
 
 function head(g, skin, hair, y = -34) {
@@ -63,6 +64,21 @@ export function createNpc(role) {
         g.beginFill(0xe8b040); g.drawRect(-7, -43, 14, 2.4); g.endFill();
         accent = softGlow(18, 0xffd84a, 0.28); accent.position.set(0, -20);
         body.addChild(g);
+    } else if (role === 'elder') {
+        poly(g, [-13, 0, 13, 0, 9, -30, -9, -30], 0x2a3f8a);                 // deep blue robe
+        poly(g, [1, 0, 13, 0, 9, -30, 1, -30], 0x3a56b0);
+        g.beginFill(0xe8c050); g.drawRect(-11, -18, 22, 3); g.drawRect(-1.6, -30, 3.2, 30); g.endFill();   // gold sash and trim
+        head(g, 0xf0d0b0, 0);
+        poly(g, [-7.5, -36, 7.5, -36, 9.5, -21, 0, -14, -9.5, -21], 0xf4f4f4);   // long white beard
+        poly(g, [-9.5, -41, 9.5, -41, 8, -49, 0, -54, -8, -49], 0x2a3f8a);       // hood
+        g.beginFill(0x7ad0ff); g.drawCircle(0, -45, 2); g.endFill();
+        const staff = new PIXI.Graphics();
+        O(staff, 1.2); staff.beginFill(0x7a5a2a); staff.drawRoundedRect(-1.5, -52, 3, 52, 1.5); staff.endFill(); staff.lineStyle(0);
+        staff.beginFill(0x7ad0ff); staff.drawCircle(0, -55, 5); staff.endFill();
+        staff.beginFill(0xffffff, 0.7); staff.drawCircle(-1.5, -56.5, 1.6); staff.endFill();
+        staff.position.set(-17, 0);
+        accent = softGlow(16, 0x7ad0ff, 0.4); accent.position.set(-17, -55);
+        body.addChild(g, staff);
     } else {
         poly(g, [-12, 0, 12, 0, 9, -28, -9, -28], 0xb8584a);
         poly(g, [-8, 0, 8, 0, 7, -24, -7, -24], 0xf2ead8);       // apron
@@ -91,5 +107,33 @@ export function createNpc(role) {
         body.scale.y = 1 + Math.sin(t * 0.06) * 0.012;
         accent.alpha = 0.7 + 0.3 * Math.sin(t * 0.09);
     };
+    return c;
+}
+
+/** The bounty board: posts, a plank board with pinned notices, a roof and a lantern. */
+export function createBoard() {
+    const c = new PIXI.Container();
+    const shadow = new PIXI.Graphics();
+    shadow.beginFill(0x000000, 0.35); shadow.drawEllipse(0, 0, 30, 8); shadow.endFill();
+    const g = new PIXI.Graphics();
+    rrect(g, -30, -64, 6, 64, 2, 0x6a4422); rrect(g, 24, -64, 6, 64, 2, 0x6a4422);      // posts
+    rrect(g, -32, -62, 64, 42, 3, 0x9a6a38);                                              // board
+    g.lineStyle(1, 0x5a3a1a, 0.7); for (let y = -50; y < -22; y += 10) { g.moveTo(-30, y); g.lineTo(30, y); } g.lineStyle(0);
+    poly(g, [-38, -62, 38, -62, 30, -74, -30, -74], 0x7a3a2a);                            // little roof
+    // notices
+    const note = (x, y, w, h, c0, rot) => { const n = new PIXI.Graphics(); O(n, 1); n.beginFill(c0); n.drawRect(-w / 2, -h / 2, w, h); n.endFill(); n.lineStyle(0); n.beginFill(0x7a2a2a); n.drawCircle(0, -h / 2 + 2, 1.5); n.endFill(); n.lineStyle(1, 0x6a5a40, 0.7); for (let i = 1; i < 4; i++) { n.moveTo(-w / 2 + 3, -h / 2 + 3 + i * 4); n.lineTo(w / 2 - 3, -h / 2 + 3 + i * 4); } n.position.set(x, y); n.rotation = rot; return n; };
+    const notes = [note(-18, -44, 16, 20, 0xf2e8c8, -0.08), note(2, -40, 14, 18, 0xe8dcb8, 0.06), note(20, -45, 15, 21, 0xf0c8c0, 0.1), note(-4, -53, 10, 10, 0xd8e8f2, -0.04)];
+    // lantern
+    const lamp = new PIXI.Graphics();
+    O(lamp, 1.2); lamp.beginFill(0x2a2a30); lamp.drawRect(-3, -6, 6, 10); lamp.endFill(); lamp.lineStyle(0);
+    lamp.beginFill(0xffd070); lamp.drawRect(-2, -4, 4, 6); lamp.endFill();
+    lamp.position.set(38, -52);
+    const accent = softGlow(22, 0xffc060, 0.38); accent.position.set(38, -50);
+    const label = new PIXI.Text('Bounties', { fontFamily: 'Trebuchet MS, Arial', fontSize: 13, fontWeight: 'bold', fill: 0xffe9a8, stroke: 0x000000, strokeThickness: 3 });
+    label.anchor.set(0.5, 1);
+    label.position.set(0, -80);
+    c.addChild(shadow, accent, g, ...notes, lamp, label);
+    c.accent = accent;
+    c.animate = (t) => { accent.alpha = 0.65 + 0.3 * Math.sin(t * 0.11) * Math.sin(t * 0.07); };
     return c;
 }

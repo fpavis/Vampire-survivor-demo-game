@@ -27,9 +27,16 @@ function sampleSave(over: Partial<SaveData> = {}): SaveData {
     stats: { kills: 321, score: 4000, bossesDefeated: 1 },
     world: {
       clearedCamps: { '3,4,0': 120 }, defeatedLairs: { '1,1': 300 },
-      places: { '5,5': { opened: [0, 2], cleared: true, altarUsed: false } },
+      places: { '5,5': { opened: [0, 2], cleared: true, altarUsed: false }, '-1,-4': { opened: [1], cleared: false, altarUsed: false, unsealed: true, floors: { '1': { opened: [], cleared: true, altarUsed: false, unsealed: true } }, bossDead: true, bossChestOpened: false } },
       fog: fog.toJSON(), cities: [{ id: '5,5', name: 'Oakhaven', ex: 10, ey: 20 }], lastCity: '5,5', claimed: { 's1,1': 400 }, triggered: { 's2,2': 80 }, gathered: ['oak:100,56'], shopSold: { '5,5:3': [1, 4] },
       towers: [{ id: 't60,70', kind: 'spire', tx: 60, ty: 70, dir: 0, len: 0, delivered: { gold: 10, wood: 3, stone: 2, iron: 0 }, built: false, spell: null }], boats: { 't9,9': { x: 5, y: 6 } }, caches: ['c1,1']
+    },
+    quests: {
+      active: {
+        m1_hollow: { progress: [1, 0], targets: ['-1,-4', '-1,-4'], startedAt: 100 },
+        'b:5,5:3:0': { progress: [4], targets: [null], startedAt: 200, def: { id: 'b:5,5:3:0', title: 'Cull the Slimes', kind: 'bounty', giver: 'board', objectives: [{ type: 'kill', count: 12, enemy: 'SLIME' }], rewards: { gold: 60 }, summary: 's' } }
+      },
+      done: ['m0_omen'], flags: { begun: true, 'lord.field': true }, tracked: 'm1_hollow', bounties: { '5,5': { epoch: 3, taken: [0, 2] } }
     },
     ...over
   };
@@ -87,16 +94,16 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[6] = (raw) => ({ ...raw, version: 7, party: { ...raw.party, extra: 5 } });
-    MIGRATIONS[7] = (raw) => ({ ...raw, version: 8, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    MIGRATIONS[7] = (raw) => ({ ...raw, version: 8, party: { ...raw.party, extra: 5 } });
+    MIGRATIONS[8] = (raw) => ({ ...raw, version: 9, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 8);
-      expect(out.version).toBe(8);
+      const out: any = migrate(sampleSave(), 9);
+      expect(out.version).toBe(9);
       expect(out.party.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[6];
       delete MIGRATIONS[7];
+      delete MIGRATIONS[8];
     }
   });
 
@@ -127,7 +134,7 @@ describe('save validation and migration', () => {
     const v3: any = sampleSave();
     v3.version = 3;
     v3.hero = { level: 12, experience: 5, nextLevel: 200, health: 55, mana: 33, pendingPicks: 2, picks: { might: 3 }, spells: [{ uid: 'a', tpl: 'bolt', level: 4, xp: 0, runes: ['swift', null] }], runes: ['echo'], auto: ['a'], active: [null, null, null], wallet: { gold: 9, wood: 0, stone: 0, iron: 1 }, lootFilter: 'basic' };
-    delete v3.party; delete v3.inventory; delete v3.world.lastCity; delete v3.world.claimed; delete v3.world.triggered; delete v3.world.gathered; delete v3.world.shopSold; delete v3.world.towers; delete v3.world.boats; delete v3.world.caches;
+    delete v3.party; delete v3.inventory; delete v3.world.lastCity; delete v3.world.claimed; delete v3.world.triggered; delete v3.world.gathered; delete v3.world.shopSold; delete v3.world.towers; delete v3.world.boats; delete v3.world.caches; delete v3.quests;
     const out = migrate(v3);
     expect(out.version).toBe(SAVE_VERSION);
     expect((out as any).hero).toBeUndefined();
@@ -142,7 +149,30 @@ describe('save validation and migration', () => {
     expect(out.world.gathered).toEqual([]);
     expect(out.world.towers).toEqual([]);
     expect(out.world.boats).toEqual({});
+    expect(out.quests).toEqual({ active: {}, done: [], flags: {}, tracked: null, bounties: {} });
     expect(validateSave(out)).toEqual([]);
+  });
+
+  it('migrates a v6 save: quests start empty, towers and places are untouched', () => {
+    const v6: any = sampleSave();
+    v6.version = 6;
+    delete v6.quests;
+    const out = migrate(v6);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.quests.done).toEqual([]);
+    expect(out.world.towers).toHaveLength(1);
+    expect(out.world.places['5,5'].cleared).toBe(true);
+    expect(validateSave(out)).toEqual([]);
+  });
+
+  it('keeps quest progress, generated bounties and dungeon state through a codec round trip', async () => {
+    const s = sampleSave();
+    const back: any = migrate(JSON.parse(JSON.stringify(s)));
+    expect(back.quests.active.m1_hollow.progress).toEqual([1, 0]);
+    expect(back.quests.active['b:5,5:3:0'].def.title).toBe('Cull the Slimes');
+    expect(back.quests.bounties['5,5'].taken).toEqual([0, 2]);
+    expect(back.world.places['-1,-4'].floors['1'].cleared).toBe(true);
+    expect(back.world.places['-1,-4'].bossDead).toBe(true);
   });
 });
 

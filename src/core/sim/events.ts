@@ -1,10 +1,16 @@
 // A tiny typed event bus. Systems publish facts; quests, audio, saving and the UI subscribe.
 
 export interface GameEvents {
-  EnemyKilled: { type: string; level: number; x: number; y: number; boss: boolean };
+  EnemyKilled: { type: string; level: number; x: number; y: number; boss: boolean; group?: string | null; dungeon?: boolean };
   CampCleared: { id: string };
   LairDefeated: { id: string; type: string };
-  PlaceEntered: { id: string; name: string; kind: string };
+  PlaceEntered: { id: string; name: string; kind: string; dungeon?: string | null; group?: string };
+  FloorEntered: { id: string; floor: number; floors: number };
+  DungeonCleared: { id: string; name: string; type: string; group: string; realm: string };
+  QuestCompleted: { id: string };
+  Collected: { resource: string; count: number };
+  TowerBuilt: { kind: string; id: string };
+  ZoneClaimed: { id: string; level: number };
   PlaceLeft: { id: string };
   ZoneChanged: { group: string; level: number; tier: number };
   HeroLevelUp: { level: number };

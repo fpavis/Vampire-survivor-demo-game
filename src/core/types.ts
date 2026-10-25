@@ -2,6 +2,8 @@
 
 export interface Vec2 { x: number; y: number }
 
+import type { DungeonInfo } from './world/dungeons';
+
 export type PoiType = 'cave' | 'ruins' | 'city';
 
 export interface Poi {
@@ -13,6 +15,7 @@ export interface Poi {
     ex: number; ey: number;       // where the player stands to enter
     seed: number;
     name: string;
+    dungeon?: DungeonInfo;        // set for dungeons: several floors, a boss, a guaranteed chest
 }
 
 export interface DecorItem {

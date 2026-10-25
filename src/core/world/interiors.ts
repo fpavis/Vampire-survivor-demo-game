@@ -2,6 +2,7 @@ import { WORLD_CONFIG } from '../config';
 import { makeRng } from './noise';
 import { BIOME, INTERIOR_ROSTERS, GROUP } from './biomes';
 import { addDecorItem } from './terrain';
+import { floorSeed, type DungeonInfo } from './dungeons';
 import type { ChunkLike, InteriorTheme, Poi, TerrainSource, Vec2 } from '../types';
 
 export interface InteriorSpawn { type: string; x: number; y: number; elite?: boolean }
@@ -52,6 +53,15 @@ export class InteriorSource implements TerrainSource {
     exit: Vec2 = { x: 0, y: 0 };
     fountain: Vec2 | null = null;
     altar: Vec2 | null = null;
+    // dungeon floors
+    floor = 0;
+    floors = 1;
+    dungeon: DungeonInfo | null = null;
+    stairsDown: Vec2 | null = null;
+    stairsUp: Vec2 | null = null;
+    boss: Vec2 | null = null;
+    /** The elite guardians of a floor: the stairs down stay sealed until every one of them has fallen. */
+    get guardians(): number { return this.spawns.filter((s) => s.elite).length; }
 
     constructor(type: string, group: string, w: number, h: number, seed: number) {
         this.kind = type;
@@ -108,10 +118,45 @@ export class InteriorSource implements TerrainSource {
 }
 
 // --------------------------------------------------------------------- cave
-function generateCave(poi: Poi): InteriorSource {
-    const rng = makeRng(poi.seed);
+/** Open a round clearing of floor around a tile (used for stair landings and the boss arena). */
+function clearing(src: InteriorSource, tx: number, ty: number, radius: number, floorTile: number): void {
+    for (let y = Math.floor(ty - radius); y <= Math.ceil(ty + radius); y++) for (let x = Math.floor(tx - radius); x <= Math.ceil(tx + radius); x++) {
+        if (Math.hypot(x - tx, y - ty) <= radius + 0.2 && x > 1 && y > 1 && x < src.w - 2 && y < src.h - 2) src.tiles[y * src.w + x] = floorTile;
+    }
+}
+
+/** Stairs and the boss spot for a dungeon floor, chosen from the cells farthest from the way in. */
+function addDungeonFeatures(src: InteriorSource, info: DungeonInfo, floor: number, cells: { x: number; y: number; d: number }[], floorTile: number, avoid: { x: number; y: number }[], startTx: number, startTy: number): void {
+    src.dungeon = info;
+    src.floor = floor;
+    src.floors = info.floors;
+    const last = floor >= info.floors - 1;
+    const far = cells.slice().sort((a, b) => b.d - a.d);
+    const spot = far.find((c) => c.d > 8 && avoid.every((o) => Math.hypot(o.x - c.x, o.y - c.y) > 7)) ?? far[0];
+    if (last) {
+        clearing(src, spot.x, spot.y, 4.5, floorTile);
+        src.boss = { x: (spot.x + 0.5) * T, y: (spot.y + 0.5) * T };
+    } else {
+        clearing(src, spot.x, spot.y, 2.6, floorTile);
+        src.stairsDown = { x: (spot.x + 0.5) * T, y: (spot.y + 0.5) * T };
+    }
+    // monsters never wait on top of a stair or in the boss's clearing
+    const keep = (x: number, y: number) => {
+        const a = src.stairsDown ?? src.boss;
+        return !a || Math.hypot(a.x - x, a.y - y) > (last ? 6 : 3.4) * T;
+    };
+    src.spawns = src.spawns.filter((sp) => keep(sp.x, sp.y));
+    // every floor keeps at least two guardians: they are what unseals the stairs
+    if (src.guardians < 2) {
+        const plain = src.spawns.filter((sp) => !sp.elite).sort((a, b) => Math.hypot(b.x - src.start.x, b.y - src.start.y) - Math.hypot(a.x - src.start.x, a.y - src.start.y));
+        for (const sp of plain.slice(0, 2 - src.guardians)) sp.elite = true;
+    }
+    if (floor > 0) src.stairsUp = { x: (startTx + 0.5) * T, y: (startTy + 0.5) * T };
+}
+function generateCave(poi: Poi, floor = 0): InteriorSource {
+    const rng = makeRng(floorSeed(poi.seed, floor));
     const w = 64, h = 64;
-    const src = new InteriorSource('cave', poi.group, w, h, poi.seed);
+    const src = new InteriorSource('cave', poi.group, w, h, floorSeed(poi.seed, floor));
     const WALL = WALL_FOR.cave, FLOOR = FLOOR_FOR.cave;
 
     let grid = new Uint8Array(w * h);
@@ -167,7 +212,7 @@ function generateCave(poi: Poi): InteriorSource {
     }
     src.start = { x: (sx + 0.5) * T, y: (sy + 1.3) * T };
     src.exit = { x: (sx + 0.5) * T, y: (sy + 0.5) * T };
-    src.addDecor('portal', sx, sy, 0);
+    if (!(poi.dungeon && floor > 0)) src.addDecor('portal', sx, sy, 0);   // deeper floors show a stair instead (drawn by the game)
 
     const dist = src.distanceMap(sx, sy);
     const cells: { x: number; y: number; d: number }[] = [];
@@ -205,9 +250,13 @@ function generateCave(poi: Poi): InteriorSource {
         }
     });
 
+    if (poi.dungeon) addDungeonFeatures(src, poi.dungeon, floor, cells, FLOOR, src.chests.map((c) => ({ x: c.tx, y: c.ty })), sx, sy);
+
     // decoration
+    const feature = src.stairsDown ?? src.boss;
     for (const c of cells) {
         if (Math.hypot(c.x - sx, c.y - sy) < 5) continue;
+        if (feature && Math.hypot((c.x + 0.5) * T - feature.x, (c.y + 0.5) * T - feature.y) < 5.5 * T) continue;
         const r = rng();
         const northWall = src.tiles[(c.y - 1) * w + c.x] === WALL;
         if (northWall && r < 0.07) src.addDecor('torch', c.x, c.y - 0.2, 0);
@@ -220,10 +269,10 @@ function generateCave(poi: Poi): InteriorSource {
 }
 
 // -------------------------------------------------------------------- ruins
-function generateRuins(poi: Poi): InteriorSource {
-    const rng = makeRng(poi.seed);
+function generateRuins(poi: Poi, floor = 0): InteriorSource {
+    const rng = makeRng(floorSeed(poi.seed, floor));
     const w = 64, h = 64;
-    const src = new InteriorSource('ruins', poi.group, w, h, poi.seed);
+    const src = new InteriorSource('ruins', poi.group, w, h, floorSeed(poi.seed, floor));
     const WALL = WALL_FOR.ruins, FLOOR = FLOOR_FOR.ruins;
     src.tiles.fill(WALL);
 
@@ -249,7 +298,7 @@ function generateRuins(poi: Poi): InteriorSource {
     const startRoom = rooms[0];
     src.start = { x: (startRoom.cx + 0.5) * T, y: (startRoom.cy + 1.6) * T };
     src.exit = { x: (startRoom.cx + 0.5) * T, y: (startRoom.cy + 0.5) * T };
-    src.addDecor('portal', startRoom.cx, startRoom.cy, 0);
+    if (!(poi.dungeon && floor > 0)) src.addDecor('portal', startRoom.cx, startRoom.cy, 0);
 
     const dist = src.distanceMap(startRoom.cx, startRoom.cy);
     let guardian = rooms[rooms.length - 1], gd = -1;
@@ -265,12 +314,20 @@ function generateRuins(poi: Poi): InteriorSource {
             src.spawns.push({ type: roster[Math.floor(rng() * roster.length)], elite: isGuardian && k < 2, x: (x + 0.5) * T, y: (y + 0.5) * T });
         }
         if (isGuardian) {
-            src.chests.push({ tx: r.cx, ty: r.cy, x: (r.cx + 0.5) * T, y: (r.cy + 0.5) * T, big: true });
+            // in a dungeon the middle of the guardian room belongs to the stairs or the boss
+            const ctx = poi.dungeon ? r.x + 1 : r.cx, cty = poi.dungeon ? r.y + r.h - 2 : r.cy;
+            src.chests.push({ tx: ctx, ty: cty, x: (ctx + 0.5) * T, y: (cty + 0.5) * T, big: true });
         } else if (rng() < 0.45) {
             const cx = r.x + r.w - 2, cy = r.y + r.h - 2;
             src.chests.push({ tx: cx, ty: cy, x: (cx + 0.5) * T, y: (cy + 0.5) * T });
         }
     });
+
+    if (poi.dungeon) {
+        const cells: { x: number; y: number; d: number }[] = [];
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const d = dist[y * w + x]; if (d >= 0 && x >= guardian.x && x < guardian.x + guardian.w && y >= guardian.y && y < guardian.y + guardian.h && Math.hypot(x - guardian.cx, y - guardian.cy) < 1.5) cells.push({ x, y, d: d + 20 }); }
+        addDungeonFeatures(src, poi.dungeon, floor, cells.length ? cells : [{ x: guardian.cx, y: guardian.cy, d: 99 }], FLOOR, src.chests.map((c) => ({ x: c.tx, y: c.ty })), startRoom.cx, startRoom.cy);
+    }
 
     // dressing
     rooms.forEach((r) => {
@@ -358,10 +415,10 @@ function generateCity(poi: Poi): InteriorSource {
     return src;
 }
 
-export function createInterior(poi: Poi): InteriorSource {
+export function createInterior(poi: Poi, floor = 0): InteriorSource {
     switch (poi.type) {
-        case 'cave': return generateCave(poi);
-        case 'ruins': return generateRuins(poi);
+        case 'cave': return generateCave(poi, floor);
+        case 'ruins': return generateRuins(poi, floor);
         default: return generateCity(poi);
     }
 }

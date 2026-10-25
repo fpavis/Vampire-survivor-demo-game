@@ -152,4 +152,30 @@ html[data-input="pad"] #ui-root input[type=range]:focus{outline-offset:6px}
 .vs-hint-pad{display:none}
 html[data-input="pad"] .vs-hint-pad{display:inline}
 html[data-input="pad"] .vs-hint-key{display:none}
+
+.vs-journal{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-board{left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-quest{background:#131a30;border:2px solid #2e3a62;border-radius:12px;padding:9px 11px;margin:6px 0}
+.vs-quest.tracked{border-color:#5a8aff}
+.vs-quest.ready{border-color:#7be07b}
+.vs-quest .hd{display:flex;gap:8px;align-items:center;font-size:15px}
+.vs-quest .sub{margin:3px 0 6px}
+.vs-quest .rw{font-size:12px;color:#ffe9a8;margin-top:4px}
+.vs-tag.ok{background:#2c5a34;color:#bff0c4}
+.vs-obj{list-style:none;margin:4px 0;padding:0;font-size:13px}
+.vs-obj li{display:flex;gap:8px;padding:2px 0;color:#dfe6ff}
+.vs-obj li.done{color:#8e97b0;text-decoration:line-through}
+.vs-obj .ck{width:16px}
+.vs-obj .tx{flex:1;min-width:0}
+.vs-obj .pr{color:#ffd84a;font-weight:700}
+.vs-lords{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:4px 0}
+.vs-lord{color:#ffb0b0}
+.vs-lord.dead{color:#7a8296;text-decoration:line-through}
+.vs-lord.sov{color:#e6b8ff}
+.vs-tracker{position:absolute;left:16px;top:146px;width:min(250px,calc(100vw - 32px));background:rgba(8,12,24,.72);border:1px solid #3a4a78;border-left:3px solid #7ad8ff;border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.35;text-shadow:0 1px 2px #000;pointer-events:none}
+.vs-tracker .t{font-weight:700;font-size:13px;margin-bottom:2px}
+.vs-tracker .o.done{color:#8e97b0;text-decoration:line-through}
+.vs-tracker .r{color:#9be09b;margin-top:2px}
+.vs-choices{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.vs-choices .vs-btn{text-align:left}
 `;

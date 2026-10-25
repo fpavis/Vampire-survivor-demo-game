@@ -137,9 +137,9 @@ export const KEY_GLYPH: Record<PadAction, string> = {
 };
 
 /** Panels that the d-pad opens when no menu is up (the buttons are fixed, so they live here as data). */
-export type QuickPanel = 'spells' | 'upgrades' | 'build';
-export const QUICK_PANELS: Record<Dir, QuickPanel | null> = { up: 'spells', down: 'upgrades', left: 'build', right: null };
-export const QUICK_KEY: Record<QuickPanel, string> = { spells: 'I', upgrades: 'U', build: 'B' };
+export type QuickPanel = 'spells' | 'upgrades' | 'build' | 'journal';
+export const QUICK_PANELS: Record<Dir, QuickPanel | null> = { up: 'spells', down: 'upgrades', left: 'build', right: 'journal' };
+export const QUICK_KEY: Record<QuickPanel, string> = { spells: 'I', upgrades: 'U', build: 'B', journal: 'J' };
 
 // ------------------------------------------------------- spatial navigation
 export interface Rect { x: number; y: number; w: number; h: number }

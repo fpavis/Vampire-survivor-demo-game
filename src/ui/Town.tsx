@@ -71,6 +71,22 @@ export function Inn() {
 export function Dialog() {
   const d = ui.dialog.value;
   if (!d || !ui.game) return null;
+  const game = ui.game;
+  const close = () => game.closeNpcPanels();
+  if (d.script) {
+    return (
+      <div class="vs-panel vs-dialog hit">
+        <button class="vs-btn vs-x" onClick={close}>✕</button>
+        <div class="who"><span class="ic">{d.icon}</span><b>{d.speaker}</b></div>
+        <div class="say">“{d.text}”</div>
+        <div class="vs-choices">
+          {d.choices && d.choices.length > 0
+            ? d.choices.map((c) => <button key={c.index} class="vs-btn" onClick={() => game.quests.advance(c.index)}>{c.text}</button>)
+            : <button class="vs-btn" onClick={() => game.quests.advance()}>{d.last ? 'Farewell' : 'Continue ▶'}</button>}
+        </div>
+      </div>
+    );
+  }
   return (
     <div class="vs-panel vs-dialog hit">
       <button class="vs-btn vs-x" onClick={() => (ui.dialog.value = null)}>✕</button>

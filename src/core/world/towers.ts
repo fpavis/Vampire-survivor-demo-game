@@ -233,7 +233,6 @@ export function plateauDecor(rec: TowerRec, seed: number): EditDecor[] {
     const r = (1.2 + hash(c.tx + i, c.ty, seed + 91) * (PLATEAU_RADIUS - 2)) * T;
     out.push({ type: i % 3 === 2 ? 'crystal' : i % 3 === 1 ? 'boulder' : 'ore', x: (c.tx + 0.5) * T + Math.cos(a) * r, y: (c.ty + 0.5) * T + Math.sin(a) * r * 0.9, variant: i });
   }
-  out.push({ type: 'ore', x: (c.tx + 0.5) * T, y: (c.ty + 0.5) * T, variant: 0 });
   return out;
 }
 

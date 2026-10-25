@@ -69,6 +69,7 @@ export class World {
         this.removed = new Set(); // harvested resource nodes (ids from core/economy/gather)
         this.edits = new Map();   // tile edits made by built towers: 'tx,ty' -> biome
         this.towerDecor = new Map(); // tower id -> decor items it adds (the tower itself, plateau ore ...)
+        this.extraPois = null;       // (cx, cy) => Poi[]: dungeon entrances the world hosts on plateaus and islands
     }
 
     setSource(source) {
@@ -120,6 +121,15 @@ export class World {
                     if (this.removed.has(nodeId(d.type, d.x, d.y))) continue;
                     addDecorItem(chunk, d.type, d.x, d.y, d.variant);
                 }
+            }
+        }
+        if (this.extraPois && !src.bounded) {
+            // dungeon entrances on plateaus and islands: a gate, two pillars and a spot to stand at
+            const here = (x, y) => Math.floor(x / CHUNK_SIZE) === cx && Math.floor(y / CHUNK_SIZE) === cy;
+            for (const p of this.extraPois(cx, cy)) {
+                if (here(p.x, p.y)) addDecorItem(chunk, 'ruinarch', p.x, p.y, 0);
+                for (const [ox, oy] of [[-66, 24], [68, 22]]) if (here(p.x + ox, p.y + oy)) addDecorItem(chunk, 'pillar', p.x + ox, p.y + oy, 0);
+                if (here(p.ex, p.ey)) chunk.pois.push(p);
             }
         }
         if (src.surfaceNumAt) {

@@ -4,6 +4,7 @@ import { BIOME, isSolidBiome, isWaterBiome, groupOf, GROUP } from './biomes';
 import { DECOR_DEFS } from '../../render/decorArt';
 import { GROUP_LEVEL_OFFSET, tierOf, zoneLevel } from './difficulty';
 import { SURFACE_NUM, surfaceAt } from './surfaces';
+import { dungeonForLand, dungeonName } from './dungeons';
 import type { ChunkLike, DecorItem, Poi, PoiType, TerrainSource } from '../types';
 
 const T = WORLD_CONFIG.tile;
@@ -147,13 +148,17 @@ export class OverworldSource implements TerrainSource {
             const a = NAME_A[type], b = NAME_B[type];
             const first = a[Math.floor(hash(cx, cy, seed + 570) * a.length)];
             const second = b[Math.floor(hash(cx, cy, seed + 580) * b.length)];
-            const name = type === 'city' ? first + second : `${first} ${second}`;
-            return {
+            const level = zoneLevel(seed, tx, ty, GROUP_LEVEL_OFFSET[group] ?? 0);
+            const dungeon = dungeonForLand(seed, cx, cy, type, group, level);
+            const name = dungeon ? dungeonName(seed, cx, cy, type) : type === 'city' ? first + second : `${first} ${second}`;
+            const poi: Poi = {
                 id: `${cx},${cy}`, type, group, tx, ty,
                 x: (tx + 0.5) * T, y: (ty + 0.5) * T,
                 ex: (tx + 0.5) * T, ey: (ty + 0.5) * T + ENTRANCE_OFFSET[type],
                 seed: Math.floor(hash(cx, cy, seed + 590) * 1e9), name
             };
+            if (dungeon) poi.dungeon = dungeon;
+            return poi;
         }
         return null;
     }

@@ -16,6 +16,7 @@ function Controls() {
     ['Spells and runes', 'I', quickGlyph('spells')],
     ['Level-up cards', 'U', quickGlyph('upgrades')],
     ['Build menu', 'B', quickGlyph('build')],
+    ['Journal and quests', 'J', quickGlyph('journal')],
     ['World map', 'M', pad('map')],
     ['Pause · settings', 'Esc', pad('menu')],
     ['Back · close · cancel', 'Esc', pad('cancel')],

@@ -1,7 +1,7 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 1;
 
@@ -38,14 +38,29 @@ export interface TowerSave {
   spell: string | null;
 }
 
+export interface FloorState { opened: number[]; cleared: boolean; altarUsed: boolean; unsealed?: boolean }
+
 export interface PlaceState {
   opened: number[];
   cleared: boolean;
   altarUsed: boolean;
   fountainAt?: number;
+  unsealed?: boolean;                    // the guardians of the first floor are down for good
+  floors?: Record<string, FloorState>;   // dungeon floors below the first, by floor number
+  bossDead?: boolean;                    // the dungeon boss has fallen for good
+  bossChestOpened?: boolean;             // and its guaranteed chest has been opened
 }
 
 export interface CityRef { id: string; name: string; ex: number; ey: number }
+
+export interface QuestSave {
+  active: Record<string, { progress: number[]; targets: (string | null)[]; startedAt: number; def?: unknown }>;
+  done: string[];
+  flags: Record<string, number | boolean>;
+  tracked: string | null;
+  bounties: Record<string, { epoch: number; taken: number[] }>;
+}
+export const emptyQuests = (): QuestSave => ({ active: {}, done: [], flags: {}, tracked: null, bounties: {} });
 
 export interface SaveData {
   version: number;
@@ -73,6 +88,7 @@ export interface SaveData {
     boats: Record<string, { x: number; y: number }>;  // dock id -> where its boat is moored
     caches: string[];                       // island treasure already opened
   };
+  quests: QuestSave;                        // story progress, active quests, bounty board rotations
 }
 
 export interface SaveSummary {
@@ -123,6 +139,8 @@ export function validateSave(data: unknown): string[] {
     if (!Array.isArray(world.caches)) errs.push('world.caches missing');
     if (!Array.isArray(world.cities)) errs.push('world.cities missing');
   }
+  const q = data.quests;
+  if (!isObj(q) || !isObj(q.active) || !Array.isArray(q.done) || !isObj(q.flags) || !isObj(q.bounties)) errs.push('quests missing');
   return errs;
 }
 

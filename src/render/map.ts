@@ -123,7 +123,7 @@ export class MapView {
                 ctx.fillStyle = 'rgba(0,0,0,0.55)';
                 ctx.beginPath(); ctx.arc(x, y, iconSize * 0.62, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = '#fff';
-                ctx.fillText(POI_INFO[p.type].icon, x, y + 1);
+                ctx.fillText(p.dungeon ? '🗝️' : POI_INFO[p.type].icon, x, y + 1);
                 if (opts.big) {
                     ctx.font = 'bold 12px sans-serif';
                     ctx.fillStyle = '#fff';
