@@ -290,7 +290,7 @@ if (want('tips')) {
   await page.waitForTimeout(150);
   const welcome = await ev(() => ({ id: document.querySelector('.vs-coach')?.dataset.tip, text: document.querySelector('.vs-coach .tx')?.innerText }));
   check('a new game shows the welcome tip with the movement keys', welcome.id === 'welcome' && /WASD|arrow keys/.test(welcome.text || ''), JSON.stringify(welcome));
-  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/tip.png` });
+  if (process.env.SHOTS) { await page.waitForTimeout(2500); await page.screenshot({ path: `${process.env.SHOTS}/tip.png` }); }
   await ev(() => document.querySelector('.vs-coach .vs-x').click());
   await page.waitForTimeout(100);
   const gone = await ev(() => ({ card: !!document.querySelector('.vs-coach'), seen: window.game.tips.seen.has('welcome') }));
@@ -305,7 +305,15 @@ if (want('tips')) {
   await ev(() => { const g = window.game; g.tips.dismiss(); g.state.pending = 0; g.ensureCards(); });
 
   // seen tips are saved and stay seen after loading
-  const saved = await ev(async () => { const g = window.game; await g.requestSave('test', true); return { tips: [...g.tips.seen], regions: g.regionsSeen.size }; });
+  // a region discovered far away and some experience (so the next tip has something to say) go into the save
+  const saved = await ev(async () => {
+    const g = window.game, p = g.state.player, T = 48;
+    const far = g.overworld.regionId(Math.floor(p.wx / T) + 600, Math.floor(p.wy / T));
+    g.regionsSeen.add(far);
+    g.state.experience = Math.max(1, g.state.experience);
+    await g.requestSave('test', true);
+    return { tips: [...g.tips.seen], regions: [...g.regionsSeen], far };
+  });
   const p2 = await context.newPage();
   watch(p2);
   await p2.goto(`http://localhost:${PORT}/`);
@@ -315,9 +323,9 @@ if (want('tips')) {
   await p2.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
   await p2.evaluate(() => { const g = window.game; for (let i = 0; i < 200; i++) g.gameLoop(1); });
   await p2.waitForTimeout(150);
-  const loaded = await p2.evaluate(() => { const g = window.game; return { seen: [...g.tips.seen], card: document.querySelector('.vs-coach')?.dataset.tip || null, regions: g.regionsSeen.size }; });
+  const loaded = await p2.evaluate(() => { const g = window.game; return { seen: [...g.tips.seen], card: document.querySelector('.vs-coach')?.dataset.tip || null, regions: [...g.regionsSeen] }; });
   check('seen tips are saved and not shown again', saved.tips.includes('welcome') && saved.tips.includes('upgrade') && loaded.seen.includes('welcome') && !!loaded.card && loaded.card !== 'welcome' && loaded.card !== 'upgrade', JSON.stringify({ saved, loaded }));
-  check('discovered regions are saved', saved.regions >= 2 && loaded.regions >= saved.regions, JSON.stringify({ saved, loaded }));
+  check('discovered regions are saved', saved.regions.every((id) => loaded.regions.includes(id)) && loaded.regions.includes(saved.far), JSON.stringify({ saved, loaded }));
 
   // tips can be switched off from the pause menu
   await p2.keyboard.press('Escape');
