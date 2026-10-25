@@ -17,14 +17,17 @@ function ActiveBar() {
   const slots = ui.active.value;
   const keys = [glyph('skill1'), glyph('skill2'), glyph('skill3')];
   const mana = ui.mana.value, max = ui.maxMana.value;
+  const w = ui.wallet.value;
+  const open = (p: 'spells' | 'journal' | 'build') => ui.game?.input.openPanel(p);
   return (
-    <div class="vs-bar hit">
+    <div class="vs-bar hit vs-hud">
       <div class="vs-btns">
-        <button class="vs-btn" onClick={() => (ui.loadoutOpen.value = !ui.loadoutOpen.value)} title={`Spells and runes (${quickGlyph('spells')})`}>🎒 Spells</button>
-        <button class="vs-btn" onClick={() => { ui.muted.value = !ui.muted.value; ui.game?.audio.setMuted(ui.muted.value); }} title="Sound">{ui.muted.value ? '🔇' : '🔊'}</button>
+        <button class="vs-btn vs-ico" onClick={() => open('spells')} title={`Spells and runes (${quickGlyph('spells')})`} aria-label="Spells and runes">🎒</button>
+        <button class="vs-btn vs-ico" onClick={() => open('journal')} title={`Journal (${quickGlyph('journal')})`} aria-label="Journal">📖</button>
+        <button class="vs-btn vs-ico" onClick={() => open('build')} title={`Build (${quickGlyph('build')})`} aria-label="Build">🔨</button>
       </div>
       <div class="vs-wallet" title="Gold, wood, stone, iron">
-        <span>🪙 {ui.wallet.value.gold}</span><span>🪵 {ui.wallet.value.wood}</span><span>🪨 {ui.wallet.value.stone}</span><span>⛓ {ui.wallet.value.iron}</span>
+        <span>🪙 {w.gold}</span>{w.wood > 0 && <span>🪵 {w.wood}</span>}{w.stone > 0 && <span>🪨 {w.stone}</span>}{w.iron > 0 && <span>⛓ {w.iron}</span>}
       </div>
       {ui.surface.value && (
         <div class={`vs-surface${ui.surface.value.bad ? ' bad' : ''}`} style={{ '--sc': `#${ui.surface.value.color.toString(16).padStart(6, '0')}` }}>
@@ -46,7 +49,7 @@ function ActiveBar() {
               <span class="cd" style={{ transform: `scaleY(${s.cdFrac})` }} />
             </button>
           ) : (
-            <div key={i} class="vs-skill empty"><span class="k">{keys[i]}</span>empty</div>
+            <div key={i} class="vs-skill empty"><span class="k">{keys[i]}</span></div>
           )
         )}
       </div>
@@ -98,10 +101,22 @@ function HoldBar() {
 function Pill() {
   const n = ui.pending.value;
   if (!n || ui.cardsOpen.value) return null;
-  return <button class="vs-pill hit" onClick={() => (ui.cardsOpen.value = true)}>⬆ {n} upgrade{n > 1 ? 's' : ''} ready — press {quickGlyph('upgrades')}</button>;
+  return (
+    <button class="vs-pill hit" onClick={() => (ui.cardsOpen.value = true)}>
+      ⬆ {n} upgrade{n > 1 ? 's' : ''}<span class="long"> ready</span> · {quickGlyph('upgrades')}
+    </button>
+  );
 }
 
+/** Panels that take the screen: on small screens the HUD steps aside while one is open. */
+const modalOpen = () =>
+  ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
+  ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
+  ui.pauseOpen.value || !!ui.dialog.value;
+
 export function App() {
+  const modal = modalOpen();
+  useEffect(() => { document.documentElement.classList.toggle('vs-modal', modal); }, [modal]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!ui.visible.value || ui.pauseOpen.value || isTyping(e.target)) return;
@@ -124,8 +139,11 @@ export function App() {
   return (
     <>
       <HoldBar />
-      <Tracker />
-      <Pill />
+      <div class="vs-left vs-hud">
+        <Pill />
+        <Tracker />
+        <PartyBar />
+      </div>
       <CardsPanel />
       <Loadout />
       <Healer />
@@ -140,7 +158,6 @@ export function App() {
       <WaypointPanel />
       <SailingHint />
       <PauseMenu />
-      <PartyBar />
       <ActiveBar />
     </>
   );

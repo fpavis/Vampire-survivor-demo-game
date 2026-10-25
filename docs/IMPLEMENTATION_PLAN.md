@@ -472,8 +472,51 @@ Acceptance
 
 ### Phase 8: Audio, polish, breadth (L, ongoing)
 
-Tasks: music manager and tracks, remaining SFX, regions and roads, more archetypes and runes, accessibility
-options, controller support, performance pass, onboarding.
+Phase 8 is split in steps. Controller support moved to the cross-cutting Input work above.
+
+**8a: Polish pass (UI, z-order, equipment on controller, art)**
+
+Problems found by playing on a desktop window, a 740×420 landscape phone and a 390×760 portrait phone:
+- On small screens the party bar, the skill bar, the wallet and the HUD buttons are drawn *over* open
+  panels (loadout, journal, shops), hiding their buttons; in portrait the tracker, the pill and the minimap
+  crowd the top of the screen.
+- Clutter: every ordinary monster shows a "Lv N" label and a full health bar, the wallet lists zero
+  resources, the HUD has a sound button that the pause menu already covers, the tracker always lists every
+  objective, the party bar is as large on a phone as on a desktop.
+- Z-order: the hero disappears behind cliff walls and tall trees standing south of them, NPC names are
+  hidden behind market stalls, damage numbers go under trees.
+- Equipment on a controller works but is slow: X / Y / RT cast skills even while the loadout is open, there
+  is no way to equip, lock or swap heroes from the panel with face buttons, sockets list every rune instead
+  of the ones that fit, and the panel shows no button hints.
+- Art: trees and rocks have no ink outline (heroes and monsters do), canopies are flat blobs, rocks are
+  three plain polygons; several monsters (bee, scarab, boar, gull, mummy, spider) read poorly; heroes lack
+  shading.
+
+Tasks
+- **Layering**: panels sit above every HUD element; while a panel is open on a small screen the HUD bars,
+  tracker and minimap step aside; panels fill small screens and scroll inside.
+- **Declutter**: level labels only on elites, bosses and monsters well above the hero; health bars only once
+  damaged (elites and bosses always); wallet shows gold and the resources you hold; sound button removed
+  from the HUD (pause menu); tracker shows the tracked quest's next objective and folds to its title; a
+  compact party bar and skill bar on small screens.
+- **Z-order**: decor in front of the hero fades out while it covers the hero; the hero shows as a
+  silhouette through walls; names, health bars and damage numbers draw on an overlay above the world.
+- **Controller equipment**: inside a panel the face buttons act on the focused element instead of casting
+  (X equip / unequip, Y lock, A open, B back); LB / RB switch the hero whose loadout is shown; sockets
+  open a rune picker that lists only runes that fit, with the stat change; a button-hint bar along the
+  bottom of the panel follows the device (keyboard keys, Xbox / PlayStation / Switch glyphs).
+- **Art**: outlined trees with layered, three-tone canopies, rim light, roots and bark; faceted outlined
+  rocks, boulders, ore and ice with cracks, moss and snow caps; shaded heroes; redrawn bee, scarab, boar,
+  gull, mummy and spider, plus outline and shading passes on the rest.
+
+Acceptance
+- At 740×420 and 390×760 no HUD element covers an open panel's buttons (checked by an e2e that compares
+  bounding boxes); a pad can equip a spell, socket a rune through the picker, lock a spell and switch the
+  shown hero without touching the mouse, and X does not cast while the loadout is open; a hero standing
+  behind a wall or tree stays visible; ordinary monsters at the hero's level show no label until hurt.
+
+**8b and later**: music manager and tracks, remaining SFX, regions and roads, more archetypes and runes,
+accessibility options (text size, colour-blind palettes, reduced motion), performance pass, onboarding.
 
 ## 7. What happens to the current code
 

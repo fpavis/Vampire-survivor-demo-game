@@ -100,6 +100,7 @@ export function createNpc(role) {
     label.anchor.set(0.5, 1);
     label.position.set(0, -62);
     c.addChild(shadow, accent, body, label);
+    c.label = label;
     c.body = body;
     c.accent = accent;
     c.animate = (t) => {
@@ -133,6 +134,7 @@ export function createBoard() {
     label.anchor.set(0.5, 1);
     label.position.set(0, -80);
     c.addChild(shadow, accent, g, ...notes, lamp, label);
+    c.label = label;
     c.accent = accent;
     c.animate = (t) => { accent.alpha = 0.65 + 0.3 * Math.sin(t * 0.11) * Math.sin(t * 0.07); };
     return c;

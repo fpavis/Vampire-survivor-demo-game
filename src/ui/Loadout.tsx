@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { ui } from './bridge';
-import { quickGlyph } from './hints';
+import { glyph, onPad, quickGlyph } from './hints';
 import { applyDrop, beginDrag, checkDrop, configureDnd, dragging, type DropTarget, type Payload } from './dnd';
 import {
   CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES, canSocket, describeSpell, previewRune, resolveSpell, spellXpFor, type SpellItem
@@ -90,7 +90,7 @@ function SpellRow({ it, sel, onSel }: { it: SpellItem; sel: boolean; onSel: () =
   const game = ui.game;
   const held = game.spells.heldBy(it.uid);
   return (
-    <div class={`vs-item${sel ? ' sel' : ''}`} tabIndex={0} style={{ touchAction: 'none' }}
+    <div class={`vs-item${sel ? ' sel' : ''}`} tabIndex={0} style={{ touchAction: 'none' }} data-spell={it.uid}
       onFocus={() => { if (ui.device.value === 'pad' || ui.device.value === 'key') onSel(); }}
       onKeyDown={(e) => { if (e.key === 'Enter') onSel(); }}
       onPointerDown={(e) => beginDrag(e as any, { kind: 'spell', uid: it.uid }, `${t.icon} ${t.name}`, onSel)}>
@@ -116,8 +116,27 @@ export function Loadout() {
   const [spellSort, setSpellSort] = useState<SpellSort>('level');
   const [runeSort, setRuneSort] = useState<RuneSort>('rarity');
   const [fitsOnly, setFits] = useState(false);
+  const [picker, setPicker] = useState<number | null>(null);     // socket whose rune picker is open
+  const [panel, setPanel] = useState<HTMLElement | null>(null);
+  const act = useRef<(button: string, target: HTMLElement) => boolean>(() => false);
+  const pickerFrom = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!panel) return;
+    // controller face buttons (from nav.ts) and their keyboard twins act on the focused spell, rune or socket
+    const onPadEv = (e: Event) => { if (act.current((e as CustomEvent).detail, e.target as HTMLElement)) e.preventDefault(); };
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const button = k === 'f' ? 'x' : k === 'l' ? 'y' : null;
+      if (button && !e.repeat && act.current(button, e.target as HTMLElement)) { e.preventDefault(); e.stopPropagation(); }
+    };
+    panel.addEventListener('vs-pad', onPadEv);
+    panel.addEventListener('keydown', onKey);
+    return () => { panel.removeEventListener('vs-pad', onPadEv); panel.removeEventListener('keydown', onKey); };
+  }, [panel]);
+  const open = ui.loadoutOpen.value;
+  useEffect(() => { if (!open) setPicker(null); }, [open]);
   const game = ui.game;
-  if (!ui.loadoutOpen.value || !game) return null;
+  if (!open || !game) return null;
   const sp = game.spells;
   const wallet = ui.wallet.value;
   const all: SpellItem[] = sp.spells;
@@ -140,6 +159,15 @@ export function Loadout() {
     .filter((id) => !fitsOnly || (item && canSocket(item, id, firstEmpty).ok))
     .sort((a, b) => (runeSort === 'rarity' ? RUNES[b].rarity - RUNES[a].rarity || a.localeCompare(b) : RUNES[a].name.localeCompare(RUNES[b].name)));
 
+  const openPicker = (slot: number) => {
+    pickerFrom.current = document.activeElement as HTMLElement | null;
+    setPicker(slot);
+  };
+  const closePicker = () => {
+    setPicker(null);
+    const back = pickerFrom.current;
+    if (back && back.isConnected) back.focus({ preventScroll: true });
+  };
   const trySocket = (slot: number) => {
     if (!item) return;
     if (selRune) {
@@ -148,14 +176,55 @@ export function Loadout() {
       game.audio.play('equip');
       setRune(null);
     } else if (item.runes[slot]) sp.unsocket(item.uid, slot);
+    else openPicker(slot);
+  };
+  // equip or unequip; active skills take the first free Space / Q / R slot
+  const toggleEquip = (it: SpellItem) => {
+    if (sp.equipped(it.uid)) return applyDrop({ kind: 'spell', uid: it.uid }, { type: 'unequip' });
+    if (TEMPLATES[it.tpl].mode === 'auto') return applyDrop({ kind: 'spell', uid: it.uid }, { type: 'equip' });
+    const free = [0, 1, 2].find((i) => !sp.active[i]);
+    return applyDrop({ kind: 'spell', uid: it.uid }, { type: 'equip', slot: free ?? 0 });
+  };
+  act.current = (button, target) => {
+    const row = target.closest<HTMLElement>('[data-spell]');
+    const sock = target.closest<HTMLElement>('[data-drop="socket"]');
+    const rune = target.closest<HTMLElement>('[data-rune]');
+    if (row) {
+      const it = sp.item(row.dataset.spell);
+      if (!it) return false;
+      if (button === 'x') { toggleEquip(it); return true; }
+      if (button === 'y') { it.locked = !it.locked; sp.touch(); return true; }
+    }
+    if (sock && item && button === 'x') {
+      const slot = Number(sock.dataset.slot);
+      if (item.runes[slot]) { sp.unsocket(item.uid, slot); game.audio.play('equip'); }
+      else openPicker(slot);
+      return true;
+    }
+    if (rune && item && button === 'x') {
+      const id = rune.dataset.rune!;
+      const slot = item.runes.findIndex((r, i) => r === null && canSocket(item, id, i).ok);
+      if (slot < 0) { game.ui.toast(canSocket(item, id, firstEmpty).reason || 'No free socket fits this rune'); return true; }
+      sp.socket(item.uid, id, slot);
+      game.audio.play('equip');
+      if (selRune === id) setRune(null);
+      return true;
+    }
+    return false;
   };
   const preview = item && selRune ? previewRune(item, selRune, firstEmpty) : [];
   const selReason = item && selRune ? canSocket(item, selRune, firstEmpty).reason : undefined;
 
   return (
-    <div class="vs-panel vs-load hit">
+    <>
+    <div class="vs-panel vs-load hit" ref={setPanel}>
       <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}>✕ ({quickGlyph('spells')})</button>
-      <h2>Spells &amp; Runes — {ui.party.value.heroes[ui.party.value.active]?.name}</h2>
+      <h2>Spells &amp; Runes — {ui.party.value.heroes[ui.party.value.active]?.name}
+        <span class="vs-heroes">{ui.party.value.heroes.map((h, i) => (
+          <button key={h.id} class={`vs-btn vs-hb${i === ui.party.value.active ? ' on' : ''}`} tabIndex={-1} disabled={h.dead}
+            title={i === ui.party.value.active ? `${h.name}'s loadout` : `Switch to ${h.name}`} onClick={() => game.party.switchTo(i)}>{h.icon}</button>
+        ))}</span>
+      </h2>
       <div class="sub">Drag spells and runes, or select one and use its buttons (works with the keyboard and a controller too). Greyed runes don’t fit — hover for why. Each hero has their own loadout; a spell can be equipped by one hero at a time.</div>
       <div class="vs-tools">
         <input class="vs-in" placeholder="Search…" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
@@ -228,7 +297,7 @@ export function Loadout() {
                   const def = RUNES[id];
                   const chk = canSocket(item, id, firstEmpty);
                   return (
-                    <div key={id} class={`vs-rune${selRune === id ? ' sel' : ''}${chk.ok ? '' : ' bad'}`} tabIndex={0} style={{ touchAction: 'none', borderColor: selRune === id ? undefined : RC[def.rarity] }}
+                    <div key={id} class={`vs-rune${selRune === id ? ' sel' : ''}${chk.ok ? '' : ' bad'}`} tabIndex={0} data-rune={id} style={{ touchAction: 'none', borderColor: selRune === id ? undefined : RC[def.rarity] }}
                       title={`${def.name} (${RARITY_NAMES[def.rarity]}) — ${chk.ok ? def.desc : chk.reason}`}
                       onKeyDown={(e) => { if (e.key === 'Enter') setRune(selRune === id ? null : id); }}
                       onPointerDown={(e) => beginDrag(e as any, { kind: 'rune', id, from: 'bag' }, `${def.icon} ${def.name}`, () => setRune(selRune === id ? null : id))}>
@@ -264,7 +333,72 @@ export function Loadout() {
           </div>
         </div>
       </div>
+      <HintBar />
       <Ghost />
+    </div>
+    {picker !== null && item && <RunePicker item={item} slot={picker} close={closePicker} />}
+    </>
+  );
+}
+
+/** What the buttons do here, for the device in use. */
+function HintBar() {
+  const pad = onPad();
+  const k = (a: string) => <kbd>{a}</kbd>;
+  return (
+    <div class="vs-hintbar">
+      {pad ? (
+        <>
+          <span>{k(glyph('interact'))} select / open</span>
+          <span>{k(glyph('skill1'))} equip · unequip · socket</span>
+          <span>{k(glyph('skill2'))} lock</span>
+          <span>{k(glyph('prevHero'))}{k(glyph('nextHero'))} hero</span>
+          <span>{k(glyph('cancel'))} back</span>
+        </>
+      ) : (
+        <>
+          <span>{k('Enter')} select / open</span>
+          <span>{k('F')} equip · unequip · socket</span>
+          <span>{k('L')} lock</span>
+          <span>{k('Tab')} hero</span>
+          <span>{k('Esc')} close</span>
+          <span class="vs-hint-mouse">or drag with the mouse</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Runes from the bag that fit one socket, with what each would change. */
+function RunePicker({ item, slot, close }: { item: SpellItem; slot: number; close: () => void }) {
+  const game = ui.game;
+  const sp = game.spells;
+  const ids = [...new Set(sp.runes as string[])];
+  const fit = ids.filter((id) => canSocket(item, id, slot).ok).sort((a, b) => RUNES[b].rarity - RUNES[a].rarity || a.localeCompare(b));
+  const misfit = ids.length - fit.length;
+  const count = (id: string) => (sp.runes as string[]).filter((r) => r === id).length;
+  const tpl = TEMPLATES[item.tpl];
+  return (
+    <div class="vs-panel vs-picker hit">
+      <button class="vs-btn vs-x" onClick={close}>✕</button>
+      <h2>{tpl.icon} {tpl.name} · socket {slot + 1}</h2>
+      <div class="sub">Runes that fit this socket. {misfit > 0 ? `${misfit} other rune${misfit > 1 ? 's' : ''} in your bag ${misfit > 1 ? "don't" : "doesn't"} fit.` : ''}</div>
+      {!fit.length && <div class="vs-empty">{ids.length ? 'None of your runes fit this spell.' : 'No runes yet. Rare drops from enemies, chests and altars.'}</div>}
+      {fit.map((id) => {
+        const def = RUNES[id];
+        const pv = previewRune(item, id, slot);
+        return (
+          <button key={id} class="vs-pick" style={{ '--rc': RC[def.rarity] }}
+            onClick={() => { sp.socket(item.uid, id, slot); game.audio.play('equip'); close(); }}>
+            <span class="ic">{def.icon}</span>
+            <span class="tx">
+              <b>{def.name}{count(id) > 1 ? ` ×${count(id)}` : ''}</b> <i>{RARITY_NAMES[def.rarity]}</i>
+              <small>{def.desc}</small>
+              {pv.length > 0 && <small class="pv">{pv.join('  ·  ')}</small>}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

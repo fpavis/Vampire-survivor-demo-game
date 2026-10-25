@@ -19,7 +19,7 @@ const CT = WORLD_CONFIG.chunkTiles;
 const TILT = WORLD_CONFIG.tilt;
 export const CHUNK_SIZE = T * CT;
 
-const WALL_HEIGHT = {
+export const WALL_HEIGHT = {
     [BIOME.MOUNTAIN]: 46, [BIOME.PEAK]: 46, [BIOME.CAVE_WALL]: 58, [BIOME.RUIN_WALL]: 54,
     [BIOME.CITY_WALL]: 60, [BIOME.CITY_STONE]: 60
 };
@@ -379,6 +379,7 @@ export class World {
                 if (!row) {
                     row = new PIXI.Graphics();
                     row.zIndex = (cy * CT + j + 1) * T - 0.5;
+                    row.wallRow = cy * CT + j;
                     rows.push(row);
                 }
                 return row;
@@ -403,6 +404,7 @@ export class World {
             s.anchor.set(0.5, set.anchorY);
             s.position.set(d.x, d.y * TILT);
             s.zIndex = d.y;
+            s.occ = set.texture.height * set.anchorY > 40;     // tall enough to hide the hero: fades when in front of them
             d._sprite = s;
             if (d.flip) s.scale.x = -1;
             if (d.type === 'portal' || d.type === 'torch') animated.push({ s, kind: d.type, phase: d.x * 0.01 });

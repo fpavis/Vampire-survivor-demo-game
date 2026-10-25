@@ -4,7 +4,7 @@
 import { pickNeighbor, type Dir, type Rect } from '../core/input/gamepad';
 import { ui } from './bridge';
 
-const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), input:not([disabled]):not([type=hidden]), [tabindex="0"]';
+const FOCUSABLE = 'button:not([disabled]):not([tabindex="-1"]), select:not([disabled]), input:not([disabled]):not([type=hidden]), [tabindex="0"]';
 const TEXTY = new Set(['text', 'search', 'number', 'email', 'password', '']);
 
 const visible = (el: HTMLElement) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -13,7 +13,7 @@ const isText = (el: Element | null): el is HTMLInputElement => el instanceof HTM
 /** True while the player is typing into a field: hotkeys must leave their keys alone. */
 export function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
-  return !!el && (isText(el) || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement);
+  return !!el && (isText(el) || el instanceof HTMLTextAreaElement);
 }
 
 /** The top-most open panel, or null. */
@@ -51,7 +51,9 @@ function focusEl(el: HTMLElement) {
 export function navFocusFirst(scope = navScope()): boolean {
   if (!scope) return false;
   const all = candidates(scope).filter((el) => !isText(el));
-  const items = all.filter((el) => !el.classList.contains('vs-x'));     // start on the content, not on the close button
+  // start on the content, not on the close button or the sort / filter controls
+  let items = all.filter((el) => !el.classList.contains('vs-x') && !(el instanceof HTMLSelectElement) && !(el instanceof HTMLInputElement));
+  if (!items.length) items = all.filter((el) => !el.classList.contains('vs-x'));
   if (!items.length) { if (!all.length) return false; items.push(...all); }
   const rects = items.map(rectOf);
   focusEl(items[pickNeighbor(null, rects, 'down')]);
@@ -113,6 +115,23 @@ export function navConfirm(): boolean {
   }
   return true;
 }
+
+export type PadFace = 'x' | 'y' | 'rt';
+
+/**
+ * Offer a face button to the focused element of the top panel as a cancelable `vs-pad` event (detail: the button).
+ * Returns true when a panel handled it (equip, lock ...), so the button does not also cast a skill.
+ */
+export function navAction(button: PadFace): boolean {
+  const scope = navScope();
+  if (!scope) return false;
+  const ev = new CustomEvent<PadFace>('vs-pad', { detail: button, bubbles: true, cancelable: true });
+  (current(scope) ?? scope).dispatchEvent(ev);
+  return ev.defaultPrevented;
+}
+
+/** Panels that sit beside the action (level-up cards) let unhandled skill buttons through; the others do not. */
+export const navModal = () => { const s = navScope(); return !!s && !s.classList.contains('vs-cards'); };
 
 /** Close the top-most panel (or leave a text field). */
 export function navBack(): boolean {

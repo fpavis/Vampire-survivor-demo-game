@@ -148,8 +148,7 @@ export class Effects {
         t.alpha = 1;
         t.scale.set(0.6);
         t.visible = true;
-        t.zIndex = 1e9;
-        this.game.objectLayer.addChild(t);
+        this.game.occlusion.layer.addChild(t);     // above the world, the trees and the light map
         this.popups.push({ t, wx: x + (Math.random() - 0.5) * 16, wy: y, z, vz: 1.6, life: 40, target: 1 });
     }
 
@@ -186,7 +185,7 @@ export class Effects {
             if (p.life < 14) p.t.alpha = Math.max(0, p.life / 14);
             if (p.life <= 0) {
                 p.t.visible = false;
-                this.game.objectLayer.removeChild(p.t);
+                p.t.parent?.removeChild(p.t);
                 this.popupPool.push(p.t);
                 this.popups.splice(i, 1);
             }

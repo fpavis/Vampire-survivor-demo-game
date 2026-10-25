@@ -138,8 +138,19 @@ export class UIManager {
         this.container.visible = visible;
     }
 
+    /** Phones and small windows get a smaller HUD; the DOM side uses the same breakpoints (see ui/style.ts). */
+    get compact() {
+        return this.app.screen.width < 900 || this.app.screen.height < 600;
+    }
+
     layoutHUD() {
         const w = this.app.screen.width, h = this.app.screen.height;
+        const k = this.compact ? 0.8 : 1;
+        this.hudScale = k;
+        this.panel.scale.set(k);
+        this.panel.position.set(12, k < 1 ? 24 : 26);
+        this.slotsContainer.scale.set(k);
+        this.slotsContainer.position.set(12, this.panel.y + 64 * k + 8);
         this.settingsButton.position.set(w - 34, 50);
         this.elements.xpText.x = w / 2;
         this.elements.banner.position.set(w / 2, h * 0.24);
@@ -283,9 +294,12 @@ export class UIManager {
             const t = TEMPLATES[it.tpl];
             drawSlot(i * 44, 0, t.icon, it.level, t.max, CORE_INFO[t.core].color);
         });
+        const autoRow = game.spells.auto.length ? 1 : 0;
         Object.entries(s.picks).forEach(([id, lvl], i) => {
-            drawSlot(i * 44, 44, CARDS[id].icon, lvl, CARDS[id].max, 0x7be07b);
+            drawSlot(i * 44, autoRow * 44, CARDS[id].icon, lvl, CARDS[id].max, 0x7be07b);
         });
+        this.slotRows = autoRow + (Object.keys(s.picks).length ? 1 : 0);
+        this.publishHudTop();
 
         const st = game.stats;
         this.elements.statsText.visible = false;   // detailed numbers live in the spell panel / tooltips
@@ -336,6 +350,7 @@ export class UIManager {
         this.mapZone.anchor.set(0.5, 0);
         this.mapZone.position.set(85, 178);
         const hint = new PIXI.Text('[M] world map', { fontFamily: FONT, fontSize: 11, fill: 0xaab4cc, stroke: 0x000000, strokeThickness: 3 });
+        this.mapHint = hint;
         hint.anchor.set(0.5, 0);
         hint.position.set(85, 196);
         this.mapBox.addChild(this.mapFrame, this.mapSprite, mask, this.mapZone, hint);
@@ -410,9 +425,27 @@ export class UIManager {
         this.toastTimer = 150;
     }
 
+    /** Where the DOM column (tracker, party) may start: just below the canvas health panel and spell slots. */
+    publishHudTop() {
+        const k = this.hudScale || 1;
+        const top = Math.round(this.slotsContainer.y + (this.slotRows || 0) * 44 * k + 6);
+        if (top !== this.hudTop) {
+            this.hudTop = top;
+            document.documentElement.style.setProperty('--hud-top', `${top}px`);
+        }
+    }
+
     layoutExtras() {
         const w = this.app.screen.width, h = this.app.screen.height;
-        this.mapBox.position.set(w - 182, 92);
+        const mk = this.compact ? 0.62 : 1;
+        this.mapBox.scale.set(mk);
+        this.mapBox.position.set(w - 12 - 177 * mk, mk < 1 ? 76 : 92);
+        // the zone name stays readable: keep its size and right-align it under a shrunken map
+        this.mapZone.scale.set(1 / mk);
+        this.mapZone.anchor.set(mk < 1 ? 1 : 0.5, 0);
+        this.mapZone.x = mk < 1 ? 172 : 85;
+        this.mapHint.visible = mk === 1;
+        this.publishHudTop();
         this.toastText.position.set(14, h - 14);
         this.prompt.position.set(w / 2, h - 120);
         this.zoneText.position.set(w / 2, h * 0.16);

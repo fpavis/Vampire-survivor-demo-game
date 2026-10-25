@@ -8,7 +8,7 @@ export const CSS = `
 .vs-mana>b{position:absolute;inset:0;text-align:center;font-size:11px;line-height:12px;text-shadow:0 1px 2px #000}
 .vs-skills{display:flex;gap:8px}
 .vs-skill{position:relative;width:58px;height:58px;border-radius:12px;background:rgba(10,14,26,.82);border:2px solid #4c5b86;display:grid;place-items:center;font-size:28px;cursor:pointer;overflow:hidden;padding:0;color:inherit;font-family:inherit}
-.vs-skill.empty{opacity:.35;cursor:default;font-size:12px}
+.vs-skill.empty{opacity:.3;cursor:default;font-size:12px;border-style:dashed}
 .vs-skill.poor{border-color:#a04848;filter:saturate(.4)}
 .vs-skill .cd{position:absolute;inset:0;background:rgba(0,0,0,.62);transform-origin:bottom;pointer-events:none}
 .vs-skill .k{position:absolute;left:4px;top:2px;font-size:11px;font-weight:700;color:#cdd7f5;text-shadow:0 1px 2px #000}
@@ -16,9 +16,10 @@ export const CSS = `
 .vs-btns{display:flex;gap:8px}
 .vs-btn{pointer-events:auto;background:rgba(10,14,26,.82);border:2px solid #4c5b86;color:#dfe6ff;border-radius:10px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
 .vs-btn:hover{border-color:#8fb0ff}
-.vs-pill{position:absolute;top:70px;left:50%;transform:translateX(-50%);padding:7px 16px;border-radius:20px;background:linear-gradient(#ffd84a,#e8a317);color:#2a1a00;font-weight:700;font-size:14px;border:0;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);animation:vs-pulse 1.3s infinite}
+.vs-btn.vs-ico{font-size:18px;line-height:1;padding:6px 8px;min-width:38px}
+.vs-pill{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2;padding:7px 16px;border-radius:20px;background:linear-gradient(#ffd84a,#e8a317);color:#2a1a00;font-weight:700;font-size:14px;border:0;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);animation:vs-pulse 1.3s infinite}
 @keyframes vs-pulse{50%{transform:translateX(-50%) scale(1.07)}}
-.vs-panel{position:absolute;background:rgba(12,16,30,.94);border:2px solid #3a4a78;border-radius:14px;padding:14px;box-shadow:0 6px 28px rgba(0,0,0,.6)}
+.vs-panel{position:absolute;z-index:5;background:rgba(12,16,30,.94);border:2px solid #3a4a78;border-radius:14px;padding:14px;box-shadow:0 6px 28px rgba(0,0,0,.6)}
 .vs-panel h2{margin:0 0 4px;font-size:18px}
 .vs-panel .sub{font-size:12px;color:#9aa6c8;margin-bottom:10px}
 .vs-cards{right:16px;bottom:150px;width:min(320px,calc(100vw - 32px));max-height:calc(100vh - 290px);overflow:auto}
@@ -83,12 +84,12 @@ export const CSS = `
 .vs-hold .b>i{display:block;height:100%;background:linear-gradient(#ffe27a,#e8a317)}
 .vs-surface{max-width:260px;font-size:12px;padding:3px 9px;border-radius:8px;background:rgba(8,12,24,.78);border-left:4px solid var(--sc);text-align:right;text-shadow:0 1px 2px #000}
 .vs-surface.bad{background:rgba(60,14,10,.82)}
-.vs-party{position:absolute;left:12px;top:214px;display:flex;flex-direction:column;gap:6px;width:178px}
-@media(max-width:700px){.vs-party{top:auto;bottom:150px;width:150px}}
+.vs-party{display:flex;flex-direction:column;gap:6px;width:178px}
 .vs-hero{position:relative;display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 7px;border-radius:10px;background:rgba(10,14,26,.8);border:2px solid #34426c;color:inherit;font:inherit;cursor:pointer;text-align:left;overflow:hidden}
 .vs-hero.act{border-color:var(--hc);box-shadow:0 0 12px var(--hc)}
 .vs-hero.dead{filter:grayscale(1);opacity:.55;cursor:not-allowed}
-.vs-hero .pi{font-size:24px;text-align:center}
+.vs-hero .pi{font-size:24px;text-align:center;position:relative}
+.vs-hero .pi .lv{display:none}
 .vs-hero .nm{font-size:12px;font-weight:700;display:flex;justify-content:space-between;gap:4px}
 .vs-hero .nm i{font-style:normal;color:#9aa6c8;font-weight:400}
 .vs-hero .b{display:block;height:6px;border-radius:3px;background:#0a0f1c;margin-top:3px;overflow:hidden}
@@ -132,7 +133,8 @@ export const CSS = `
 
 /* focus follows the device: a bright ring for keyboard and controller, none for mouse and touch */
 #ui-root button:focus,#ui-root [tabindex]:focus,#ui-root select:focus,#ui-root input:focus{outline:none}
-html[data-input="key"] #ui-root :focus,html[data-input="pad"] #ui-root :focus{outline:3px solid #ffd84a;outline-offset:2px;box-shadow:0 0 14px rgba(255,216,74,.65);position:relative;z-index:1}
+html[data-input="key"] #ui-root :focus,html[data-input="pad"] #ui-root :focus{outline:3px solid #ffd84a;outline-offset:2px;box-shadow:0 0 14px rgba(255,216,74,.65)}
+html[data-input="key"] #ui-root :focus:not(.vs-x):not(.vs-tracker),html[data-input="pad"] #ui-root :focus:not(.vs-x):not(.vs-tracker){position:relative;z-index:1}
 html[data-input="key"] #ui-root .vs-card:focus,html[data-input="pad"] #ui-root .vs-card:focus{background:#1c2644;transform:translateX(-3px)}
 html[data-input="pad"] #ui-root input[type=range]:focus{outline-offset:6px}
 .vs-pause{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:20}
@@ -172,10 +174,69 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-lord{color:#ffb0b0}
 .vs-lord.dead{color:#7a8296;text-decoration:line-through}
 .vs-lord.sov{color:#e6b8ff}
-.vs-tracker{position:absolute;left:16px;top:146px;width:min(250px,calc(100vw - 32px));background:rgba(8,12,24,.72);border:1px solid #3a4a78;border-left:3px solid #7ad8ff;border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.35;text-shadow:0 1px 2px #000;pointer-events:none}
-.vs-tracker .t{font-weight:700;font-size:13px;margin-bottom:2px}
+.vs-tracker{display:block;width:min(250px,calc(100vw - 32px));text-align:left;color:inherit;font:inherit;cursor:pointer;background:rgba(8,12,24,.72);border:1px solid #3a4a78;border-left:3px solid #7ad8ff;border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.35;text-shadow:0 1px 2px #000}
+.vs-tracker:hover{border-color:#7ad8ff}
+.vs-tracker .more{color:#8e97b0}
+.vs-tracker .t{font-weight:700;font-size:13px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vs-tracker .o.done{color:#8e97b0;text-decoration:line-through}
 .vs-tracker .r{color:#9be09b;margin-top:2px}
 .vs-choices{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .vs-choices .vs-btn{text-align:left}
+
+/* loadout: hero switcher, button hints, rune picker */
+.vs-heroes{display:inline-flex;gap:4px;margin-left:10px;vertical-align:middle}
+.vs-btn.vs-hb{padding:2px 6px;font-size:15px;opacity:.55}
+.vs-btn.vs-hb.on{opacity:1;border-color:#ffd84a}
+.vs-hintbar{position:sticky;bottom:-14px;margin:10px -14px -14px;padding:7px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:#aab4cc;background:rgba(8,11,22,.97);border-top:1px solid #2e3a62;border-radius:0 0 12px 12px}
+.vs-hintbar kbd{display:inline-block;min-width:18px;text-align:center;font:700 10.5px/1 inherit;color:#ffe9a8;background:#1d2646;border:1px solid #3a4a78;border-bottom-width:2px;border-radius:5px;padding:3px 5px;margin-right:4px}
+.vs-hintbar kbd+kbd{margin-left:-1px}
+.vs-picker{left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 24px));max-height:calc(100vh - 40px);overflow:auto;z-index:7;border-color:#b8a8ff}
+.vs-pick{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;background:#151c33;border:2px solid var(--rc,#2e3a62);border-radius:10px;padding:8px 10px;margin-bottom:7px;color:inherit;font:inherit;cursor:pointer}
+.vs-pick:hover{background:#1c2644}
+.vs-pick .ic{font-size:26px;width:32px;text-align:center}
+.vs-pick .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.vs-pick i{font-style:normal;font-size:11px;color:var(--rc)}
+.vs-pick small{font-size:12px;color:#c9d1e6}
+.vs-pick small.pv{color:#9be09b}
+
+/* left HUD column: sits under the canvas health panel and spell slots (ui.ts sets --hud-top) */
+.vs-left{position:absolute;left:12px;top:var(--hud-top,190px);display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-height:calc(100vh - var(--hud-top,190px) - 12px)}
+
+/* small screens: phones and small windows */
+@media (max-width:899px),(max-height:599px){
+  html.vs-modal #ui-root .vs-hud{display:none}
+  .vs-panel{padding:10px;border-radius:12px}
+  .vs-load,.vs-build,.vs-tpanel,.vs-shop,.vs-journal,.vs-board,.vs-pause,.vs-heal,.vs-inn{width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}
+  .vs-dialog{bottom:8px;max-height:calc(100vh - 16px);overflow:auto}
+  .vs-cards{top:8px;bottom:auto;right:8px;max-height:calc(100vh - 16px)}
+  .vs-load .sub{display:none}
+  .vs-hintbar{bottom:-10px;margin:8px -10px -10px;padding:6px 10px}
+  .vs-hint-mouse{display:none}
+  .vs-pill{position:static;transform:none;animation:vs-glow 1.3s infinite;font-size:12px;padding:5px 11px}
+  .vs-pill .long{display:none}
+  .vs-tracker{width:200px;padding:4px 8px;font-size:11px}
+  .vs-tracker .t{font-size:12px}
+  .vs-party{flex-direction:row;width:auto;gap:5px}
+  .vs-hero{display:flex;flex-direction:column;align-items:stretch;gap:2px;width:50px;padding:3px 4px}
+  .vs-hero .pi{font-size:20px;line-height:24px}
+  .vs-hero .pi .lv{display:block;position:absolute;right:-2px;bottom:-2px;font-style:normal;font-size:9px;font-weight:700;background:#1d2646;border-radius:6px;padding:0 3px;line-height:12px}
+  .vs-hero .nm,.vs-hero .kb{display:none}
+  .vs-hero .pend{top:1px;right:1px;bottom:auto;font-size:9px;padding:0 3px}
+  .vs-bar{right:10px;bottom:10px;gap:6px}
+  .vs-skill{width:48px;height:48px;font-size:23px;border-radius:10px}
+  .vs-mana{width:160px;height:14px}
+  .vs-mana>b{font-size:10px;line-height:10px}
+  .vs-btn.vs-ico{font-size:16px;padding:4px 7px;min-width:34px}
+  .vs-wallet{font-size:12px;gap:8px}
+  .vs-surface{max-width:200px;font-size:11px}
+}
+/* narrow (portrait): centred banners go below the minimap */
+@media (max-width:599px){
+  .vs-hold,.vs-buildhud,.vs-sailing{top:300px}
+}
+/* short (landscape phone): centred banners fit between the health panel and the minimap */
+@media (max-height:599px) and (min-width:600px){
+  .vs-hold,.vs-buildhud,.vs-sailing{top:26px;width:min(340px,calc(100vw - 500px));white-space:normal}
+}
+@keyframes vs-glow{50%{box-shadow:0 0 16px #ffd84a}}
 `;

@@ -3,7 +3,7 @@
 // using (so prompts and focus rings follow), reads the gamepad, and turns buttons into game actions.
 import { DIRS, PadMapper, QUICK_PANELS, emptyFrame, padKind } from '../core/input/gamepad';
 import { ui as uiBridge } from '../ui/bridge';
-import { isTyping, navActive, navBack, navConfirm, navMove, navScope, navWantsArrows } from '../ui/nav';
+import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navWantsArrows } from '../ui/nav';
 
 const PREFS_KEY = 'vs.input.v1';
 const ARROW_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
@@ -203,9 +203,13 @@ export class InputSystem {
         }
         if (s.paused) return;
 
-        if (has('skill1')) g.spells.cast(0);
-        if (has('skill2')) g.spells.cast(1);
-        if (has('skill3')) g.spells.cast(2);
+        // inside a panel the face buttons act on the focused item first (X equip, Y lock ...)
+        const faces = [['skill1', 'x', 0], ['skill2', 'y', 1], ['skill3', 'rt', 2]];
+        for (const [action, face, slot] of faces) {
+            if (!has(action)) continue;
+            if (navActive() && (navAction(face) || navModal())) continue;
+            g.spells.cast(slot);
+        }
         if (has('prevHero')) g.party.cycle(-1);
         if (has('nextHero')) g.party.cycle(1);
         if (has('map')) g.toggleMap();

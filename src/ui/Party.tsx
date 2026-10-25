@@ -12,8 +12,8 @@ export function PartyBar() {
         <button key={h.id} class={`vs-hero${i === p.active ? ' act' : ''}${h.dead ? ' dead' : ''}`} style={{ '--hc': hex(h.color) }}
           title={h.dead ? `${h.name} is down. Revive at a town healer.` : i === p.active ? `${h.name} (active)` : `Switch to ${h.name}`}
           onClick={() => ui.game?.party.switchTo(i)}>
-          <span class="pi">{h.dead ? '💀' : h.icon}</span>
-          <span>
+          <span class="pi">{h.dead ? '💀' : h.icon}<i class="lv">{h.level}</i></span>
+          <span class="bars">
             <span class="nm">{h.name}<i>Lv {h.level}</i></span>
             <span class="b"><u class="hp" style={{ width: `${Math.max(0, Math.min(100, (h.hp / h.maxHp) * 100))}%` }} /></span>
             <span class="b"><u class="mp" style={{ width: `${Math.max(0, Math.min(100, (h.mana / h.maxMana) * 100))}%` }} /></span>

@@ -8,6 +8,7 @@ import { EntityManager } from '../render/entities';
 import { UIManager } from './ui';
 import { World, BIOME } from '../render/world';
 import { Effects } from '../render/effects';
+import { Occlusion } from '../render/occlusion';
 import { Lighting } from '../render/lighting';
 import { Ambience } from '../render/ambience';
 import { SpellSystem } from './spells';
@@ -82,6 +83,7 @@ class Game {
         this.createAtmosphere();
 
         this.world = new World(this.app, this.groundLayer, this.objectLayer);
+        this.occlusion = new Occlusion(this);
         this.fx = new Effects(this);
         this.spells = new SpellSystem(this);
         this.party = new PartyRuntime(this);
@@ -698,6 +700,7 @@ class Game {
             this.step(1);
         }
         if (this.state.player && !this.state.paused) this.ambience.update(Math.min(rawDelta, 2.5), this.cam, this.worldContainer);
+        this.occlusion.update(Math.min(rawDelta, 2.5));
         this.renderLights();
     }
 
@@ -934,6 +937,7 @@ class Game {
         if (opts.minion) e.minion = true;
         this.objectLayer.addChild(e);
         EntityManager.place(e);
+        this.occlusion.float(e, e.hpBar.bar);
         this.state.enemies.push(e);
         return e;
     }
@@ -1341,6 +1345,7 @@ class Game {
         c.position.set(spot.x, spot.y * TILT);
         c.zIndex = spot.y;
         this.objectLayer.addChild(c);
+        this.occlusion.float(c, c.label);
         this.interactables.push({ kind: role, x: spot.x, y: spot.y, sprite: c, npc: true });
         const icon = { healer: '✚', merchant: '💰', innkeeper: '🛏', elder: '📜' }[role];
         this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon });
@@ -1353,6 +1358,7 @@ class Game {
         c.position.set(spot.x, spot.y * TILT);
         c.zIndex = spot.y;
         this.objectLayer.addChild(c);
+        this.occlusion.float(c, c.label);
         this.interactables.push({ kind: 'board', x: spot.x, y: spot.y, sprite: c, npc: true });
         this.map.markers.push({ tx: spot.x / T, ty: spot.y / T, icon: '📋' });
         return c;

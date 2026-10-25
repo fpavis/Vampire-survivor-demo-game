@@ -115,9 +115,10 @@ export type PadKind = 'xbox' | 'playstation' | 'switch' | 'generic';
 
 export function padKind(id: string): PadKind {
   const s = (id || '').toLowerCase();
+  // Xbox pads also call themselves "Wireless Controller", so they are checked before the generic Sony name
+  if (/xbox|xinput|045e|microsoft/.test(s)) return 'xbox';
   if (/playstation|dualshock|dualsense|054c|ps4|ps5|wireless controller/.test(s)) return 'playstation';
   if (/nintendo|switch|pro controller|057e|joy-con/.test(s)) return 'switch';
-  if (/xbox|xinput|045e|microsoft/.test(s)) return 'xbox';
   return 'generic';
 }
 

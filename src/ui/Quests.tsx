@@ -105,16 +105,18 @@ export function BoardPanel() {
   );
 }
 
+/** The tracked quest in one or two lines: its title and the next thing to do. Tap it for the journal. */
 export function Tracker() {
   const q = ui.tracker.value;
   if (!q) return null;
+  const next = q.objectives.find((o) => !o.done);
+  const left = q.objectives.filter((o) => !o.done).length;
   return (
-    <div class="vs-tracker">
+    <button class="vs-tracker hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.input.openPanel('journal')}>
       <div class="t">{q.kind === 'main' ? '📖' : '📋'} {q.title}</div>
-      {q.objectives.slice(0, 4).map((o, i) => (
-        <div key={i} class={`o${o.done ? ' done' : ''}`}>{o.done ? '☑' : '☐'} {o.text}{o.progress && o.progress !== '✔' ? ` (${o.progress})` : ''}</div>
-      ))}
-      {q.ready && <div class="r">{q.giver === 'elder' ? 'Return to the Elder' : 'Claim at a bounty board'}</div>}
-    </div>
+      {q.ready
+        ? <div class="r">{q.giver === 'elder' ? 'Return to the Elder' : 'Claim at a bounty board'}</div>
+        : next && <div class="o">☐ {next.text}{next.progress && next.progress !== '✔' ? ` (${next.progress})` : ''}{left > 1 ? <span class="more"> +{left - 1}</span> : null}</div>}
+    </button>
   );
 }

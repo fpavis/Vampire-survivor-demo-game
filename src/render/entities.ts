@@ -46,7 +46,7 @@ function drawHealthBar(container, width, y) {
     bar.y = y;
     bar.visible = false;
     container.addChild(bar);
-    return { bar, fg, width };
+    return { bar, bg, fg, width };
 }
 
 export class EntityManager {
@@ -163,26 +163,29 @@ export class EntityManager {
             e.body.alpha = e.phasing ? 0.85 : 1;
         }
         const hp = e.hpBar;
-        if (e.health < e.maxHealth && !e.dead) {
-            hp.bar.visible = true;
+        // Bars only once hurt; level tags only where they matter: elites, bosses and monsters above the hero.
+        const hurt = e.health < e.maxHealth && !e.dead;
+        const band = e.level ? threatBand(e.level, EntityManager.heroLevel) : 'even';
+        const tagged = !e.dead && !!e.level && (e.isBoss || e.elite || band === 'high' || band === 'deadly');
+        hp.bar.visible = hurt || tagged;
+        hp.bg.visible = hp.fg.visible = hurt;
+        if (hurt) {
             const frac = Math.max(0, e.health / e.maxHealth);
             hp.fg.scale.x = frac;
             hp.fg.tint = frac < 0.3 ? 0xff4747 : frac < 0.6 ? 0xffc233 : 0x4cd964;
-            if (e.level && !hp.label) {
-                // level tag, created lazily so undamaged monsters stay cheap
-                const label = new PIXI.Text(`Lv ${e.level}`, { fontFamily: 'Arial', fontSize: 11, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
-                label.anchor.set(0.5, 1);
-                label.position.set(0, -2);
-                hp.bar.addChild(label);
-                hp.label = label;
-            }
-            if (hp.label) {
-                const band = threatBand(e.level, EntityManager.heroLevel);
-                hp.label.style.fill = THREAT_COLORS[band];
-                if (e.isBoss) hp.label.text = `Lv ${e.level} ${e.bossName ?? ''}`;
-            }
-        } else if (hp.bar.visible && e.health >= e.maxHealth) {
-            hp.bar.visible = false;
+        }
+        if (tagged && !hp.label) {
+            // created lazily so ordinary monsters stay cheap
+            const label = new PIXI.Text(`Lv ${e.level}`, { fontFamily: 'Arial', fontSize: 11, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
+            label.anchor.set(0.5, 1);
+            label.position.set(0, -2);
+            hp.bar.addChild(label);
+            hp.label = label;
+        }
+        if (hp.label) {
+            hp.label.visible = tagged;
+            if (tagged && hp.band !== band) { hp.band = band; hp.label.style.fill = THREAT_COLORS[band]; }
+            if (e.isBoss && e.bossName && hp.named !== e.bossName) { hp.named = e.bossName; hp.label.text = `Lv ${e.level} ${e.bossName}`; }
         }
     }
 
