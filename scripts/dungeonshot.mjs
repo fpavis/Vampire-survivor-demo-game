@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'dg';
 mkdirSync(OUT, { recursive: true });
-const pv = spawn('npx', ['vite', 'preview', '--port', '4207', '--strictPort'], { stdio: 'ignore' });
+const pv = spawn('npx', ['vite', 'preview', '--port', '4207', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
@@ -37,4 +37,4 @@ for (let f = 1; f < floors; f++) {
 }
 await p.evaluate(() => { const g = window.game; const s = g.interior.boss; window.stand(s.x - 20, s.y + 280); });
 await shot('boss');
-await b.close(); pv.kill();
+await b.close(); process.kill(-pv.pid);

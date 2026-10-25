@@ -4,8 +4,8 @@ import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 
 const PORT = 4187;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
-process.on('exit', () => { try { preview.kill(); } catch { /* ignore */ } });
+const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
+process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
 for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
 
 let failed = 0;
@@ -335,6 +335,6 @@ check('Continue loads the saved game', loaded === 777, String(loaded));
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
-preview.kill();
+process.kill(-preview.pid);
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

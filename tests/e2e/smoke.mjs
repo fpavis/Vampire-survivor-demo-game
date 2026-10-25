@@ -4,8 +4,8 @@ import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 
 const PORT = 4179;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
-const stop = () => { try { preview.kill(); } catch { /* ignore */ } };
+const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
+const stop = () => { try { process.kill(-preview.pid); } catch { /* ignore */ } };
 process.on('exit', stop);
 
 async function waitForServer() {

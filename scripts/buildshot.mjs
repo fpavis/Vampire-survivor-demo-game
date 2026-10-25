@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'ui';
 mkdirSync(OUT, { recursive: true });
-const pv = spawn('npx', ['vite', 'preview', '--port', '4205', '--strictPort'], { stdio: 'ignore' });
+const pv = spawn('npx', ['vite', 'preview', '--port', '4205', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
@@ -56,4 +56,4 @@ await p.evaluate(() => {
   g.state.keys.d = g.state.keys.a = g.state.keys.s = g.state.keys.w = false;
 });
 await shot('sailing');
-await b.close(); pv.kill();
+await b.close(); process.kill(-pv.pid);

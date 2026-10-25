@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'lay';
 mkdirSync(OUT, { recursive: true });
-const pv = spawn('npx', ['vite', 'preview', '--port', '4209', '--strictPort'], { stdio: 'ignore' });
+const pv = spawn('npx', ['vite', 'preview', '--port', '4209', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 
@@ -103,4 +103,4 @@ for (const [w, h, name] of [[1280, 720, 'desk'], [820, 460, 'land'], [390, 760, 
   }
   await ctx.close();
 }
-await b.close(); pv.kill();
+await b.close(); process.kill(-pv.pid);

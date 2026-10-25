@@ -3,8 +3,8 @@ import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 
 const PORT = 4181;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
-const stop = () => { try { preview.kill(); } catch { /* ignore */ } };
+const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
+const stop = () => { try { process.kill(-preview.pid); } catch { /* ignore */ } };
 process.on('exit', stop);
 for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
 

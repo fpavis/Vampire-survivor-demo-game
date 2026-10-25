@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'shot';
 mkdirSync(OUT, { recursive: true });
-const pv = spawn('npx', ['vite', 'preview', '--port', '4195', '--strictPort'], { stdio: 'ignore' });
+const pv = spawn('npx', ['vite', 'preview', '--port', '4195', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise(r => setTimeout(r, 2500));
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
@@ -62,4 +62,4 @@ for (const [i, type] of [['9', 'city'], ['10', 'cave'], ['11', 'ruins']]) {
   await p.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 8000 });
 }
 await shot('12-boss', goto('field', 30) + `; g.spawnBoss(); const e=g.state.enemies.find(x=>x.isBoss); if(e){e.wx=g.state.player.wx+220; e.wy=g.state.player.wy-40;}`, 120);
-await b.close(); pv.kill();
+await b.close(); process.kill(-pv.pid);
