@@ -721,6 +721,8 @@ export class SpellSystem {
     aimDir() {
         const g = this.game;
         const p = g.state.player;
+        const stick = g.input && g.input.aim();
+        if (stick) return stick;                      // right stick aims dashes and blinks
         const ptr = g.state.pointerPosition;
         if (g.state.pointerDown && ptr) {
             const tx = ptr.x - g.worldContainer.x, ty = (ptr.y - g.worldContainer.y) / TILT;

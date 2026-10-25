@@ -1,5 +1,8 @@
 import { signal } from '@preact/signals';
 import type { OfferedCard } from '../core/hero/stats';
+import type { PadKind } from '../core/input/gamepad';
+
+export type InputDevice = 'key' | 'mouse' | 'pad' | 'touch';
 
 export interface HeroView {
   id: string; name: string; icon: string; color: number; level: number; dead: boolean; pending: number;
@@ -43,6 +46,12 @@ export const ui = {
   muted: signal(false),
   wallet: signal({ gold: 0, wood: 0, stone: 0, iron: 0 }),
   filter: signal<'off' | 'basic' | 'advanced'>('off'),
+  device: signal<InputDevice>('mouse'),
+  padKind: signal<PadKind>('xbox'),
+  padName: signal(''),
+  pauseOpen: signal(false),
+  vibration: signal(true),
+  deadzone: signal(0.2),
   game: null as any
 };
 

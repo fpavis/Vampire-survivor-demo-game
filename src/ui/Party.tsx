@@ -1,4 +1,5 @@
 import { ui } from './bridge';
+import { onPad } from './hints';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -17,7 +18,7 @@ export function PartyBar() {
             <span class="b"><u class="hp" style={{ width: `${Math.max(0, Math.min(100, (h.hp / h.maxHp) * 100))}%` }} /></span>
             <span class="b"><u class="mp" style={{ width: `${Math.max(0, Math.min(100, (h.mana / h.maxMana) * 100))}%` }} /></span>
           </span>
-          <span class="kb">{i + 1}</span>
+          {!onPad() && <span class="kb">{i + 1}</span>}
           {h.pending > 0 && <span class="pend">⬆{h.pending}</span>}
           {i !== p.active && p.cd > 0 && !h.dead && <span class="cdv" style={{ transform: `scaleX(${p.cd})` }} />}
         </button>

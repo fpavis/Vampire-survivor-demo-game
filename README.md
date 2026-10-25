@@ -30,7 +30,10 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 - **Graphics**: baked ground textures with organic biome borders, shore foam, earthen banks and water depth; textured cliffs with moss, snow and glowing crystal veins; a light map for caves, ruins and the dark far regions (torches, crystals, spells and explosions glow); region ambience (leaves, pollen, blowing sand, snow, cave motes, ash); `npm run gallery` saves screenshots of every scene
 - **Art**: three distinct, rigged heroes (mage, knight, druid) with walk cycles; outlined, shaded monsters with animated legs, wings and glowing eyes; spell effects with trails, shockwaves, light pillars and dash afterimages; gabled, half-timbered town houses with shutters, flower boxes and lanterns; varied townsfolk; gilded minimap frame. `node scripts/artsheet.mjs` lays every sprite out on one sheet and `node scripts/spellshot.mjs` captures each spell
 - **Modern UI**: XP bar, animated health bar, warlord health bar, biome banners, spell and stat slots, mana bar and active skill bar, floating damage numbers with crits, damage vignette
-- **Responsive Controls**: keyboard (WASD / arrows), mouse (click and hold), touch and virtual joystick
+- **Responsive Controls**: keyboard (WASD), mouse (click and hold), touch with a virtual joystick, and **gamepad** (Xbox, PlayStation, Switch and generic pads through the browser Gamepad API). Prompts, skill keys and hints follow whichever device you used last (`[E]` becomes `[A]` or `[✕]`)
+  - Controller: left stick moves, right stick aims dashes and blinks, **A** interacts and confirms, **B** backs out, **X / Y / RT** are the three skills, **LB / RB** switch heroes, **View** is the map, **Start** pauses, and the **D-pad** opens spells (↑), level-up cards (↓) and the build menu (←) or moves through any open panel
+  - Every panel works with the keyboard (arrow keys move focus while a panel is open, Enter presses, Esc backs out; WASD keeps walking), the mouse and a controller, including equipping, unequipping and salvaging spells without dragging
+  - The pause menu (Esc / Start) has sound, controller vibration, stick dead zone, the touch joystick options and a table of every control
 
 ## 🚀 Getting Started
 

@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { App } from './App';
 import { CSS } from './style';
 import { ui } from './bridge';
+import { installNav } from './nav';
 
 export function mountUi(game: any) {
   if (document.getElementById('ui-root')) return;
@@ -13,4 +14,5 @@ export function mountUi(game: any) {
   document.body.appendChild(root);
   ui.game = game;
   render(<App />, root);
+  installNav();
 }

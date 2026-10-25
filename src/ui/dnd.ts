@@ -17,6 +17,14 @@ let reject: (reason: string) => void = () => {};
 export function configureDnd(v: typeof validate, c: typeof commit, r: typeof reject) { validate = v; commit = c; reject = r; }
 export const checkDrop = (p: Payload, t: DropTarget) => validate(p, t);
 
+/** The keyboard and controller path: do what a drop would do, with the same rules and the same refusals. */
+export function applyDrop(p: Payload, t: DropTarget): boolean {
+  const chk = validate(p, t);
+  if (chk.ok) { commit(p, t); return true; }
+  if (chk.reason) reject(chk.reason);
+  return false;
+}
+
 function targetAt(x: number, y: number): DropTarget | null {
   const el = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest('[data-drop]') as HTMLElement | null;
   if (!el) return null;

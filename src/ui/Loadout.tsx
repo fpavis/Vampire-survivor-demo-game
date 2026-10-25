@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { ui } from './bridge';
-import { beginDrag, checkDrop, configureDnd, dragging, type DropTarget, type Payload } from './dnd';
+import { quickGlyph } from './hints';
+import { applyDrop, beginDrag, checkDrop, configureDnd, dragging, type DropTarget, type Payload } from './dnd';
 import {
   CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES, canSocket, describeSpell, previewRune, resolveSpell, spellXpFor, type SpellItem
 } from '../core/spells/spells';
@@ -90,6 +91,7 @@ function SpellRow({ it, sel, onSel }: { it: SpellItem; sel: boolean; onSel: () =
   const held = game.spells.heldBy(it.uid);
   return (
     <div class={`vs-item${sel ? ' sel' : ''}`} tabIndex={0} style={{ touchAction: 'none' }}
+      onFocus={() => { if (ui.device.value === 'pad' || ui.device.value === 'key') onSel(); }}
       onKeyDown={(e) => { if (e.key === 'Enter') onSel(); }}
       onPointerDown={(e) => beginDrag(e as any, { kind: 'spell', uid: it.uid }, `${t.icon} ${t.name}`, onSel)}>
       <span class="ic">{t.icon}</span>
@@ -152,9 +154,9 @@ export function Loadout() {
 
   return (
     <div class="vs-panel vs-load hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}>✕ (I)</button>
+      <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}>✕ ({quickGlyph('spells')})</button>
       <h2>Spells &amp; Runes — {ui.party.value.heroes[ui.party.value.active]?.name}</h2>
-      <div class="sub">Drag spells and runes (or click, then click a target). Greyed runes don’t fit — hover for why. Each hero has their own loadout; a spell can be equipped by one hero at a time.</div>
+      <div class="sub">Drag spells and runes, or select one and use its buttons (works with the keyboard and a controller too). Greyed runes don’t fit — hover for why. Each hero has their own loadout; a spell can be equipped by one hero at a time.</div>
       <div class="vs-tools">
         <input class="vs-in" placeholder="Search…" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
         <label>Spells <select class="vs-in" value={spellSort} onChange={(e) => setSpellSort((e.target as HTMLSelectElement).value as SpellSort)}><option value="level">by level</option><option value="name">by name</option><option value="type">by type</option></select></label>
@@ -191,6 +193,18 @@ export function Loadout() {
               <div class="vs-sec">SELECTED</div>
               <div><b>{tpl.icon} {tpl.name}</b> — {tpl.desc}</div>
               <div class="vs-tip">{describeSpell(resolved).join('  ·  ')}</div>
+              <div class="vs-acts">
+                {tpl.mode === 'auto' && !sp.equipped(item.uid) && (
+                  <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'equip' })}>⚔ Equip</button>
+                )}
+                {tpl.mode === 'active' && [0, 1, 2].map((i) => (
+                  <button key={i} class="vs-btn" disabled={sp.active[i] === item.uid} onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'equip', slot: i })}>
+                    {sp.active[i] === item.uid ? '✔' : '→'} {['Space', 'Q', 'R'][i]} slot
+                  </button>
+                ))}
+                {sp.equipped(item.uid) && <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'unequip' })}>Unequip</button>}
+                <button class="vs-btn" onClick={() => applyDrop({ kind: 'spell', uid: item.uid }, { type: 'salvage' })}>♻ Salvage{!sp.equipped(item.uid) && !item.locked ? ` ${spellValue(item)}g` : ''}</button>
+              </div>
               <div class="vs-socks">
                 {item.runes.map((r: string | null, i: number) => {
                   const target: DropTarget = { type: 'socket', uid: item.uid, slot: i };
@@ -199,7 +213,7 @@ export function Loadout() {
                       data-drop="socket" data-uid={item.uid} data-slot={i} style={{ touchAction: 'none' }}
                       title={r ? `${RUNES[r].name}: ${RUNES[r].desc} (click to remove, or drag out)` : 'Empty socket'}
                       onPointerDown={(e) => { if (r) beginDrag(e as any, { kind: 'rune', id: r, from: { uid: item.uid, slot: i } }, `${RUNES[r].icon} ${RUNES[r].name}`, () => trySocket(i)); }}
-                      onClick={() => { if (!r) trySocket(i); }}>
+                      onClick={(e) => { if (!r || (e as MouseEvent).detail === 0) trySocket(i); }}>
                       {r ? RUNES[r].icon : '+'}
                     </button>
                   );
@@ -223,6 +237,12 @@ export function Loadout() {
                   );
                 })}
               </div>
+              {selRune && (
+                <div class="vs-acts">
+                  <button class="vs-btn" onClick={() => { if (applyDrop({ kind: 'rune', id: selRune, from: 'bag' }, { type: 'salvage' })) setRune(null); }}>♻ Salvage {RUNES[selRune].name} {runeValue(selRune)}g</button>
+                  <button class="vs-btn" onClick={() => setRune(null)}>Put it back</button>
+                </div>
+              )}
               <div class="vs-tip">
                 {selRune && <b>{RUNES[selRune].name}: {RUNES[selRune].desc}</b>}
                 {selRune && preview.length > 0 && <div>{preview.join('  ·  ')}</div>}

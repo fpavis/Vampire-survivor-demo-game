@@ -46,6 +46,9 @@ import { PopulationRuntime } from './populationRuntime';
 import { perceptionOf } from '../core/config';
 import { engage } from '../core/ai/ai';
 import { installDevTools } from './devtools';
+import { InputSystem } from './input';
+import { isTyping } from '../ui/nav';
+import { quickGlyph } from '../ui/hints';
 
 const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
@@ -103,6 +106,7 @@ class Game {
         this.playerVel = { x: 0, y: 0 };
         this.ambient = 0;
         this.ui = new UIManager(this.app);
+        this.input = new InputSystem(this);
 
         // persistent-world plumbing
         this.events = new EventBus();
@@ -199,6 +203,7 @@ class Game {
     }
 
     menuLoop(delta) {
+        this.input.poll();
         this.frame += delta;
         this.cam.x += 0.7 * delta;
         this.cam.y += Math.sin(this.frame * 0.004) * 0.5 * delta;
@@ -239,8 +244,10 @@ class Game {
         });
         label.anchor.set(0.5);
         button.addChild(bg, label);
-        button.on('pointerover', () => { draw(true); button.scale.set(1.05); });
-        button.on('pointerout', () => { draw(false); button.scale.set(1); });
+        button.on('pointerover', () => { draw(true); button.scale.set(1.05); if (button.onHover) button.onHover(); });
+        button.on('pointerout', () => { draw(!!button.selected); button.scale.set(button.selected ? 1.05 : 1); });
+        // the keyboard and controller highlight a button the same way the mouse does
+        button.setSelected = (v) => { button.selected = v; draw(v); button.scale.set(v ? 1.05 : 1); };
         button.label = label;
         return button;
     }
@@ -284,7 +291,7 @@ class Game {
         orn.beginFill(0xd9a440); orn.drawCircle(-196, 0, 3); orn.drawCircle(196, 0, 3); orn.endFill();
         const infoBox = new PIXI.Graphics();
         const info = new PIXI.Text(
-            'WASD / arrows / mouse / touch to move  ·  E to interact  ·  M for the map\nSpells fire on their own  ·  Space / Q / R for skills  ·  1 2 3 switch heroes  ·  I spells\nThe farther you travel, the deadlier it gets  ·  Progress is saved automatically', {
+            'WASD / mouse / touch / left stick to move  ·  E or A to interact  ·  M or View for the map\nSpells fire on their own  ·  Space Q R or X Y RT for skills  ·  1 2 3 or LB RB switch heroes\nI or D-pad ↑ spells  ·  B or D-pad ← build  ·  Esc or Start to pause and see every control\nThe farther you travel, the deadlier it gets  ·  Progress is saved automatically', {
             fontFamily: FONT, fontSize: 18, fill: 0xd8deef, align: 'center', lineHeight: 28
         });
         info.anchor.set(0.5);
@@ -333,7 +340,7 @@ class Game {
             if (started) return;
             started = true;
             window.removeEventListener('resize', layout);
-            window.removeEventListener('keydown', onKey);
+            menuNav.remove();
             app.stage.removeChild(screen);
             screen.destroy({ children: true });
             this.bindEvents();
@@ -348,10 +355,15 @@ class Game {
             }
             begin(null);
         };
-        const onKey = (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { if (save) begin(save); else startNew(); }
-        };
-        window.addEventListener('keydown', onKey);
+        // arrows, W / S, the d-pad and the stick move the highlight; Enter, Space and A press it
+        const menuNav = this.input.pushMenu({
+            items: () => [
+                ...(continueBtn.visible ? [{ btn: continueBtn, run: () => { if (save) begin(save); } }] : []),
+                { btn: newBtn, run: startNew }
+            ]
+        });
+        continueBtn.onHover = () => menuNav.menu.select(continueBtn);
+        newBtn.onHover = () => menuNav.menu.select(newBtn);
         continueBtn.on('pointerdown', (e) => { e.stopPropagation(); if (save) begin(save); });
         newBtn.on('pointerdown', (e) => { e.stopPropagation(); startNew(); });
 
@@ -367,6 +379,7 @@ class Game {
                     continueBtn.visible = true;
                     summary.visible = true;
                     layout();
+                    menuNav.menu.refresh();
                 }
             } catch (err) {
                 note.text = `Could not read the saved game (${err && err.message ? err.message : err}). You can start a new game.`;
@@ -385,6 +398,7 @@ class Game {
         if (this.eventsBound) return;
         this.eventsBound = true;
         window.addEventListener('keydown', (e) => {
+            if (isTyping(e.target)) return;
             if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
             gameState.keys[e.key] = true;
             this.audio.unlock();
@@ -665,6 +679,7 @@ class Game {
     // ------------------------------------------------------------ game loop
     // The simulation advances in fixed 1/60 s steps; rendering simply follows the latest state.
     gameLoop(rawDelta) {
+        this.input.poll();
         this.accum = Math.min(this.accum + rawDelta * this.timeScale, 5 * this.timeScale);
         while (this.accum >= 1) {
             this.accum -= 1;
@@ -743,6 +758,10 @@ class Game {
             dx = joy.position.x;
             dy = joy.position.y;
             analog = true;
+        } else if (this.input.frame.move.x !== 0 || this.input.frame.move.y !== 0) {
+            dx = this.input.frame.move.x;
+            dy = this.input.frame.move.y;
+            analog = true;
         } else if (this.state.pointerDown && this.state.pointerPosition) {
             const p = this.state.pointerPosition;
             const tx = p.x - this.worldContainer.x;
@@ -810,6 +829,7 @@ class Game {
             this.lastHurt = this.frame;
             this.ui.flashDamage();
             this.fx.addShake(3);
+            this.input.rumble(0.55, 0.3, 150);
         }
     }
 
@@ -1562,8 +1582,9 @@ class Game {
         this.fx.pillar(p.wx, p.wy, 0xffe27a, 60, 70, 260);
         this.fx.shockwave(p.wx, p.wy, 220, 0xffe27a, 26, 6);
         this.fx.addShake(3);
+        this.input.rumble(0.3, 0.8, 260);
         this.audio.play('levelup');
-        this.ui.toast(`Level ${s.level}!  ${s.pending} upgrade${s.pending > 1 ? 's' : ''} ready (U)`);
+        this.ui.toast(`Level ${s.level}!  ${s.pending} upgrade${s.pending > 1 ? 's' : ''} ready (${quickGlyph('upgrades')})`);
         this.requestSave('level', true);
         this.ensureCards();
     }
@@ -1766,7 +1787,7 @@ class Game {
             done = true;
             app.ticker.remove(fade);
             window.removeEventListener('resize', layout);
-            window.removeEventListener('keydown', onKey);
+            menuNav.remove();
             app.stage.removeChild(screen);
             screen.destroy({ children: true });
         };
@@ -1775,22 +1796,23 @@ class Game {
             close();
             this.respawn(target);
         };
-        const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') doRespawn(); };
-        window.addEventListener('keydown', onKey);
-        respawnBtn.on('pointerdown', (e) => { e.stopPropagation(); doRespawn(); });
-        newBtn.on('pointerdown', (e) => {
-            e.stopPropagation();
+        const runNew = () => {
             if (done || screen.alpha < 0.6) return;
             if (!confirmNew) {
                 confirmNew = true;
-                newBtn.label.text = 'THIS ERASES YOUR SAVE - CLICK TO CONFIRM';
+                newBtn.label.text = 'THIS ERASES YOUR SAVE - PRESS AGAIN TO CONFIRM';
                 setTimeout(() => { confirmNew = false; if (!done) newBtn.label.text = 'NEW GAME'; }, 3500);
                 return;
             }
             close();
             this.state.gameOver = false;
             this.init(null);
-        });
+        };
+        const menuNav = this.input.pushMenu({ items: () => [{ btn: respawnBtn, run: doRespawn }, { btn: newBtn, run: runNew }] });
+        respawnBtn.onHover = () => menuNav.menu.select(respawnBtn);
+        newBtn.onHover = () => menuNav.menu.select(newBtn);
+        respawnBtn.on('pointerdown', (e) => { e.stopPropagation(); doRespawn(); });
+        newBtn.on('pointerdown', (e) => { e.stopPropagation(); runNew(); });
     }
 
     formatTime(seconds) {

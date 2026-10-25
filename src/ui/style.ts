@@ -129,4 +129,27 @@ export const CSS = `
 .vs-item:focus-visible,.vs-rune:focus-visible{outline:2px solid #ffd84a}
 .vs-item,.vs-rune{user-select:none;cursor:grab}
 
+
+/* focus follows the device: a bright ring for keyboard and controller, none for mouse and touch */
+#ui-root button:focus,#ui-root [tabindex]:focus,#ui-root select:focus,#ui-root input:focus{outline:none}
+html[data-input="key"] #ui-root :focus,html[data-input="pad"] #ui-root :focus{outline:3px solid #ffd84a;outline-offset:2px;box-shadow:0 0 14px rgba(255,216,74,.65);position:relative;z-index:1}
+html[data-input="key"] #ui-root .vs-card:focus,html[data-input="pad"] #ui-root .vs-card:focus{background:#1c2644;transform:translateX(-3px)}
+html[data-input="pad"] #ui-root input[type=range]:focus{outline-offset:6px}
+.vs-pause{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:20}
+.vs-pause .vs-btn{display:block;margin:4px 0;width:100%;text-align:left}
+.vs-pause .vs-btn.vs-x{width:auto;margin:0}
+.vs-pause .vs-btn.big{font-size:16px;text-align:center;padding:10px;border-color:#6aa8ff;background:rgba(40,70,140,.55)}
+.vs-row{display:flex;align-items:center;gap:12px;margin:8px 0;font-size:13px}
+.vs-row>span{flex:0 0 140px;color:#c9d1e6}
+.vs-row input[type=range]{flex:1;min-width:0;accent-color:#ffd84a;height:22px}
+.vs-row .v{flex:0 0 60px;text-align:right;color:#ffd84a}
+.vs-keys{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.vs-keys th{text-align:left;color:#8e97b0;font-size:10px;letter-spacing:1px;padding:4px 6px;border-bottom:1px solid #2e3a62}
+.vs-keys td{padding:4px 6px;border-bottom:1px solid #1b2340;color:#dfe6ff}
+.vs-keys td:first-child{color:#c9d1e6}
+.vs-acts{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.vs-acts .vs-btn{font-size:12px;padding:6px 9px}
+.vs-hint-pad{display:none}
+html[data-input="pad"] .vs-hint-pad{display:inline}
+html[data-input="pad"] .vs-hint-key{display:none}
 `;

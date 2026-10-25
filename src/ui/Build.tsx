@@ -1,4 +1,5 @@
 import { ui } from './bridge';
+import { glyph, onPad, quickGlyph } from './hints';
 import { TOWER_DEFS, TOWER_KINDS, fareBetween, totalOf } from '../core/world/towers';
 import { CORE_INFO, TEMPLATES, describeSpell, resolveSpell } from '../core/spells/spells';
 
@@ -11,7 +12,7 @@ export function BuildMenu() {
   const w = ui.wallet.value;
   return (
     <div class="vs-panel vs-build hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.buildMenuOpen.value = false)}>✕ (B)</button>
+      <button class="vs-btn vs-x" onClick={() => (ui.buildMenuOpen.value = false)}>✕ ({quickGlyph('build')})</button>
       <h2>🔨 Build</h2>
       <div class="sub">Towers are monumental and permanent. Lay a site, then haul in the materials and press E at the site. No limit on how many, only on what you can gather.</div>
       <div class="vs-goods">
@@ -41,7 +42,7 @@ export function BuildHud() {
   return (
     <div class={`vs-buildhud${b.valid ? ' ok' : ' bad'}`}>
       <div class="t">{b.icon} Placing {b.name}</div>
-      <div class="r">{b.valid ? 'Click (or press Enter) to lay the site. Esc cancels.' : `✕ ${b.reason}`}</div>
+      <div class="r">{b.valid ? (onPad() ? `Walk to move the ghost, ${glyph('interact')} lays the site, ${glyph('cancel')} cancels.` : 'Click (or press Enter) to lay the site. Esc cancels.') : `✕ ${b.reason}`}</div>
       <div class="b hit">
         <button class="vs-btn" disabled={!b.valid} onClick={() => game?.towers.confirmBuild()}>Place here</button>
         <button class="vs-btn" onClick={() => game?.towers.cancelBuild()}>Cancel</button>
@@ -115,7 +116,7 @@ export function WaypointPanel() {
 
 export function SailingHint() {
   if (!ui.sailing.value) return null;
-  return <div class="vs-sailing">⛵ Sailing — WASD to steer · E near a shore to step off · spells still work</div>;
+  return <div class="vs-sailing">⛵ Sailing — {onPad() ? 'left stick' : 'WASD'} to steer · {glyph('interact')} near a shore to step off · spells still work</div>;
 }
 
 export { totalOf };

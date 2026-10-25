@@ -1,4 +1,5 @@
 import { ui } from './bridge';
+import { glyph } from './hints';
 import { CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES, describeSpell, makeSpell, resolveSpell } from '../core/spells/spells';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -75,7 +76,7 @@ export function Dialog() {
       <button class="vs-btn vs-x" onClick={() => (ui.dialog.value = null)}>✕</button>
       <div class="who"><span class="ic">{d.icon}</span><b>{d.speaker}</b></div>
       <div class="say">“{d.text}”</div>
-      <div class="sub">Walk away or press E to close.</div>
+      <div class="sub">Walk away or press {glyph('interact')} to close.</div>
     </div>
   );
 }
