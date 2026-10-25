@@ -25,7 +25,7 @@ the whole plan is implemented and tested.** A private hosted test page is republ
 | 7 Quests, story, dungeons | **Done, with deferrals** | **Dungeons** (`core/world/dungeons.ts`, `core/world/interiors.ts`): a seeded share of caves and ruins on land, 2 to 5 floors by zone level (+2 levels per floor, boss +1), generated per floor with stairs, a boss clearing on the last floor and at least two **guardians** per floor that keep the stairs **sealed**; the boss (the region's warlord, named after the demon lord in the lord's lair) leaves a **guaranteed chest** (loot tier 2, 3 for deep dungeons) that waits if you leave; broken seals, boss and chest state persist per floor. **Plateau Skyvaults** (3 floors) open on the plateau a climbing tower carves and **drowned shrines** replace some island treasure; both are hosted by the world as extra POIs. **Quest engine** (`core/quest`): data-defined quests with 10 objective types (talk, kill, kill boss, discover, enter, clear, gather, deliver, survive, build), place targets resolved from the seed ("the nearest dungeon of the Whispering Woods"), prerequisites, rewards (gold, xp, loot picks, resources, flags), turn-in with hand-overs, places already seen or cleared count; **bounty boards** (`bounties.ts`) generate four postings per town per 20 minutes of play from templates. **Story framework** (`core/story`): chapters, five demon lords plus the sovereign, a seven-quest main chain, the elder's dialogue as data, and a dialogue runner with choices, conditions, effects and variables. Runtime (`app/quests.ts`, `app/dungeons.ts`): the Elder and a bounty board in every town (new NPC and board art), dialogue UI with choices, journal (J / D-pad right), HUD tracker, board panel, map markers that reveal quest places early. Save v7 (+v6 migration). e2e `phase7.mjs`. **Deferred:** the story's real writing, dungeon keys / levers / puzzles beyond the seal, dungeon-weighted loot tables (overworld drops are unchanged), fetch-item and escort objectives, quest givers beyond the Elder and the board, bounty reputation, recruitment, voiced or animated story scenes |
 | 8a Polish: UI, depth, controller loadout, art | **Done, with deferrals** | **Layering**: panels sit above the HUD; on phones and small windows (under 900 × 600) the canvas HUD shrinks, the minimap scales down, the upgrade pill, tracker and party bar stack in one left column below the health panel (the canvas publishes `--hud-top`), and the HUD steps aside while a panel is open; panels fill small screens. **Declutter**: wallet shows gold and only the resources you hold, the sound button moved to the pause menu, an icon toolbar (spells, journal, build), a one-line tracker that opens the journal, a compact party bar, level tags only on elites, warlords and monsters above the hero, bars only once hurt. **Depth** (`render/occlusion.ts`): tall decor in front of the hero fades out, walls and cliffs in front show a silhouette of the hero, NPC names, monster bars and damage numbers float on a layer above the world and the light map. **Controller loadout**: X / Y / RT act on the focused item inside panels (X equip, unequip or socket, Y lock) instead of casting, sockets open a rune picker that lists only fitting runes with their stat change, hero switcher in the panel title, device-aware hint bar, focus follows an item when it moves lists. **Art**: ink-outlined trees with clustered three-tone crowns, rim light and leaf flecks, snow-laden pines, feathered palms, faceted rocks, boulders, ore and ice with cracks and moss; redrawn bee, boar, spider, treant, scorpion, mummy, scarab and gull; shaded hero robes, armour and sleeves. Fixed: Xbox Wireless Controllers were labelled as PlayStation pads. e2e `phase8.mjs`, `scripts/layoutshot.mjs`, `scripts/decorsheet.mjs`. **Deferred:** viewing another hero's loadout without switching to them, rebinding the pad buttons, art for the remaining props and landmarks (houses, gates, stalls), and the rest of Phase 8 (music, SFX, regions and roads, accessibility, performance, onboarding) |
 | 8b–8g Audio, regions and roads, spells, accessibility, performance, onboarding | **Done, with deferrals** | **Audio** (`core/audio/sfx.ts`, `core/audio/music.ts`, `app/audio.ts`): about 50 synthesized effects as data with pitch variation, per-sound and global voice limits and stereo placement by distance from the camera; procedural music (a track per region group, town, cave and ruins, dungeon, boss and title) played by a look-ahead scheduler with 2 s crossfades, a combat layer that follows nearby fighting and darker variants far out; master, music, effects and menu volumes. **Regions and roads** (`core/world/regions.ts`, `core/world/roads.ts`): seeded named regions with banners, map labels and capitals; A* roads between neighbouring towns and from the start, baked into the ground, 25% faster, free of decor and camps, with signposts. **Spells**: Ember Trail, Seeker Wisps, Returning Glaive, Spore Cloud, Earthshatter, Mending Light; crit, homing, mana-on-kill and echo parameters; eight new runes. **Accessibility**: text size, colour-blind palettes with shape cues, reduced motion, keyboard and controller rebinding. **Performance**: atlas-baked art, zero-alpha additive glows, larger Graphics batches, ground details in the ground texture, culling, spatial queries; about 1,120 → 23 draw calls per frame in the benchmark (numbers under 8f); F3 overlay; `scripts/perf.mjs`. **Onboarding**: fifteen once-only tips that follow the input device, tips switch, How to play page. Save v8 (tips seen, regions discovered). e2e `phase8b.mjs`. **Deferred:** viewing another hero's loadout without switching to them; art for houses, gates and stalls |
-| 9 Deferred work, quality of life, professional polish | **Planned** | Steps 9a–9i in the roadmap: front end, save slots and tabbed settings; party, loadout and spell deferrals; art, icons, fonts and juice; dungeon puzzles and sea bosses; tower upgrades, sieges and quests; input deferrals; robustness and tooling; release readiness; stretch (second height layer, localization) |
+| 9 Deferred work, quality of life, professional polish | **In progress** | Steps 9a–9i in the roadmap: SVG icons, fonts and tokens; front end, save slots and tabbed settings; party, loadout and spell deferrals; art and juice; dungeon puzzles and sea boss; tower upgrades, sieges and quests; input deferrals; robustness, performance and tooling; release readiness |
 
 ## 1. Goals and hard constraints
 
@@ -571,16 +571,21 @@ persists; the benchmark meets the frame budget on the reference run; a new playe
 ### Phase 9: Deferred work, quality of life, professional polish (XL)
 
 Phase 9 has three goals:
-- Close every item deferred in Phases 1–8.
+- Close the items deferred in Phases 1–8.
 - Add the options and conveniences players expect from a finished game.
 - Bring presentation, robustness and tooling to release quality.
 
-Steps run in the order below, so the game stays shippable after each one: front end and settings first, the
-large engine work last. Each step is typechecked, unit-tested, e2e-checked, committed and published to the
-test page, as in Phase 8.
+Steps run in the order below, so the game stays shippable after each one. Each step is typechecked,
+unit-tested, e2e-checked, committed and published to the test page, as in Phase 8. New saved state goes
+through save migrations from v9 on, each with a migration test.
 
-New saved state goes through save migrations from v9 on, each with a migration test. That covers difficulty,
-loadout presets, favourites, codex entries, statistics, tower levels, reputation and the roster.
+**Decisions** (confirmed by the owner):
+- One difficulty, with no difficulty modes.
+- SVG icons everywhere and no emoji anywhere, in the DOM UI and on the canvas.
+- Recruitment is deferred beyond Phase 9.
+- Performance: no reference hardware is named, so optimise as far as possible: quality presets, render
+  scale, a first-run benchmark that picks defaults, and profiling work.
+- The second height layer is dropped.
 
 **Deferral audit.** Items deferred earlier that are already done:
 - drag and drop (Phase 3);
@@ -589,9 +594,24 @@ loadout presets, favourites, codex entries, statistics, tower levels, reputation
 - music (8b);
 - pad button rebinding (8e).
 
-Everything else that is still open is listed in the steps below (marked *deferred*).
+The rest are in the steps below (marked *deferred*) or listed under Later.
 
-**9a Front end, saves and settings (QoL)**
+**9a Visual identity: icons, fonts, design tokens**
+- **Icons:** every emoji is replaced by an SVG icon, in panels, buttons, the HUD, toasts, banners, map
+  markers, the minimap, prompts, dialogue and data (spells, runes, cards, heroes, towers, biomes, quests,
+  tips).
+  - Sources: game-icons.net (CC BY 3.0) for game content and Material Design Icons (Apache 2.0) for UI
+    glyphs. A build script extracts only the icons in use into a generated module.
+  - The DOM gets an `<Icon>` component. The canvas draws icons through `Path2D` into cached textures,
+    synchronously, plus an icon-and-text helper for banners and toasts.
+  - Each icon has a default colour from the palette and a dark outline, for legibility over the world.
+- **Fonts:** a display face for titles and banners and a readable UI face, bundled (OFL) and inlined in the
+  single-file build. The canvas text waits for them to load.
+- **Design tokens:** colours, spacing, type scale and radii as CSS variables, with one panel frame style and
+  consistent hover, press and focus states.
+- **Credits:** in the README; the in-game Credits page comes in 9b.
+
+**9b Front end, saves and settings (QoL)**
 - **Title screen:**
   - Continue, New Game (with an optional seed field), Load, Options, Credits.
   - The version and build date in a corner.
@@ -599,189 +619,142 @@ Everything else that is still open is listed in the steps below (marked *deferre
 - **Saves:**
   - Three save slots plus the autosave. Each shows hero levels, play time, region and a thumbnail.
   - Rename and delete with a hold-to-confirm.
-  - Every save keeps the last three backups, with "Restore backup" when a save fails to load.
-  - Export and import a save as a file. This works on GitHub Pages; the test page's sandbox blocks file
-    downloads, so there the export shows the text to copy.
-- **Settings, in tabs** (Game, Video, Audio, Controls, Accessibility, Help) instead of one long list. They
-  open from both the title and the pause menu, and every option persists. New options:
+  - Every slot keeps its last three backups, with "Restore backup" when a save fails to load.
+  - Export and import a save as a file. The test page's sandbox blocks downloads, so there the export shows
+    the text to copy.
+- **Settings, in tabs** (Game, Video, Audio, Controls, Accessibility, Help). They open from the title and the
+  pause menu, and every option persists. New options:
   - **Game:**
-    - difficulty: Relaxed, Normal, Hard (enemy damage and health, death penalty), changeable any time and
-      shown in saves;
-    - auto-pick upgrades (moved here);
+    - auto-pick upgrades;
     - confirm before salvaging;
     - pause when the window loses focus.
   - **Video:**
     - quality preset (Low, Medium, High: particles, light map, ambience, render resolution);
     - render scale (50–100%);
     - a 30 / 60 / uncapped frame limit;
-    - camera zoom (three steps, mouse wheel and pad shoulder combos);
-    - screen-shake and flash intensity sliders (reduced motion stays the master switch);
+    - camera zoom (three steps);
+    - shake and flash intensity;
     - damage numbers (all / crits only / off).
   - **HUD:**
-    - HUD scale, separate from text size;
+    - HUD scale;
     - minimap size and opacity;
-    - health bars on monsters (hurt only / always / off);
+    - monster health bars (hurt only / always / off);
     - tracker on or off.
   - **Controls:**
-    - mouse mode (hold to move, click to move);
-    - aim actives at the cursor or along the move direction;
-    - the existing rebinding, vibration and dead zone.
+    - mouse mode (hold to move / click to move);
+    - aim actives at the cursor or along the move direction.
 - **Message log:**
-  - The last 50 toasts and banners (loot found, quests, discoveries), opened from the journal.
-  - A statistics page: kills by monster, bosses, distance walked, gold earned, play time.
+  - The last 50 toasts and banners.
+  - A statistics page: kills by monster, bosses, distance, gold earned, play time.
 
-**9b Party, loadout and spells (deferred + QoL)**
+**9c Party, loadout and spells (deferred + QoL)**
 - **Party and loadout:**
-  - *Deferred:* view and edit any hero's loadout from the panel without switching the active hero. The
-    hero tabs keep the active hero fighting.
-  - Loadout presets per hero (three named sets, swap from the panel or a quick menu).
-  - "New" badges on items and runes until first viewed; sort and filter memory; "socket best rune"
-    suggestions.
-  - *Deferred:* ASSIST bench role: a benched hero casts one chosen auto spell at a reduced rate from the
-    edge of the screen.
+  - *Deferred:* view and edit any hero's loadout without switching the active hero.
+  - Three loadout presets per hero.
+  - "New" badges; sort and filter memory.
+  - *Deferred:* favourites (a star that pins items to the top).
+  - *Deferred:* ASSIST bench role (a benched hero casts one chosen auto spell at a reduced rate).
   - *Deferred:* the healer gets their own dialogue.
 - **Spells:**
-  - *Deferred:* spell preview against a training dummy. The spell panel opens a small arena showing the
-    selected spell with its runes, before and after a change.
-  - *Deferred:* a codex with three parts:
-    - a bestiary of monsters seen: art, behaviour, drops and kills;
-    - a spell and rune compendium of everything found, with sources;
-    - a places list.
-  - *Deferred:* favourites beyond lock: a star that pins items to the top.
-  - *Deferred:* trigger chains two levels deep and spell-to-spell triggers (a bolt kill casts the equipped
-    nova at reduced power). Compatibility rules stay in data; the depth-1 spell board UI gains a second
-    socket row only for trigger runes.
+  - *Deferred:* spell preview against a training dummy, before and after a change.
+  - *Deferred:* a codex: a bestiary of monsters seen, a spell and rune compendium, a places list.
+  - *Deferred:* trigger chains two levels deep and spell-to-spell triggers.
 
-**9c Art, presentation and juice (professional polish)**
-- **Town art (*deferred*):** houses, town gates, market stalls, wells and notice boards in the 8a ink style;
-  the remaining landmarks (shrines, ruins entrances, lairs) get the same pass.
-- **Visual identity:**
-  - One SVG icon set in place of mixed emoji: emoji differ by OS and some fail to render.
-  - Two bundled fonts (a display face for titles, a readable UI face), inlined for the single-file build.
-  - Design tokens (colours, spacing, type scale, radii) used by every panel.
-  - One panel frame style; consistent hover, press and focus states for mouse, keyboard and pad.
+**9d Art, presentation and juice**
+- *Deferred:* houses, town gates, market stalls, wells and notice boards in the ink style, plus shrines, ruin
+  entrances and lairs.
+- *Deferred:* tiered monster species per biome: at least one new species per biome for tiers 2 and 3.
 - **Story moments:**
-  - Boss intro cards (name, title, portrait, health bar sweep).
-  - A victory card for each demon lord.
-  - An ending sequence and scrolling credits after the Sovereign falls.
-  - Death and respawn screens restyled to match.
+  - Boss intro cards and demon lord victory cards.
+  - An ending sequence with scrolling credits.
+  - Restyled death and respawn screens.
 - **Game feel:**
   - Hit-stop on crits and big kills.
   - The camera leads slightly in the direction of travel.
-  - Damage numbers stack instead of overlapping.
-  - Pickups fly to the hero with a trail.
-  - A level-up flourish that never blocks.
+  - Stacked damage numbers.
+  - Pickup trails.
   - Eased panel transitions (none under reduced motion).
-- **Audio polish:**
-  - Ambient beds per biome (wind, birds, surf, cave drips, desert wind).
-  - Music stingers for discoveries, boss start and victory.
-  - Music ducks under stingers and dialogue.
+- **Audio:**
+  - Ambient beds per biome.
+  - Stingers for discoveries, boss start and victory.
+  - Music ducking.
   - Footsteps by surface.
-- **Variety (*deferred*):** tiered monster species per biome, so far regions bring new monsters and not only
-  stronger, renamed ones. At least one new species per biome for tiers 2 and 3.
 
-**9d World and dungeons (deferred)**
+**9e World and dungeons (deferred)**
 - **Dungeons:**
-  - Keys, levers and pressure plates: locked doors, switch-opened gates, simple ordering puzzles. Every
-    puzzle is generated from the seed and checked solvable by the generator.
-  - Dungeon-weighted loot tables: more spells and runes underground, with a guaranteed find per cleared
-    floor.
-  - Vaults and walk-on unlock gates in the overworld and dungeons, opened by keys, levers or claimed zones.
-- **Monster navigation:** hazard costs in the flow field, so monsters path around lava and poison instead
-  of only steering away.
-- **Sea:** sea bosses: a kraken on deep water, guarding island caches, with telegraphed tentacle slams.
+  - Keys, levers and pressure plates, with puzzles the generator proves solvable.
+  - Dungeon-weighted loot.
+  - Vaults and unlock gates.
+- **Monster navigation:** hazard costs in the flow field.
+- **Sea:** a kraken sea boss.
 
-**9e Towers, quests and story (deferred)**
+**9f Towers, quests and story (deferred)**
 - **Towers:**
-  - Upgrades and levels (range, damage, ward radius, beacon reach), paid in materials, shown on the scaffold.
-  - Siege events: warbands march on towers, disable them temporarily (towers stay indestructible, as
-    decided) and drop loot when repelled.
+  - Upgrades and levels.
+  - Siege events that temporarily disable towers (towers stay indestructible).
   - Build sites on claimed zones.
-  - Interior towers: spires and wards inside dungeons, removed when you leave.
+  - Interior towers.
 - **Quests:**
-  - Fetch and escort objectives (escorts follow the hero, with a leash and a fail state).
-  - More quest givers: townsfolk with one-off requests, innkeeper rumours.
-  - Bounty reputation per town, with better rewards and a unique rune at the top rank.
-- **Recruitment:** a roster beyond three heroes (recruit at inns, keep three in the party, the rest wait in
-  town). Needs save v9.
-- **Story:** a writing pass:
-  - introduction and defeat scenes for each demon lord;
-  - more Elder lines between chapters;
-  - an epilogue;
-  - scenes with portraits, letterbox and camera pans.
+  - Fetch and escort objectives.
+  - Townsfolk quest givers and innkeeper rumours.
+  - Bounty reputation per town.
+- **Story:** a writing pass with lord introductions and defeats, Elder lines between chapters and an
+  epilogue, told in scenes with portraits, letterbox and camera pans. Voice acting is out of scope.
 
-  Voice acting stays out of scope: it needs recorded assets.
+**9g Input (deferred)**
+- Per-pad profiles for non-standard mappings (a guided setup, saved per pad).
+- Richer haptics with their own intensity.
+- A pad-driven world map: pan and zoom, move between markers, custom pins.
 
-**9f Input (deferred)**
-- Per-pad profiles for non-standard mappings: a guided "press the button for…" setup, saved per pad id.
-- Richer haptics (hits, boss slams, low health heartbeat), each with its own intensity.
-- Focus-driven world map:
-  - pan and zoom with stick and keyboard;
-  - move between markers, with a details card;
-  - set a custom pin that shows on the minimap and the compass.
-
-**9g Robustness and engineering (professional polish)**
-- **Crash handling:** an error boundary for the DOM UI and a guarded game loop. On a crash: a friendly screen
-  with "copy error report", a reload, and the last good save kept safe.
-- **Storage:** detect a full or blocked store and say so instead of failing silently.
+**9h Robustness, performance and engineering**
+- **Crashes and storage:**
+  - A crash screen with "copy error report" that keeps the last good save.
+  - A full or blocked storage warning.
 - **Offline and mobile:**
-  - Installable and offline (web app manifest, service worker on Pages; the single-file test page stays as
-    is).
-  - App icons, favicon, social preview image.
-  - Fullscreen toggle; orientation hint on phones.
-- **Real-hardware performance:**
-  - Measure on a mid laptop and a mid phone (8f measured only a software GPU).
-  - The Video quality presets from 9a pick defaults from a short first-run benchmark.
+  - Installable and offline on Pages, with app icons and a social preview image.
+  - A fullscreen toggle and an orientation hint.
+- **Performance, as far as it goes:**
+  - Profile the update and render paths again.
+  - Pool bullets and particles.
+  - Skip AI and animation for far, idle monsters.
+  - Dynamic resolution when frames run long.
+  - A first-run benchmark that picks the quality preset.
 - **Tooling:**
   - ESLint and Prettier in CI.
-  - A perf regression check in CI: `scripts/perf.mjs` fails when draw calls or step time grow past a
-    threshold.
+  - A perf regression check in CI.
   - A bundle size budget.
-  - Halve the 32 `@ts-nocheck` files by typing the legacy modules.
-- *Deferred:* the headless `Simulation`, split from the Pixi renderer, with minute-long deterministic sim
-  tests (no NaNs, caps respected, enemies reach the hero).
+  - Fewer `@ts-nocheck` files.
+- *Deferred:* the headless `Simulation` split, with deterministic sim tests.
 
-**9h Release readiness**
-- **Text:** a proofreading pass over every string, with a glossary for consistent terms and capitalisation.
-- **Accessibility audit:**
-  - contrast checks on every panel;
-  - focus order;
-  - ARIA labels on the DOM UI;
-  - text size at 140% on a phone.
+**9i Release readiness**
+- **Text:** a proofreading pass and a glossary.
+- **Accessibility audit:** contrast, focus order, ARIA labels, 140% text on a phone.
 - **Release:**
-  - A changelog, a 1.0 checklist, the README and docs brought up to date.
+  - A changelog, a 1.0 checklist, and the README and docs updated.
   - The full e2e chain, visual scripts and perf runs.
-  - Publish the test page.
-  - Merge to main and deploy to Pages only when you approve.
+  - Publish.
+  - Merge to main only on the owner's approval.
 
-**9i Stretch (only after 9a–9h; may move to Phase 10)**
-- *Deferred:* a true second height layer: plateaus above the ground plane, ramps and stairs, monsters that
-  follow you up. A spike first, to size it.
-- Localization: move strings into a table so the game is ready for translation (English only at first).
+**Later (beyond Phase 9):** recruitment and a roster beyond three heroes; localization (a string table);
+voice acting.
+
+**Dropped:** the second height layer.
 
 Acceptance
-- Every Phase 1–8 deferral is either done or listed in 9i with a reason.
-- Settings open from the title and the pause menu, sit in tabs and persist. Each new option takes visible
-  effect (checked by e2e).
-- Three save slots and their backups survive a corrupt save (e2e corrupts one and restores it).
+- No emoji remains in the source or on screen. A test scans `src` for emoji, and an e2e scans the rendered
+  DOM.
+- Settings open from the title and the pause menu, sit in tabs and persist, and each option takes visible
+  effect.
+- Three slots and their backups survive a corrupt save.
 - A hero's loadout can be edited without switching to them.
-- Towns use the new house, gate and stall art.
-- Bosses have intro and victory cards; finishing the story rolls the credits.
-- A puzzle dungeon is always solvable (generator test over many seeds).
-- Tower upgrades, siege events and escort quests work end to end.
+- Towns use the new art.
+- Bosses have intro and victory cards, and finishing the story rolls the credits.
+- Puzzle dungeons are always solvable.
+- Tower upgrades, sieges and escorts work end to end.
 - The world map can be driven with a pad.
 - A crash shows the report screen and keeps the save.
-- CI runs lint and the perf regression check.
-- The game holds 60 fps on the reference laptop at High and on the reference phone at Low.
-
-Decisions to confirm before 9a:
-1. **Difficulty:** three modes (Relaxed, Normal, Hard), changeable any time.
-2. **Icons:** a custom SVG set replaces emoji everywhere, or only in the HUD and panels with emoji kept in
-   text.
-3. **Recruitment (9e):** whether it belongs in 9e or in a later phase. It touches saves, parties, towns and
-   the UI.
-4. **Reference hardware** for the 60 fps target: which laptop and which phone.
-5. **Stretch (9i):** whether the second height layer is wanted at all, given its cost.
+- CI runs lint and the perf check.
+- The benchmark improves on the 8f numbers.
 
 ## 7. What happens to the current code
 
