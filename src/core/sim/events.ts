@@ -13,6 +13,7 @@ export interface GameEvents {
   ZoneClaimed: { id: string; level: number };
   PlaceLeft: { id: string };
   ZoneChanged: { group: string; level: number; tier: number };
+  RegionEntered: { id: string; name: string; first: boolean };
   HeroLevelUp: { level: number };
   HeroDied: { respawnAt: string };
   ChestOpened: { placeId: string };

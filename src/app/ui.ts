@@ -440,10 +440,10 @@ export class UIManager {
         const mk = this.compact ? 0.62 : 1;
         this.mapBox.scale.set(mk);
         this.mapBox.position.set(w - 12 - 177 * mk, mk < 1 ? 76 : 92);
-        // the zone name stays readable: keep its size and right-align it under a shrunken map
+        // the zone name stays readable: keep its size and right-align it under the map so it never runs off screen
         this.mapZone.scale.set(1 / mk);
-        this.mapZone.anchor.set(mk < 1 ? 1 : 0.5, 0);
-        this.mapZone.x = mk < 1 ? 172 : 85;
+        this.mapZone.anchor.set(1, 0);
+        this.mapZone.x = 172;
         this.mapHint.visible = mk === 1;
         this.publishHudTop();
         this.toastText.position.set(14, h - 14);

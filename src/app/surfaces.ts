@@ -32,7 +32,7 @@ export class SurfaceSystem {
         if (key !== this.shown) {
             this.shown = key;
             uiBridge.surface.value = def ? { name: def.name, desc: def.desc, color: def.color, bad: def.playerDps > 0 || def.playerSpeed < 0.9 } : null;
-            if (def) g.audio.play(def.playerDps > 0 ? 'deny' : 'pickup');
+            if (def && def.id !== 'road') g.audio.play(def.playerDps > 0 ? 'deny' : 'surface');
         }
         if (def && fx.dps > 0 && (g.frame | 0) % 14 === 0) g.fx.burst(p.wx, p.wy, 6, def.glow || def.color, 3, 1.4, { size: 0.7, life: 20, up: 1.5, glow: true });
         if (def && fx.heal > 0 && (g.frame | 0) % 10 === 0) g.fx.burst(p.wx, p.wy, 4, def.glow, 2, 0.8, { size: 0.6, life: 26, up: 1.8, gravity: -0.02, glow: true });

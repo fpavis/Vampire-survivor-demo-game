@@ -5,6 +5,8 @@ import { DECOR_DEFS } from '../../render/decorArt';
 import { GROUP_LEVEL_OFFSET, tierOf, zoneLevel } from './difficulty';
 import { SURFACE_NUM, surfaceAt } from './surfaces';
 import { dungeonForLand, dungeonName } from './dungeons';
+import { RoadNet } from './roads';
+import { regionAt, regionInfo, type RegionInfo } from './regions';
 import type { ChunkLike, DecorItem, Poi, PoiType, TerrainSource } from '../types';
 
 const T = WORLD_CONFIG.tile;
@@ -62,9 +64,34 @@ export class OverworldSource implements TerrainSource {
     bounded = false;
     theme = null;
     poiCache = new Map<string, Poi | null>();
+    roads: RoadNet;
+    private regionCache = new Map<string, RegionInfo & { capital: Poi | null }>();
 
     constructor(seed: number) {
         this.seed = seed;
+        this.roads = new RoadNet(this);
+    }
+
+    // ------------------------------------------------------------ regions
+    regionId(tx: number, ty: number): string { return regionAt(this.seed, tx, ty); }
+
+    /** Name, title, heart and capital (the town nearest the heart, if any) of a region. */
+    region(id: string): RegionInfo & { capital: Poi | null } {
+        const hit = this.regionCache.get(id);
+        if (hit) return hit;
+        const info = regionInfo(this.seed, id, (tx, ty) => groupOf(this.biomeAt(tx, ty)));
+        let capital: Poi | null = null, best = Infinity;
+        const c0x = Math.floor((info.tx - 64) / POI_CELL), c1x = Math.floor((info.tx + 64) / POI_CELL);
+        const c0y = Math.floor((info.ty - 64) / POI_CELL), c1y = Math.floor((info.ty + 64) / POI_CELL);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            const p = this.poiForCell(cx, cy);
+            if (!p || p.type !== 'city' || this.regionId(p.tx, p.ty) !== id) continue;
+            const d = Math.hypot(p.tx - info.tx, p.ty - info.ty);
+            if (d < best) { best = d; capital = p; }
+        }
+        const out = { ...info, capital };
+        this.regionCache.set(id, out);
+        return out;
     }
 
     // ---------------------------------------------------------------- terrain
@@ -100,6 +127,7 @@ export class OverworldSource implements TerrainSource {
 
     /** numeric surface id (0 = none) at a tile whose biome is already known */
     surfaceNumAt(tx: number, ty: number, biome: number): number {
+        if (this.roads.isRoad(tx, ty)) return SURFACE_NUM.road;
         const level = zoneLevel(this.seed, tx, ty, GROUP_LEVEL_OFFSET[groupOf(biome)] ?? 0);
         const s = surfaceAt(this.seed, tx, ty, biome, level);
         return s ? SURFACE_NUM[s] : 0;
@@ -226,6 +254,7 @@ export class OverworldSource implements TerrainSource {
         const pois = this.poisNear(cx * CT + CT / 2, cy * CT + CT / 2, CT + 12);
         const chunkTier = this.tierAt(cx * CT + CT / 2, cy * CT + CT / 2);
         const seed = this.seed;
+        const road = this.roads.chunkTiles(cx, cy);
 
         for (let j = 0; j < CT; j++) {
             for (let i = 0; i < CT; i++) {
@@ -234,6 +263,7 @@ export class OverworldSource implements TerrainSource {
                 const table = DECOR_TABLES[biome];
                 if (!table) continue;
                 if (Math.hypot(tx, ty) < 4) continue;
+                if (road.has(j * CT + i) || road.has(j * CT + i - 1) || road.has((j - 1) * CT + i)) continue;   // roads stay clear
                 let blocked = false;
                 for (const p of pois) {
                     const reach = p.type === 'city' ? 7 : 5;
@@ -250,6 +280,15 @@ export class OverworldSource implements TerrainSource {
                 const y = (ty + 0.15 + 0.7 * hash(tx, ty, seed + 83)) * T;
                 this.addDecor(chunk, type, x, y, variant, { flip: hash(tx, ty, seed + 97) < 0.5 });
             }
+        }
+
+        // a signpost beside the road where it leaves each town
+        for (const p of pois) {
+            if (p.type !== 'city') continue;
+            const n = this.roads.nodeOfCell(Math.floor(p.tx / POI_CELL), Math.floor(p.ty / POI_CELL));
+            if (!n || !this.roads.destinations(n).length) continue;
+            const x = (n.tx + 2.4) * T, y = (n.ty + 0.6) * T;
+            if (x >= chunk.x0 && x < chunk.x0 + chunk.size && y >= chunk.y0 && y < chunk.y0 + chunk.size) this.addDecor(chunk, 'signpost', x, y, 0, { sign: n.id });
         }
 
         for (const p of pois) {

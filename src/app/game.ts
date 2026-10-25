@@ -490,6 +490,8 @@ class Game {
         this.busy = false;
         this.zoneGroup = null;
         this.zoneLabel = '';
+        this.regionId = null;
+        this.regionsSeen = new Set(save && save.regions ? save.regions : []);
         this.interior = null;
         this.interiorPoi = null;
         this.autosaveTimer = 1800;
@@ -530,6 +532,10 @@ class Game {
             for (const m of this.quests.markers()) out.push(m);
             return out;
         };
+        this.map.regions = () => [...this.regionsSeen].map((id) => {
+            const r = this.overworld.region(id);
+            return { tx: r.tx, ty: r.ty, name: r.name, title: r.title, capital: r.capital ? r.capital.name : null };
+        });
         this.map.siteState = (id) => (this.session.claimed[id] !== undefined || this.session.triggered[id] !== undefined ? 'done' : 'open');
         this.map.sitesFor = (cx, cy) => this.sites.sites ? this.sites.sites.near(cx * 12 + 6, cy * 12 + 6, 10) : [];
         this.setAmbient(0);
@@ -1096,11 +1102,25 @@ class Game {
         this.zoneThreat = threatBand(level, this.state.level);
         this.lighting.setAmbient(this.regionAmbient(), false);
         this.ambience.setRegion(group, tier >= 2);
-        this.zoneLabel = `${info.icon} ${info.name} · Lv ${level}`;
+        const regionId = this.overworld.regionId(tx, ty);
+        const region = this.overworld.region(regionId);
+        this.zoneLabel = `${info.icon} ${region.name} · ${info.name} · Lv ${level}`;
+        const newRegion = regionId !== this.regionId;
+        if (newRegion) {
+            this.regionId = regionId;
+            const first = !this.regionsSeen.has(regionId);
+            this.regionsSeen.add(regionId);
+            this.map.dirty = true;
+            if (this.frame > 30) {
+                this.ui.showZone(`${region.name.toUpperCase()}${first ? '' : ''}`, '⚜', 0xf3d08a);
+                this.ui.toast(`${first ? 'Discovered ' : ''}${region.title}${region.capital ? ` · capital: ${region.capital.name}` : ''}`);
+            }
+            this.events.emit('RegionEntered', { id: regionId, name: region.name, first });
+        }
         if (group !== this.zoneGroup) {
             this.zoneGroup = group;
             const prefix = tierName(tier);
-            if (this.frame > 30) this.ui.showZone(`${prefix ? prefix + ' ' : ''}${info.name}  ·  Lv ${level}`, info.icon, info.color);
+            if (this.frame > 30 && !newRegion) this.ui.showZone(`${prefix ? prefix + ' ' : ''}${info.name}  ·  Lv ${level}`, info.icon, info.color);
             this.events.emit('ZoneChanged', { group, level, tier });
         }
     }
@@ -1122,11 +1142,12 @@ class Game {
             else if (cache) target = { kind: 'cache', cache, text: '[E]  Dig up the buried treasure' };
             else {
                 const node = this.world.nearestNode(p.wx, p.wy, 64, isNode);
+                const sign = !node && this.world.nearestNode(p.wx, p.wy, 70, (t) => t === 'signpost');
                 if (node) {
                     const def = NODES[node.type];
                     const left = def.hits - (node._hits || 0);
                     target = { kind: 'gather', node, text: `[E]  ${def.verb} (${def.resource})${left < def.hits ? `  ·  ${left} more` : ''}` };
-                }
+                } else if (sign) target = { kind: 'sign', sign, text: '[E]  Read the signpost' };
             }
         } else {
             let best = Infinity;
@@ -1158,6 +1179,16 @@ class Game {
         this.ui.setPrompt(target ? target.text : null);
     }
 
+    /** A signpost names the towns its roads lead to. */
+    readSign(sign) {
+        const roads = this.overworld.roads;
+        const [cx, cy] = String(sign.sign).split(',').map(Number);
+        const node = roads.nodeOfCell(cx, cy);
+        const dests = node ? roads.destinations(node) : [];
+        this.audio.play('blip');
+        this.ui.toast(dests.length ? `${node.name} · the road leads to ${dests.join(' and ')}` : 'The letters have worn away.');
+    }
+
     fountainReady() {
         return this.frame - (this.interiorState.fountainAt || -99999) > 1500;
     }
@@ -1173,6 +1204,7 @@ class Game {
             case 'down': if (t.sealed) { this.audio.play('deny'); this.ui.toast('Defeat the guardians first: the seal holds until they fall'); } else this.changeFloor(1); break;
             case 'chest': this.openChest(t.it); break;
             case 'gather': this.gatherHit(t.node); break;
+            case 'sign': this.readSign(t.sign); break;
             case 'site': case 'tower': this.towers.interact(t); break;
             case 'boat': this.sea.board(t.id); break;
             case 'ashore': this.sea.disembark(); break;

@@ -25,6 +25,7 @@ export interface DecorItem {
     r: number;
     solid: boolean;
     flip: boolean;
+    sign?: string;        // signposts: the road node whose destinations they show
 }
 
 export interface ChunkLike {

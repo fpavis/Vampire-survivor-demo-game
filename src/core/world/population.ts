@@ -62,6 +62,7 @@ export class Population {
     for (let y = -clearance; y <= clearance; y++) for (let x = -clearance; x <= clearance; x++) {
       if (!walkable(this.source.biomeAt(tx + x, ty + y))) return false;
     }
+    for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) if (this.source.roads?.isRoad(tx + x, ty + y)) return false;   // camps keep off the roads
     return !this.source.poisNear(tx, ty, 7).some((p) => Math.hypot(p.tx - tx, p.ty - ty) < 7);
   }
 

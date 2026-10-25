@@ -5,7 +5,9 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { valueNoise } from '../core/world/noise';
 import { BIOME, BIOME_COLOR } from '../core/world/biomes';
-import { SURFACES, SURFACE_IDS } from '../core/world/surfaces';
+import { SURFACES, SURFACE_IDS, SURFACE_NUM } from '../core/world/surfaces';
+
+const ROAD = SURFACE_NUM.road;
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -202,7 +204,24 @@ export function bakeGround(cx: number, cy: number, biomeAt: (tx: number, ty: num
                 const edge2 = !sfc[o + 5] || !sfc[o - 5] || !sfc[o + M * 5] || !sfc[o - M * 5];
                 const hot = Math.max(0, Math.min(1, (dt - 0.38) * 3.2 + (gr - 0.5) * 0.3));
                 let sr = pal.base[0], sg = pal.base[1], sb = pal.base[2];
-                if (sf === 1) {          // lava: dark crust with glowing cracks
+                if (sf === ROAD) {
+                    // packed dirt with worn cobbles in staggered rows; grassy, darker verges at the edge
+                    const px = gx0 + u, py = gy0 + v;
+                    const col = Math.floor(px / 7), off = (col & 1) * 3, row = Math.floor((py + off) / 5);
+                    const lx = px - col * 7, ly = py + off - row * 5;
+                    let ch = Math.imul(col, 374761393) ^ Math.imul(row, 668265263);
+                    ch = Math.imul(ch ^ (ch >>> 13), 1274126177);
+                    const cr = ((ch ^ (ch >>> 16)) >>> 0) / 4294967296;
+                    sr = 168; sg = 138; sb = 92;
+                    if (!edge && cr < 0.62 && lx > 0 && ly > 0) {
+                        const tone = 0.86 + cr * 0.32;
+                        sr = 178 * tone; sg = 168 * tone; sb = 146 * tone;
+                        if (lx === 1 || ly === 1) { sr *= 1.08; sg *= 1.08; sb *= 1.08; }
+                    } else if (lx === 0 || ly === 0) { sr *= 0.84; sg *= 0.84; sb *= 0.84; }
+                    sr += (gr - 0.5) * 14; sg += (gr - 0.5) * 12; sb += (gr - 0.5) * 10;
+                    if (edge2) { sr = sr * 0.75 + 70 * 0.25; sg = sg * 0.75 + 110 * 0.25; sb = sb * 0.75 + 50 * 0.25; }
+                    if (edge) { sr *= 0.82; sg *= 0.86; sb *= 0.8; }
+                } else if (sf === 1) {          // lava: dark crust with glowing cracks
                     const k = edge ? 0 : hot;
                     sr = pal.dark[0] + (pal.hot[0] - pal.dark[0]) * k; sg = pal.dark[1] + (pal.hot[1] - pal.dark[1]) * k; sb = pal.dark[2] + (pal.hot[2] - pal.dark[2]) * k;
                 } else {

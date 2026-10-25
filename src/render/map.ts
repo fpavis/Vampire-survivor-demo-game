@@ -1,6 +1,9 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import { WORLD_CONFIG } from '../core/config';
 import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf } from '../core/world/biomes';
+import { SURFACE_NUM } from '../core/world/surfaces';
+
+const ROAD = SURFACE_NUM.road;
 
 const CT = WORLD_CONFIG.chunkTiles;
 const T = WORLD_CONFIG.tile;
@@ -24,6 +27,7 @@ function paintChunk(chunk, fog) {
         else if (b === BIOME.VOID) c = 0x000000;
         else if (b === BIOME.BRIDGE) c = 0xc89a5a;
         else if (b === BIOME.PLATEAU) c = 0xb8c0a0;
+        if (chunk.surf && chunk.surf[i] === ROAD) c = 0xd2b47c;
         img.data[i * 4] = (c >> 16) & 255;
         img.data[i * 4 + 1] = (c >> 8) & 255;
         img.data[i * 4 + 2] = c & 255;
@@ -44,6 +48,7 @@ export class MapView {
         this.siteState = () => 'open';   // (id) => 'open' | 'done'
         this.sitesFor = null;            // (cx, cy) => Site[] near a chunk
         this.extras = () => [];          // () => [{ tx, ty, icon, label, color }] towers, docks, caches
+        this.regions = () => [];         // () => [{ tx, ty, name, title, capital }] regions the player has seen
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
         this.minimap = document.createElement('canvas');
@@ -176,6 +181,24 @@ export class MapView {
                     ctx.font = `${iconSize}px sans-serif`;
                 }
             }
+        }
+        if (this.mode === 'overworld' && opts.big) {
+            // region names, written large and faint across the land
+            ctx.save();
+            for (const r of this.regions()) {
+                const x = ox + r.tx * ppt, y = oy + r.ty * ppt;
+                if (x < -200 || y < -60 || x > w + 200 || y > h + 60) continue;
+                ctx.font = 'italic bold 20px Georgia, serif';
+                ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,8,4,0.75)'; ctx.fillStyle = 'rgba(255,236,190,0.9)';
+                ctx.strokeText(r.name.toUpperCase(), x, y - 10); ctx.fillText(r.name.toUpperCase(), x, y - 10);
+                ctx.font = 'italic 12px Georgia, serif';
+                ctx.lineWidth = 3; ctx.fillStyle = 'rgba(232,220,190,0.85)';
+                const sub = r.capital ? `${r.title} · 👑 ${r.capital}` : r.title;
+                ctx.strokeText(sub, x, y + 10); ctx.fillText(sub, x, y + 10);
+            }
+            ctx.restore();
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `${iconSize}px sans-serif`;
         }
         if (this.mode === 'overworld') {
             for (const ex of this.extras()) {

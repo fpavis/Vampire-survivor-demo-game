@@ -2,7 +2,7 @@
 import { hash, fbm } from './noise';
 import { BIOME, isSolidBiome, isWaterBiome } from './biomes';
 
-export type SurfaceId = 'lava' | 'swamp' | 'mud' | 'ice' | 'quicksand' | 'tidal' | 'spring' | 'manawell' | 'glyph';
+export type SurfaceId = 'lava' | 'swamp' | 'mud' | 'ice' | 'quicksand' | 'tidal' | 'spring' | 'manawell' | 'glyph' | 'road';
 
 export interface SurfaceDef {
   id: SurfaceId;
@@ -29,11 +29,12 @@ export const SURFACES: Record<SurfaceId, SurfaceDef> = {
   tidal: { id: 'tidal', name: 'Tidal pool', color: 0x6ab8c8, glow: 0x9ae8ff, playerDps: 0, enemyDps: 0, playerSpeed: 0.85, enemySpeed: 0.85, heal: 0, manaRegen: 1.4, haste: 1, hazard: false, desc: 'Shallow water that stirs mana.' },
   spring: { id: 'spring', name: 'Healing spring', color: 0x6ad8b0, glow: 0x9bffd0, playerDps: 0, enemyDps: 0, playerSpeed: 1, enemySpeed: 1, heal: 4, manaRegen: 1, haste: 1, hazard: false, desc: 'Slowly heals the active hero.' },
   manawell: { id: 'manawell', name: 'Mana well', color: 0x5a7ae8, glow: 0x8aa8ff, playerDps: 0, enemyDps: 0, playerSpeed: 1, enemySpeed: 1, heal: 0, manaRegen: 3.5, haste: 1, hazard: false, desc: 'Mana returns much faster.' },
-  glyph: { id: 'glyph', name: 'Arcane glyph', color: 0xb06af0, glow: 0xd8a0ff, playerDps: 0, enemyDps: 0, playerSpeed: 1, enemySpeed: 1, heal: 0, manaRegen: 1, haste: 1.6, hazard: false, desc: 'Spells recharge faster.' }
+  glyph: { id: 'glyph', name: 'Arcane glyph', color: 0xb06af0, glow: 0xd8a0ff, playerDps: 0, enemyDps: 0, playerSpeed: 1, enemySpeed: 1, heal: 0, manaRegen: 1, haste: 1.6, hazard: false, desc: 'Spells recharge faster.' },
+  road: { id: 'road', name: 'Road', color: 0xa88a5c, playerDps: 0, enemyDps: 0, playerSpeed: 1.25, enemySpeed: 1, heal: 0, manaRegen: 1, haste: 1, hazard: false, desc: 'You travel faster on the road.' }
 };
 
 /** numeric ids stored in chunk grids (0 = none) */
-export const SURFACE_IDS: SurfaceId[] = ['lava', 'swamp', 'mud', 'ice', 'quicksand', 'tidal', 'spring', 'manawell', 'glyph'];
+export const SURFACE_IDS: SurfaceId[] = ['lava', 'swamp', 'mud', 'ice', 'quicksand', 'tidal', 'spring', 'manawell', 'glyph', 'road'];
 export const SURFACE_NUM: Record<SurfaceId, number> = Object.fromEntries(SURFACE_IDS.map((s, i) => [s, i + 1])) as Record<SurfaceId, number>;
 export const surfaceByNum = (n: number): SurfaceDef | null => (n > 0 ? SURFACES[SURFACE_IDS[n - 1]] : null);
 

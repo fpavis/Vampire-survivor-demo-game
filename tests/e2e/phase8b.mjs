@@ -104,6 +104,63 @@ if (want('audio')) {
   await page.keyboard.press('Escape');
 }
 
+// ---- regions and roads
+if (want('roads')) {
+  const road = await ev(() => {
+    const g = window.game, net = g.overworld.roads;
+    const start = { id: 'start', tx: 0, ty: 2, name: 'the start' };
+    const [town] = net.near(start);
+    const path = town ? net.route(start, town) : null;
+    if (!path) return null;
+    const k = Math.floor(path.length / 4) * 2;
+    const p = g.state.player;
+    p.wx = (path[k] + 0.5) * 48; p.wy = (path[k + 1] + 0.5) * 48; g.cam.x = p.wx; g.cam.y = p.wy;
+    g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    for (let i = 0; i < 30; i++) g.gameLoop(1);
+    return { town: town.name, len: path.length / 2, surface: g.surfaces.current && g.surfaces.current.id, speed: g.surfaces.fx.speed, hud: document.querySelector('.vs-surface')?.innerText || '' };
+  });
+  check('a road leads from the start to the nearest town', road && road.len > 5, JSON.stringify(road));
+  check('walking on the road is faster', road && road.surface === 'road' && road.speed > 1.2, JSON.stringify(road));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/road.png` });
+
+  const region = await ev(() => {
+    const g = window.game, p = g.state.player;
+    const r0 = g.regionId;
+    p.wx = 330 * 48; p.wy = 20 * 48; g.cam.x = p.wx; g.cam.y = p.wy;
+    g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    for (let i = 0; i < 45; i++) g.gameLoop(1);
+    const r = g.overworld.region(g.regionId);
+    return { r0, r1: g.regionId, name: r.name, title: r.title, label: g.zoneLabel, seen: g.regionsSeen.size, onMap: g.map.regions().map((x) => x.name) };
+  });
+  check('walking into another region names it', region.r0 === '0,0' && region.r1 !== '0,0' && region.label.includes(region.name), JSON.stringify(region));
+  check('regions seen are listed on the world map', region.seen >= 2 && region.onMap.includes('Hearthvale') && region.onMap.includes(region.name), JSON.stringify(region.onMap));
+
+  const sign = await ev(() => {
+    const g = window.game, net = g.overworld.roads;
+    const towns = net.townsIn(-200, -200, 200, 200).filter((n) => net.destinations(n).length);
+    const n = towns[0];
+    if (!n) return null;
+    const p = g.state.player;
+    p.wx = (n.tx + 2.4) * 48 + 30; p.wy = (n.ty + 0.6) * 48 + 10; g.cam.x = p.wx; g.cam.y = p.wy;
+    g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    for (let i = 0; i < 10; i++) g.gameLoop(1);
+    g.updateInteraction();
+    const kind = g.target && g.target.kind;
+    let toast = '';
+    const orig = g.ui.toast.bind(g.ui); g.ui.toast = (t) => { toast = t; orig(t); };
+    g.interact();
+    g.ui.toast = orig;
+    return { kind, toast, dests: net.destinations(n) };
+  });
+  check('a signpost by a town names where its roads lead', sign && sign.kind === 'sign' && sign.dests.every((d) => sign.toast.includes(d)), JSON.stringify(sign));
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/signpost.png` });
+    await page.keyboard.press('m'); await page.waitForTimeout(500);
+    await page.screenshot({ path: `${process.env.SHOTS}/regions-map.png` });
+    await page.keyboard.press('m'); await page.waitForTimeout(200);
+  }
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 preview.kill();

@@ -683,6 +683,21 @@ function drawPortal(g) {
     glow(g, 0, -34, 36, 0x4cc8ff, 0.12);
 }
 
+/** A wooden signpost with two arrow boards, for road junctions by the towns. */
+function drawSignpost(g) {
+    shadow(g, 11, 4, 0.28);
+    opoly(g, [-2.2, 0, -2, -50, 2, -50, 2.2, 0], 0x7a5230, 1.5);
+    fpoly(g, [0.4, -50, 2, -50, 2.2, 0, 0.6, 0], 0x5a3a20);
+    opoly(g, [-3, -46, 17, -46, 22, -41, 17, -36, -3, -36], 0xc89a5a, 1.5);
+    fpoly(g, [-2, -45, 16.5, -45, 20, -41.5, -2, -41.5], 0xe0b878);
+    opoly(g, [3, -31, -17, -31, -22, -26, -17, -21, 3, -21], 0xb88a4a, 1.5);
+    fpoly(g, [2, -30, -16.5, -30, -20, -26.5, 2, -26.5], 0xd8ac6a);
+    g.lineStyle(1, 0x5a3a1a, 0.8);
+    g.moveTo(1, -41); g.lineTo(13, -41); g.moveTo(-1, -26); g.lineTo(-12, -26);
+    noLine(g);
+    g.beginFill(0x3a2a1a); g.drawCircle(0, -41, 0.9); g.drawCircle(0, -26, 0.9); g.endFill();
+}
+
 // ---------------------------------------------------------------- REGISTRY
 export interface DecorDef { w: number; h: number; pad: number; r: number; solid: boolean; variants: ((g: any) => void)[] }
 const D = (w: number, h: number, pad: number, r: number, solid: boolean, variants: ((g: any) => void)[]): DecorDef => ({ w, h, pad, r, solid, variants });
@@ -752,5 +767,6 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     banner: D(36, 70, 8, 0, false, [(g) => drawBanner(g, 0xc83a3a), (g) => drawBanner(g, 0x3a6fc8)]),
     planter: D(36, 40, 8, 10, true, [drawPlanter]),
     well: D(56, 60, 10, 22, true, [drawWell]),
-    portal: D(72, 90, 12, 0, false, [drawPortal])
+    portal: D(72, 90, 12, 0, false, [drawPortal]),
+    signpost: D(52, 58, 8, 0, false, [drawSignpost])
 };
