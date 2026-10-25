@@ -11,7 +11,7 @@ const msToFrames = (ms) => ms * 0.06;
 const MAX_AUTO = 5;
 const MAX_ACTIVE = 3;
 // hard caps so a heavily modified loadout cannot flood the scene
-const CAP = { bullets: 120, rings: 24, meteors: 30, bolts: 16, decals: 40 };
+const CAP = { bullets: 120, rings: 24, meteors: 30, bolts: 16, decals: 40, zones: 40, later: 40 };
 
 export class SpellSystem {
     constructor(game) {
@@ -28,6 +28,9 @@ export class SpellSystem {
         this.timers = {};
         this.orbits = {};
         this.bullets = []; this.rings = []; this.meteors = []; this.bolts = []; this.decals = [];
+        this.zones = []; this.later = [];
+        this.healUntil = 0; this.healRate = 0;
+        this.lastTrail = null;
         this.cache = new Map();
         this.depth = 0;
         this.dashing = null;
@@ -55,6 +58,9 @@ export class SpellSystem {
         for (const o of Object.values(this.orbits)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); }
         this.orbits = {};
         this.bullets = []; this.rings = []; this.meteors = []; this.bolts = []; this.decals = [];
+        (this.zones || []).forEach((z) => z.g.destroy());
+        this.zones = []; this.later = [];
+        this.healUntil = 0;
         this.dashing = null;
         (this.ghosts || []).forEach((gh) => gh.c.destroy({ children: true }));
         this.ghosts = [];
@@ -176,6 +182,10 @@ export class SpellSystem {
                 case 'chain': fired = this.fireLightning(r); break;
                 case 'nova': fired = this.fireNova(r); break;
                 case 'meteor': fired = this.fireMeteor(r); break;
+                case 'trail': fired = this.dropEmber(r); break;
+                case 'wisp': fired = this.fireWisps(r); break;
+                case 'glaive': fired = this.fireGlaive(r); break;
+                case 'cloud': fired = this.fireCloud(r); break;
             }
             // stay "ready" until a target shows up
             this.timers[uid] = fired ? msToFrames(r.p.cooldown) * g.stats.cooldown : 0;
@@ -191,6 +201,9 @@ export class SpellSystem {
         this.updateMeteors(delta);
         this.updateBolts(delta);
         this.updateDecals(delta);
+        this.updateZones(delta);
+        this.updateLater(delta);
+        this.updateHeal(delta);
     }
 
     /** Active skills (dash, blink, aegis) count their cooldown down here; auto-cast spells do it as they fire. */
@@ -210,7 +223,7 @@ export class SpellSystem {
         if (e.dead) return;
         const p = r.p;
         const knock = opts.knock ? { ...opts.knock, force: opts.knock.force * p.knock } : undefined;
-        g.damageEnemy(e, amount, { color: opts.color, knock, spell: r.item });
+        g.damageEnemy(e, amount, { color: opts.color, knock, spell: r.item, critBonus: p.crit, quiet: opts.quiet });
         if (e.dead) return;
         if (p.slow > 0) { e.slowUntil = Math.max(e.slowUntil || 0, g.frame + 150); e.slowAmount = Math.max(e.slowAmount || 0, p.slow); }
         if (p.burn > 0) { e.burnUntil = g.frame + 180; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; this.burning.add(e); }
@@ -270,11 +283,15 @@ export class SpellSystem {
             this.touch();
         }
         if (r.p.leech) g.state.health = Math.min(g.state.maxHealth, g.state.health + r.p.leech);
+        if (r.p.manaLeech) this.mana.value = Math.min(g.stats.maxMana, this.mana.value + r.p.manaLeech);
         if (this.depth > 0) return;
         for (const t of r.triggers) {
             if (t.on !== 'kill' || Math.random() > t.chance) continue;
             this.depth++;
-            try { this.burst(e.wx, e.wy, 90, this.dmg(r) * t.power, r); } finally { this.depth--; }
+            try {
+                if (t.payload === 'shards') this.shards(e.wx, e.wy, this.dmg(r) * t.power, r);
+                else this.burst(e.wx, e.wy, 90, this.dmg(r) * t.power, r);
+            } finally { this.depth--; }
         }
     }
 
@@ -286,6 +303,43 @@ export class SpellSystem {
             if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force: 3 } });
         }
         g.fx.burst(x, y, 12, r.color, 20, 3.5, { size: 0.8, life: 22 });
+    }
+
+    /** Three small bolts burst out of a kill (Splinter). They never trigger anything themselves. */
+    shards(x, y, amount, r) {
+        const g = this.game;
+        const a0 = Math.random() * Math.PI * 2;
+        for (let k = 0; k < 3 && this.bullets.length < CAP.bullets; k++) {
+            const angle = a0 + (k / 3) * Math.PI * 2;
+            const sprite = EntityManager.createBolt(x, y, angle, 0xe8f6ff);
+            sprite.scale.set(0.7);
+            const vx = Math.cos(angle) * 7, vy = Math.sin(angle) * 7;
+            g.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx, vy, life: 30, damage: amount, pierce: 0, hits: new Set(), r, shard: true });
+        }
+    }
+
+    /** Run `fn` after `frames` (aftershocks). */
+    after(frames, fn) { if (this.later.length < CAP.later) this.later.push({ t: frames, fn }); }
+
+    updateLater(delta) {
+        for (let i = this.later.length - 1; i >= 0; i--) {
+            const l = this.later[i];
+            l.t -= delta;
+            if (l.t <= 0) { this.later.splice(i, 1); l.fn(); }
+        }
+    }
+
+    /** An instant ring of damage (slams and aftershocks). */
+    pulse(x, y, radius, amount, r, force = 8) {
+        const g = this.game;
+        for (const e of g.state.enemies) {
+            if (e.dead || e.untargetable) continue;
+            const dx = e.wx - x, dy = e.wy - y, rr = radius + e.radius;
+            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force } });
+        }
+        g.fx.shockwave(x, y, radius * 1.1, r.color, 22, 6);
     }
 
     nearestEnemies(x, y, range, limit = 1) {
@@ -316,7 +370,7 @@ export class SpellSystem {
             sprite.getChildAt(1).getChildAt(0).rotation = Math.atan2(vy * TILT, vx);
             this.game.objectLayer.addChild(sprite);
             EntityManager.place(sprite);
-            this.bullets.push({ sprite, vx, vy, life: 80, damage: this.dmg(r), pierce: s.pierce, hits: new Set(), r });
+            this.bullets.push({ sprite, vx, vy, life: 80, damage: this.dmg(r), pierce: s.pierce, hits: new Set(), r, homing: s.homing, jumps: s.jumps, speed: s.speed, boltTrail: sprite.getChildAt(1).getChildAt(0) });
         }
         this.game.audio.play('bolt', { x: p.wx, y: p.wy });
         return true;
@@ -324,13 +378,41 @@ export class SpellSystem {
 
     updateBullets(delta) {
         const enemies = this.game.state.enemies;
+        const p = this.game.state.player;
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const b = this.bullets[i];
             const sp = b.sprite;
+            if (b.glaive) {
+                // out along its line, slowing, then back to the hero's hand
+                const g = b.glaive;
+                if (g.out) {
+                    g.dist += Math.hypot(b.vx, b.vy) * delta;
+                    if (g.dist >= g.range) { g.out = false; b.hits.clear(); }
+                } else {
+                    const dx = p.wx - sp.wx, dy = p.wy - sp.wy, d = Math.hypot(dx, dy) || 1;
+                    b.vx = (dx / d) * b.speed; b.vy = (dy / d) * b.speed;
+                    if (d < 24) b.life = 0;
+                }
+                sp.blade.rotation += 0.45 * delta;
+            }
+            if (b.homing) {
+                // steer toward the nearest enemy, harder for higher homing
+                const t = this.nearestEnemies(sp.wx, sp.wy, 320, 1)[0];
+                if (t && !(b.glaive && !b.glaive.out)) {
+                    const want = Math.atan2(t.wy - sp.wy, t.wx - sp.wx), cur = Math.atan2(b.vy, b.vx);
+                    let da = want - cur;
+                    while (da > Math.PI) da -= Math.PI * 2;
+                    while (da < -Math.PI) da += Math.PI * 2;
+                    const turn = Math.max(-1, Math.min(1, da)) * 0.07 * b.homing * delta;
+                    const sp0 = Math.hypot(b.vx, b.vy);
+                    b.vx = Math.cos(cur + turn) * sp0; b.vy = Math.sin(cur + turn) * sp0;
+                    if (b.boltTrail) b.boltTrail.rotation = Math.atan2(b.vy * TILT, b.vx);
+                }
+            }
             sp.wx += b.vx * delta;
             sp.wy += b.vy * delta;
             b.life -= delta;
-            if (Math.random() < 0.35) this.game.fx.burst(sp.wx, sp.wy, 22, b.r.color, 1, 0.25, { size: 0.55, life: 14, gravity: 0, up: 0.1, glow: true });
+            if (Math.random() < (b.wisp ? 0.6 : 0.35)) this.game.fx.burst(sp.wx, sp.wy, b.wisp ? 18 : 22, b.r.color, 1, 0.25, { size: 0.55, life: 14, gravity: 0, up: 0.1, glow: true });
             EntityManager.place(sp);
             let remove = b.life <= 0;
             if (!remove) {
@@ -338,12 +420,26 @@ export class SpellSystem {
                     const e = enemies[j];
                     if (e.dead || e.untargetable || b.hits.has(e)) continue;
                     const dx = e.wx - sp.wx, dy = e.wy - sp.wy;
-                    const rr = e.radius + 8;
+                    const rr = e.radius + (b.glaive ? 16 : 8);
                     if (dx * dx + dy * dy < rr * rr) {
                         b.hits.add(e);
-                        this.hit(e, b.damage, b.r, { knock: { x: b.vx, y: b.vy, force: 2.2 } });
-                        if (b.pierce <= 0) { remove = true; break; }
-                        b.pierce--;
+                        if (b.shard) this.depth++;
+                        try { this.hit(e, b.damage, b.r, { knock: { x: b.vx, y: b.vy, force: 2.2 } }); } finally { if (b.shard) this.depth--; }
+                        if (b.pierce > 0) { b.pierce--; continue; }
+                        // Ricochet: jump to the next enemy instead of fizzling
+                        if (b.jumps > 0) {
+                            const next = this.nearestEnemies(sp.wx, sp.wy, 260, 6).find((n) => !b.hits.has(n));
+                            if (next) {
+                                b.jumps--;
+                                const a = Math.atan2(next.wy - sp.wy, next.wx - sp.wx), v = Math.hypot(b.vx, b.vy);
+                                b.vx = Math.cos(a) * v; b.vy = Math.sin(a) * v;
+                                if (b.boltTrail) b.boltTrail.rotation = Math.atan2(b.vy * TILT, b.vx);
+                                b.life = Math.max(b.life, 40);
+                                break;
+                            }
+                        }
+                        remove = true;
+                        break;
                     }
                 }
             }
@@ -506,6 +602,16 @@ export class SpellSystem {
         game.fx.shockwave(p.wx, p.wy, s.radius * 1.15, 0xe8fbff, 26, 6);
         game.fx.burst(p.wx, p.wy, 10, 0xe8fbff, 18, 4, { size: 0.8, life: 28, gravity: 0.05, up: 1.5, glow: true });
         game.audio.play('nova', { x: p.wx, y: p.wy });
+        for (let k = 1; k <= s.echo; k++) {
+            const x = p.wx, y = p.wy;
+            this.after(27 * k, () => {
+                if (this.rings.length >= CAP.rings) return;
+                const g2 = new PIXI.Graphics();
+                game.groundLayer.addChild(g2);
+                this.rings.push({ g: g2, x, y, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r) * 0.6, rs: r, fade: 0, spin: Math.random() * 6 });
+                game.audio.play('nova', { x, y, vol: 0.6 });
+            });
+        }
         return true;
     }
 
@@ -630,6 +736,10 @@ export class SpellSystem {
                 game.fx.burst(m.x, m.y, 6, 0x333333, 12, 2.5, { size: 1.4, life: 44, up: 2, gravity: 0.05 });
                 game.fx.addShake(8);
                 game.audio.play('boom', { x: m.x, y: m.y });
+                for (let k = 1; k <= m.r.p.echo; k++) {
+                    const mx = m.x, my = m.y, mr = m.r, rad = m.radius, dmg = m.damage * 0.6;
+                    this.after(27 * k, () => { this.pulse(mx, my, rad, dmg, mr, 6); game.audio.play('boom', { x: mx, y: my, vol: 0.6 }); });
+                }
                 game.fx.flash(m.x, m.y, m.radius * 4, 0xffa040, 26);
                 game.fx.shockwave(m.x, m.y, m.radius * 1.6, 0xffa040, 24, 7);
                 game.fx.burst(m.x, m.y, 8, 0xffd070, 16, 4.5, { size: 1, life: 26, up: 3, glow: true });
@@ -677,6 +787,9 @@ export class SpellSystem {
             case 'chain': fired = this.fireLightning(r, origin); break;
             case 'nova': fired = this.fireNova(r, origin); break;
             case 'meteor': fired = this.fireMeteor(r, origin); break;
+            case 'wisp': fired = this.fireWisps(r, origin); break;
+            case 'glaive': fired = this.fireGlaive(r, origin); break;
+            case 'cloud': fired = this.fireCloud(r, origin); break;
         }
         this.srcMult = null;
         this.timers[key] = fired ? msToFrames(r.p.cooldown) : 0;
@@ -690,6 +803,144 @@ export class SpellSystem {
         for (const m of this.meteors) if (m.t >= 0) L.add({ x: m.x, y: m.y, z: 0, r: m.radius * (0.8 + m.t / m.delay), color: 0xff7a2a, i: 0.4 + 0.6 * (m.t / m.delay) });
         for (const b of this.bolts) if (b.pts) for (const p of b.pts) L.add({ x: p.x, y: p.y, z: 20, r: 150, color: 0xc8b8ff, i: b.life / b.max });
         if (this.barrierActive) { const p = this.game.state.player; L.add({ x: p.wx, y: p.wy, z: 20, r: this.barrierRadius * 3, color: this.barrierColor, i: 0.7 }); }
+        for (const z of this.zones) if (z.kind === 'ember') L.add({ x: z.x, y: z.y, z: 4, r: z.r * 2.2, color: 0xff7a2a, i: 0.5 * Math.min(1, z.life / 30) });
+        if (this.game.frame < this.healUntil) { const p = this.game.state.player; L.add({ x: p.wx, y: p.wy, z: 30, r: 160, color: 0x9bffb0, i: 0.7 }); }
+    }
+
+    // ------------------------------------------------------------ ember trail
+    dropEmber(r) {
+        const p = this.game.state.player;
+        const last = this.lastTrail;
+        if (last && Math.hypot(p.wx - last.x, p.wy - last.y) < 18) return false;   // only while moving
+        this.lastTrail = { x: p.wx, y: p.wy };
+        if (this.zones.length >= CAP.zones) { const old = this.zones.shift(); old.g.destroy(); }
+        this.zone('ember', p.wx, p.wy, r.p.radius, r.p.duration, this.dmg(r), r);
+        if (Math.random() < 0.3) this.game.audio.play('trail', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    /** A lasting patch on the ground that hurts what stands in it (embers, spore clouds). */
+    zone(kind, x, y, radius, seconds, damage, r) {
+        const g = new PIXI.Graphics();
+        g.blendMode = kind === 'ember' ? PIXI.BLEND_MODES.ADD : PIXI.BLEND_MODES.NORMAL;
+        this.game.groundLayer.addChild(g);
+        this.zones.push({ kind, x, y, r: radius, life: seconds * 60, max: seconds * 60, tick: 0, damage, rs: r, g, seed: Math.random() * 10 });
+    }
+
+    updateZones(delta) {
+        const game = this.game;
+        for (let i = this.zones.length - 1; i >= 0; i--) {
+            const z = this.zones[i];
+            z.life -= delta;
+            if (z.life <= 0) { z.g.destroy(); this.zones.splice(i, 1); continue; }
+            z.tick -= delta;
+            if (z.tick <= 0) {
+                z.tick = 30;
+                for (const e of game.state.enemies) {
+                    if (e.dead || e.untargetable || (z.kind === 'ember' && e.flying)) continue;
+                    const dx = e.wx - z.x, dy = e.wy - z.y, rr = z.r + e.radius * 0.5;
+                    if (dx * dx + dy * dy <= rr * rr) this.hit(e, z.damage * 0.5, z.rs, { color: z.kind === 'ember' ? 0xffa040 : 0x9be07b });
+                }
+            }
+            const fade = Math.min(1, z.life / 40, (z.max - z.life) / 10 + 0.2);
+            const t = game.frame * 0.05 + z.seed;
+            const g = z.g;
+            g.clear();
+            if (z.kind === 'ember') {
+                g.beginFill(0xff5a1a, 0.28 * fade); g.drawEllipse(z.x, z.y, z.r, z.r * 0.85); g.endFill();
+                g.beginFill(0xffb040, 0.35 * fade); g.drawEllipse(z.x + Math.sin(t) * 4, z.y, z.r * 0.6, z.r * 0.5); g.endFill();
+                g.beginFill(0xfff0a0, 0.4 * fade); g.drawEllipse(z.x, z.y + Math.cos(t * 1.3) * 3, z.r * 0.25, z.r * 0.2); g.endFill();
+                if (Math.random() < 0.12 * delta) game.fx.burst(z.x + (Math.random() - 0.5) * z.r, z.y + (Math.random() - 0.5) * z.r, 6, 0xffa040, 1, 0.6, { size: 0.6, life: 20, gravity: -0.04, up: 1.2, glow: true });
+            } else {
+                g.beginFill(0x3a6a2a, 0.22 * fade); g.drawEllipse(z.x, z.y, z.r, z.r * 0.9); g.endFill();
+                for (let k = 0; k < 6; k++) {
+                    const a = t * 0.4 + k * 1.05, rr = z.r * (0.4 + 0.12 * Math.sin(t + k));
+                    g.beginFill(k % 2 ? 0x9ad05a : 0xd0e87a, 0.34 * fade);
+                    g.drawCircle(z.x + Math.cos(a) * z.r * 0.45, z.y + Math.sin(a) * z.r * 0.38, rr);
+                    g.endFill();
+                }
+                g.lineStyle(2.5, 0x5a9a3a, 0.55 * fade); g.drawEllipse(z.x, z.y, z.r, z.r * 0.9); g.lineStyle(0);
+                if (Math.random() < 0.15 * delta) game.fx.burst(z.x + (Math.random() - 0.5) * z.r, z.y + (Math.random() - 0.5) * z.r, 8, 0xc8f08a, 1, 0.4, { size: 0.8, life: 30, gravity: -0.02, up: 0.6 });
+            }
+        }
+    }
+
+    // --------------------------------------------------------------- wisps
+    fireWisps(r, src) {
+        const p = src || this.game.state.player;
+        const targets = this.nearestEnemies(p.wx, p.wy, 640, r.p.count);
+        if (!targets.length) return false;
+        for (let i = 0; i < r.p.count && this.bullets.length < CAP.bullets; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sprite = EntityManager.createWisp(p.wx, p.wy, r.color);
+            this.game.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx: Math.cos(a) * r.p.speed, vy: Math.sin(a) * r.p.speed, life: 240, damage: this.dmg(r), pierce: r.p.pierce, hits: new Set(), r, homing: Math.max(1, r.p.homing) * 1.6, jumps: r.p.jumps, speed: r.p.speed, wisp: true });
+        }
+        this.game.audio.play('wisp', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    // -------------------------------------------------------------- glaive
+    fireGlaive(r, src) {
+        const p = src || this.game.state.player;
+        const targets = this.nearestEnemies(p.wx, p.wy, r.p.range + 60, r.p.count);
+        if (!targets.length) return false;
+        for (let i = 0; i < r.p.count && this.bullets.length < CAP.bullets; i++) {
+            const t = targets[i] || targets[0];
+            const a = Math.atan2(t.wy - p.wy, t.wx - p.wx) + (i >= targets.length ? (i % 2 ? 0.35 : -0.35) : 0);
+            const sprite = EntityManager.createBlade(r.color);
+            sprite.wx = p.wx; sprite.wy = p.wy;
+            this.game.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx: Math.cos(a) * r.p.speed, vy: Math.sin(a) * r.p.speed, life: 200, damage: this.dmg(r), pierce: 999, hits: new Set(), r, homing: r.p.homing, speed: r.p.speed, glaive: { out: true, dist: 0, range: r.p.range } });
+        }
+        this.game.audio.play('glaive', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    // --------------------------------------------------------------- cloud
+    fireCloud(r, src) {
+        const p = src || this.game.state.player;
+        const t = this.nearestEnemies(p.wx, p.wy, 460, 1)[0];
+        if (!t) return false;
+        if (this.zones.length >= CAP.zones) { const old = this.zones.find((z) => z.kind === 'cloud') || this.zones[0]; old.g.destroy(); this.zones.splice(this.zones.indexOf(old), 1); }
+        this.zone('cloud', t.wx, t.wy, r.p.radius, r.p.duration, this.dmg(r), r);
+        this.game.fx.burst(t.wx, t.wy, r.p.radius * 0.6, 0xb8e07a, 14, 1.2, { size: 1, life: 30, gravity: -0.01, up: 0.6 });
+        this.game.audio.play('cloud', { x: t.wx, y: t.wy });
+        return true;
+    }
+
+    // ---------------------------------------------------------- earthshatter
+    slam(r) {
+        const g = this.game, p = g.state.player;
+        const dmg = this.dmg(r);
+        this.pulse(p.wx, p.wy, r.p.radius, dmg, r, 10);
+        g.fx.addShake(7);
+        g.fx.burst(p.wx, p.wy, r.p.radius * 0.5, 0x8a6a4a, 26, 4, { size: 1.3, life: 34, up: 4, gravity: 0.12 });
+        g.fx.burst(p.wx, p.wy, 20, 0xe8d8b8, 14, 3, { size: 0.9, life: 24, up: 3 });
+        g.fx.flash(p.wx, p.wy, r.p.radius * 2.5, 0xffe0a0, 20);
+        g.input?.rumble(0.9, 0.5, 220);
+        for (let k = 1; k <= r.p.echo; k++) {
+            const x = p.wx, y = p.wy;
+            this.after(27 * k, () => { this.pulse(x, y, r.p.radius * 1.1, dmg * 0.6, r, 6); g.audio.play('slam', { x, y, vol: 0.6 }); g.fx.addShake(4); });
+        }
+    }
+
+    // --------------------------------------------------------- mending light
+    startHeal(r) {
+        const g = this.game, p = g.state.player;
+        this.healUntil = g.frame + r.p.duration * 60;
+        this.healRate = r.p.heal * g.stats.might;
+        g.fx.pillar(p.wx, p.wy, 0x9bffb0, 40, 70, 220);
+        g.fx.burst(p.wx, p.wy, 20, 0x9bffb0, 18, 2, { size: 0.8, life: 30, up: 2.5, glow: true });
+    }
+
+    updateHeal(delta) {
+        const g = this.game, s = g.state;
+        if (g.frame >= this.healUntil || !s.player) return;
+        s.health = Math.min(s.maxHealth, s.health + this.healRate * delta / 60);
+        if (Math.random() < 0.3 * delta) g.fx.burst(s.player.wx + (Math.random() - 0.5) * 30, s.player.wy, 6, 0x9bffb0, 1, 0.4, { size: 0.7, life: 30, up: 2, gravity: -0.03, glow: true });
     }
 
     // ================================================================ ACTIVE
@@ -719,6 +970,8 @@ export class SpellSystem {
             case 'dash': this.startDash(r); break;
             case 'blink': this.blink(r); break;
             case 'barrier': this.startBarrier(r); break;
+            case 'slam': this.slam(r); break;
+            case 'heal': this.startHeal(r); break;
         }
         g.audio?.play(r.tpl.expr);
         return true;

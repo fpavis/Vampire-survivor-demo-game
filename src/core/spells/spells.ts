@@ -3,7 +3,8 @@
 // resolveSpell() folds level curve + runes into final numbers; the app-side runtime only executes them.
 
 export type CoreId = 'arcane' | 'frost' | 'fire' | 'lightning' | 'force' | 'life';
-export type ExprId = 'bolt' | 'orbit' | 'chain' | 'nova' | 'meteor' | 'dash' | 'blink' | 'barrier';
+export type ExprId = 'bolt' | 'orbit' | 'chain' | 'nova' | 'meteor' | 'dash' | 'blink' | 'barrier'
+  | 'trail' | 'wisp' | 'glaive' | 'cloud' | 'slam' | 'heal';
 export type SpellMode = 'auto' | 'active';
 
 export interface Params {
@@ -21,10 +22,15 @@ export interface Params {
   duration: number;   // seconds (barrier)
   range: number;      // distance (dash / blink)
   leech: number;      // hp healed per kill
+  crit: number;       // extra critical-hit chance (0..1)
+  homing: number;     // how hard projectiles steer toward enemies (0 = straight)
+  manaLeech: number;  // mana restored per kill
+  echo: number;       // extra weaker pulses after the first (nova, slam, meteor)
+  heal: number;       // hp per second while active (Mending Light)
 }
 
 export type TriggerOn = 'hit' | 'kill';
-export type TriggerPayload = 'spark' | 'burst';
+export type TriggerPayload = 'spark' | 'burst' | 'shards';
 export interface Trigger { on: TriggerOn; payload: TriggerPayload; chance: number; power: number }
 
 export interface SpellTemplate {
@@ -76,7 +82,7 @@ export const CORE_INFO: Record<CoreId, { name: string; color: number; icon: stri
 
 const D: Params = {
   damage: 0, cooldown: 1000, count: 1, pierce: 0, radius: 0, speed: 0, jumps: 0,
-  slow: 0, burn: 0, knock: 1, mana: 0, duration: 0, range: 0, leech: 0
+  slow: 0, burn: 0, knock: 1, mana: 0, duration: 0, range: 0, leech: 0, crit: 0, homing: 0, manaLeech: 0, echo: 0, heal: 0
 };
 
 const cd = (base: number, f: number, l: number) => Math.round(base * Math.pow(f, l - 1));
@@ -122,20 +128,50 @@ export const TEMPLATES: Record<string, SpellTemplate> = {
     id: 'barrier', name: 'Aegis', icon: '🛡️', core: 'life', expr: 'barrier', mode: 'active', sockets: 1, max: 5,
     desc: 'A ward that blocks all damage while mana lasts.',
     base: (l) => ({ cooldown: 6000, mana: 45, duration: 2.2 + 0.4 * (l - 1), radius: 60 })
+  },
+  trail: {
+    id: 'trail', name: 'Ember Trail', icon: '🔥', core: 'fire', expr: 'trail', mode: 'auto', sockets: 2, max: 8,
+    desc: 'You leave burning ground behind you as you move.',
+    base: (l) => ({ damage: 9 + 3 * (l - 1), cooldown: cd(320, 0.95, l), radius: 34 + 3 * (l - 1), duration: 2.2 + 0.2 * (l - 1), burn: 4 })
+  },
+  wisp: {
+    id: 'wisp', name: 'Seeker Wisps', icon: '🔮', core: 'arcane', expr: 'wisp', mode: 'auto', sockets: 2, max: 8,
+    desc: 'Slow wisps drift out and hunt the nearest enemies.',
+    base: (l) => ({ damage: 18 + 5 * (l - 1), cooldown: cd(1500, 0.93, l), count: 1 + Math.floor(l / 3), speed: 4.2, homing: 1 })
+  },
+  glaive: {
+    id: 'glaive', name: 'Returning Glaive', icon: '🪃', core: 'force', expr: 'glaive', mode: 'auto', sockets: 2, max: 8,
+    desc: 'A spinning glaive cuts through a line of enemies and flies back to you.',
+    base: (l) => ({ damage: 20 + 6 * (l - 1), cooldown: cd(1700, 0.93, l), count: 1 + Math.floor((l - 1) / 3), range: 270 + 15 * (l - 1), speed: 8, pierce: 99 })
+  },
+  cloud: {
+    id: 'cloud', name: 'Spore Cloud', icon: '🍄', core: 'life', expr: 'cloud', mode: 'auto', sockets: 2, max: 8,
+    desc: 'A choking cloud settles on a crowd, hurting and slowing it.',
+    base: (l) => ({ damage: 7 + 2.5 * (l - 1), cooldown: cd(3800, 0.92, l), radius: 72 + 6 * (l - 1), duration: 4 + 0.25 * (l - 1), slow: 0.3 })
+  },
+  slam: {
+    id: 'slam', name: 'Earthshatter', icon: '🪨', core: 'force', expr: 'slam', mode: 'active', sockets: 1, max: 5,
+    desc: 'Smash the ground: everything around you is hurt and hurled away.',
+    base: (l) => ({ damage: 40 + 12 * (l - 1), cooldown: 4000, mana: 30, radius: 140 + 10 * (l - 1), knock: 2.2, slow: 0.4 })
+  },
+  heal: {
+    id: 'heal', name: 'Mending Light', icon: '💚', core: 'life', expr: 'heal', mode: 'active', sockets: 1, max: 5,
+    desc: 'Warm light heals the active hero for a few seconds.',
+    base: (l) => ({ cooldown: 9000, mana: 40, heal: 6 + 2 * (l - 1), duration: 4 + 0.5 * (l - 1) })
   }
 };
 
-const ALL_DMG: ExprId[] = ['bolt', 'orbit', 'chain', 'nova', 'meteor'];
+const ALL_DMG: ExprId[] = ['bolt', 'orbit', 'chain', 'nova', 'meteor', 'trail', 'wisp', 'glaive', 'cloud', 'slam'];
 
 export const RUNES: Record<string, RuneDef> = {
-  multishot: { id: 'multishot', name: 'Multishot', icon: '🔱', rarity: 1, desc: '+1 projectile, -12% damage.', exprs: ['bolt', 'chain', 'meteor', 'orbit'],
+  multishot: { id: 'multishot', name: 'Multishot', icon: '🔱', rarity: 1, desc: '+1 projectile, -12% damage.', exprs: ['bolt', 'chain', 'meteor', 'orbit', 'wisp', 'glaive'],
     mods: [{ p: 'count', add: 1 }, { p: 'damage', mul: 0.88 }] },
-  piercing: { id: 'piercing', name: 'Piercing', icon: '➶', rarity: 1, desc: 'Bolts pierce 2 more enemies.', exprs: ['bolt'],
+  piercing: { id: 'piercing', name: 'Piercing', icon: '➶', rarity: 1, desc: 'Bolts pierce 2 more enemies.', exprs: ['bolt', 'wisp'],
     mods: [{ p: 'pierce', add: 2 }] },
   swift: { id: 'swift', name: 'Swift', icon: '⏩', rarity: 1, desc: '-20% cooldown.', mods: [{ p: 'cooldown', mul: 0.8 }] },
   heavy: { id: 'heavy', name: 'Heavy', icon: '🔨', rarity: 1, desc: '+35% damage, +15% cooldown.', exprs: ALL_DMG,
     mods: [{ p: 'damage', mul: 1.35 }, { p: 'cooldown', mul: 1.15 }] },
-  wide: { id: 'wide', name: 'Wide', icon: '⭕', rarity: 1, desc: '+30% area.', exprs: ['nova', 'meteor', 'orbit', 'barrier'],
+  wide: { id: 'wide', name: 'Wide', icon: '⭕', rarity: 1, desc: '+30% area.', exprs: ['nova', 'meteor', 'orbit', 'barrier', 'trail', 'cloud', 'slam'],
     mods: [{ p: 'radius', mul: 1.3 }] },
   chaining: { id: 'chaining', name: 'Chaining', icon: '🔗', rarity: 2, desc: '+2 chain jumps.', exprs: ['chain'],
     mods: [{ p: 'jumps', add: 2 }] },
@@ -144,14 +180,25 @@ export const RUNES: Record<string, RuneDef> = {
   ignite: { id: 'ignite', name: 'Ignite', icon: '🔥', rarity: 2, desc: 'Hits burn for 8 damage/s.', exprs: ALL_DMG, notCores: ['frost'],
     mods: [{ p: 'burn', add: 8 }] },
   shove: { id: 'shove', name: 'Shove', icon: '👊', rarity: 1, desc: '+80% knock-back.', exprs: ALL_DMG, mods: [{ p: 'knock', add: 0.8 }] },
-  spark: { id: 'spark', name: 'Spark', icon: '✴️', rarity: 3, desc: '20% on hit: a spark zaps another enemy for 60% damage.', exprs: ['bolt', 'orbit', 'meteor', 'nova'], notCores: ['lightning'],
+  spark: { id: 'spark', name: 'Spark', icon: '✴️', rarity: 3, desc: '20% on hit: a spark zaps another enemy for 60% damage.', exprs: ['bolt', 'orbit', 'meteor', 'nova', 'wisp', 'glaive', 'slam'], notCores: ['lightning'],
     mods: [], trigger: { on: 'hit', payload: 'spark', chance: 0.2, power: 0.6 } },
   echo: { id: 'echo', name: 'Death Echo', icon: '💥', rarity: 3, desc: 'Enemies killed by this spell explode for 70% damage.', exprs: ALL_DMG,
     mods: [], trigger: { on: 'kill', payload: 'burst', chance: 1, power: 0.7 } },
   vampiric: { id: 'vampiric', name: 'Vampiric', icon: '🩸', rarity: 3, desc: 'Each kill heals 1 HP.', exprs: ALL_DMG, mods: [{ p: 'leech', add: 1 }] },
   efficient: { id: 'efficient', name: 'Efficient', icon: '💧', rarity: 1, desc: '-30% mana cost.', mode: 'active', mods: [{ p: 'mana', mul: 0.7 }] },
   reach: { id: 'reach', name: 'Far Reach', icon: '↗️', rarity: 2, desc: '+40% distance.', exprs: ['dash', 'blink'], mods: [{ p: 'range', mul: 1.4 }] },
-  lingering: { id: 'lingering', name: 'Lingering', icon: '⏳', rarity: 2, desc: '+50% duration.', exprs: ['barrier', 'dash'], mods: [{ p: 'duration', mul: 1.5 }] }
+  lingering: { id: 'lingering', name: 'Lingering', icon: '⏳', rarity: 2, desc: '+50% duration.', exprs: ['barrier', 'dash', 'trail', 'cloud', 'heal'], mods: [{ p: 'duration', mul: 1.5 }] },
+  keen: { id: 'keen', name: 'Keen Edge', icon: '🎯', rarity: 1, desc: '+12% critical-hit chance.', exprs: ALL_DMG, mods: [{ p: 'crit', add: 0.12 }] },
+  colossal: { id: 'colossal', name: 'Colossal', icon: '🗿', rarity: 2, desc: '+30% area, +15% damage, +20% cooldown.', exprs: ['nova', 'meteor', 'orbit', 'cloud', 'slam', 'trail'],
+    mods: [{ p: 'radius', mul: 1.3 }, { p: 'damage', mul: 1.15 }, { p: 'cooldown', mul: 1.2 }] },
+  ricochet: { id: 'ricochet', name: 'Ricochet', icon: '↩️', rarity: 2, desc: 'Bolts bounce to 2 more enemies.', exprs: ['bolt', 'wisp'], mods: [{ p: 'jumps', add: 2 }] },
+  seeking: { id: 'seeking', name: 'Seeking', icon: '🧲', rarity: 1, desc: 'Projectiles curve toward enemies.', exprs: ['bolt', 'glaive'], mods: [{ p: 'homing', add: 1 }] },
+  siphon: { id: 'siphon', name: 'Mana Siphon', icon: '💧', rarity: 2, desc: 'Kills with this spell restore 2 mana.', exprs: ALL_DMG, mods: [{ p: 'manaLeech', add: 2 }] },
+  splinter: { id: 'splinter', name: 'Splinter', icon: '💎', rarity: 3, desc: 'Kills burst into 3 shards for 40% damage.', exprs: ['bolt', 'glaive', 'chain', 'meteor', 'wisp'],
+    mods: [], trigger: { on: 'kill', payload: 'shards', chance: 1, power: 0.4 } },
+  overcharge: { id: 'overcharge', name: 'Overcharge', icon: '🔋', rarity: 2, desc: '+60% power, +30% mana cost.', mode: 'active',
+    mods: [{ p: 'damage', mul: 1.6 }, { p: 'heal', mul: 1.6 }, { p: 'range', mul: 1.25 }, { p: 'mana', mul: 1.3 }] },
+  aftershock: { id: 'aftershock', name: 'Aftershock', icon: '〰️', rarity: 3, desc: 'A second pulse follows at 60% damage.', exprs: ['nova', 'slam', 'meteor'], mods: [{ p: 'echo', add: 1 }] }
 };
 
 export interface ResolvedSpell {
@@ -231,13 +278,18 @@ export function describeSpell(r: ResolvedSpell): string[] {
   if (tpl.mode === 'auto' && tpl.expr !== 'orbit') out.push(`Every ${(p.cooldown / 1000).toFixed(2)}s`);
   if (tpl.mode === 'active') out.push(`Costs ${p.mana} mana · ${(p.cooldown / 1000).toFixed(1)}s cooldown`);
   if (p.count > 1) out.push(`×${p.count}`);
-  if (p.pierce) out.push(`Pierce ${p.pierce}`);
+  if (p.pierce) out.push(p.pierce >= 50 ? 'Pierces everything' : `Pierce ${p.pierce}`);
   if (p.jumps) out.push(`${p.jumps} jumps`);
   if (p.radius && tpl.expr !== 'barrier') out.push(`Radius ${Math.round(p.radius)}`);
   if (p.slow) out.push(`Slow ${Math.round(p.slow * 100)}%`);
   if (p.burn) out.push(`Burn ${Math.round(p.burn)}/s`);
   if (p.range) out.push(`Range ${Math.round(p.range)}`);
   if (p.duration) out.push(`${p.duration.toFixed(1)}s`);
+  if (p.heal) out.push(`Heals ${Math.round(p.heal)}/s`);
+  if (p.crit) out.push(`+${Math.round(p.crit * 100)}% crit`);
+  if (p.homing) out.push('Homing');
+  if (p.manaLeech) out.push(`+${p.manaLeech} mana/kill`);
+  if (p.echo) out.push(`${p.echo + 1} pulses`);
   return out;
 }
 
@@ -273,7 +325,12 @@ const PARAM_LABELS: Partial<Record<keyof Params, [string, (v: number) => string]
   mana: ['Mana', (v) => `${v}`],
   duration: ['Duration', (v) => `${v.toFixed(1)}s`],
   range: ['Range', (v) => `${Math.round(v)}`],
-  leech: ['Heal/kill', (v) => `${v}`]
+  leech: ['Heal/kill', (v) => `${v}`],
+  crit: ['Crit chance', (v) => `+${Math.round(v * 100)}%`],
+  homing: ['Homing', (v) => (v ? 'yes' : 'no')],
+  manaLeech: ['Mana/kill', (v) => `${v}`],
+  echo: ['Extra pulses', (v) => `${v}`],
+  heal: ['Heal/s', (v) => `${Math.round(v)}`]
 };
 
 /** What changes if `runeId` were socketed into `slot` (compare tooltip). Empty when it cannot be socketed. */
@@ -288,6 +345,6 @@ export function previewRune(item: SpellItem, runeId: string, slot: number): stri
     if (Math.abs(a - b) > 1e-9) { const [label, f] = PARAM_LABELS[k]!; out.push(`${label}: ${f(a)} → ${f(b)}`); }
   }
   const t = RUNES[runeId].trigger;
-  if (t) out.push(t.on === 'hit' ? `On hit: ${Math.round(t.chance * 100)}% spark` : 'On kill: explosion');
+  if (t) out.push(t.on === 'hit' ? `On hit: ${Math.round(t.chance * 100)}% spark` : t.payload === 'shards' ? 'On kill: 3 shards' : 'On kill: explosion');
   return out;
 }

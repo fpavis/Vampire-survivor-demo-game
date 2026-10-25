@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  RUNES, TEMPLATES, addSpellXp, canSocket, makeSpell, resolveSpell, rollSkillDrop, spellXpFor, starterLoadout
+  RUNES, TEMPLATES, addSpellXp, canSocket, describeSpell, makeSpell, previewRune, resolveSpell, rollSkillDrop, spellXpFor, starterLoadout
 } from '../src/core/spells/spells';
 import { CARDS, computeStats, offerCards, regenMana, spendMana } from '../src/core/hero/stats';
 
@@ -180,5 +180,57 @@ describe('rune preview', () => {
     expect(previewRune(bolt, 'swift', 0)).toEqual(['Cooldown: 0.70s → 0.56s']);
     expect(previewRune(makeSpell('nova'), 'piercing', 0)).toEqual([]);
     expect(previewRune(bolt, 'echo', 0)).toContain('On kill: explosion');
+  });
+});
+
+describe('phase 8 archetypes and runes', () => {
+  it('adds six new spells with sensible numbers', () => {
+    for (const id of ['trail', 'wisp', 'glaive', 'cloud', 'slam', 'heal']) {
+      const t = TEMPLATES[id];
+      expect(t, id).toBeDefined();
+      const p = resolveSpell(makeSpell(id)).p;
+      if (t.mode === 'active') expect(p.mana, id).toBeGreaterThan(0);
+      else expect(p.damage, id).toBeGreaterThan(0);
+    }
+    expect(resolveSpell(makeSpell('wisp')).p.homing).toBeGreaterThan(0);
+    expect(resolveSpell(makeSpell('heal', 5)).p.heal).toBeGreaterThan(resolveSpell(makeSpell('heal')).p.heal);
+  });
+
+  it('checks where the new runes fit', () => {
+    expect(canSocket(makeSpell('cloud'), 'keen', 0).ok).toBe(true);
+    expect(canSocket(makeSpell('nova'), 'seeking', 0).ok).toBe(false);
+    expect(canSocket(makeSpell('glaive'), 'seeking', 0).ok).toBe(true);
+    expect(canSocket(makeSpell('bolt'), 'ricochet', 0).ok).toBe(true);
+    expect(canSocket(makeSpell('meteor'), 'ricochet', 0).ok).toBe(false);
+    expect(canSocket(makeSpell('slam'), 'overcharge', 0).ok).toBe(true);
+    expect(canSocket(makeSpell('bolt'), 'overcharge', 0).ok).toBe(false);
+    expect(canSocket(makeSpell('slam'), 'aftershock', 0).ok).toBe(true);
+    expect(canSocket(makeSpell('trail'), 'lingering', 0).ok).toBe(true);
+    expect(canSocket(makeSpell('heal'), 'heavy', 0).ok).toBe(false);
+  });
+
+  it('applies the new parameters', () => {
+    const keen = makeSpell('bolt'); keen.runes = ['keen', 'seeking'];
+    const p = resolveSpell(keen).p;
+    expect(p.crit).toBeCloseTo(0.12);
+    expect(p.homing).toBe(1);
+    const big = makeSpell('nova'); big.runes = ['colossal', 'aftershock'];
+    const q = resolveSpell(big).p;
+    expect(q.radius).toBeCloseTo(130 * 1.3);
+    expect(q.echo).toBe(1);
+    const slam = makeSpell('slam'); slam.runes = ['overcharge'];
+    expect(resolveSpell(slam).p.damage).toBeCloseTo(40 * 1.6);
+    expect(resolveSpell(slam).p.mana).toBe(Math.round(30 * 1.3));
+    const sip = makeSpell('cloud'); sip.runes = ['siphon', null];
+    expect(resolveSpell(sip).p.manaLeech).toBe(2);
+    const spl = makeSpell('glaive'); spl.runes = ['splinter', null];
+    expect(resolveSpell(spl).triggers).toEqual([{ on: 'kill', payload: 'shards', chance: 1, power: 0.4 }]);
+  });
+
+  it('previews the new numbers when comparing runes', () => {
+    const lines = previewRune(makeSpell('bolt'), 'keen', 0);
+    expect(lines.some((l) => l.startsWith('Crit chance'))).toBe(true);
+    expect(previewRune(makeSpell('bolt'), 'splinter', 0)).toContain('On kill: 3 shards');
+    expect(describeSpell(resolveSpell(makeSpell('glaive')))).toContain('Pierces everything');
   });
 });

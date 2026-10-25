@@ -34,4 +34,12 @@ await scene('meteor-hit', '', 12);
 await scene('dash', `g.spells.auto=[]; g.spells.touch(); g.spells.mana.value=99; g.spells.timers={}; g.lastMove={x:1,y:0}; g.spells.cast(0);`, 4);
 await scene('barrier', `g.party.cdUntil=0; g.party.switchTo(1); g.spells.auto=[]; g.spells.touch(); g.spells.mana.value=99; g.spells.timers={}; g.spells.cast(0);`, 20);
 await scene('blink', `g.party.cdUntil=0; g.party.switchTo(2); g.spells.auto=[]; g.spells.touch(); g.spells.mana.value=99; g.spells.timers={}; g.lastMove={x:1,y:0}; g.spells.cast(0);`, 3);
+// Phase 8 spells
+const active = (tpl) => `g.spells.auto=[]; const s=g.spells.addSpell('${tpl}'); s.level=3; g.spells.active=[s.uid,null,null]; g.spells.touch(); g.spells.mana.value=200; g.spells.timers={};`;
+await scene('trail', only('trail') + `{ const q=g.state.player; for(let i=0;i<40;i++){ q.wx+=4; g.gameLoop(1); } q.wx-=40; }` + ring, 6);
+await scene('wisp', only('wisp') + ring, 70);
+await scene('glaive', only('glaive') + ring, 40);
+await scene('cloud', only('cloud') + ring, 60);
+await scene('slam', active('slam') + ring + `g.spells.cast(0);`, 8);
+await scene('heal', active('heal') + `g.state.health=g.state.maxHealth*0.5; g.spells.cast(0);`, 30);
 await b.close(); pv.kill();

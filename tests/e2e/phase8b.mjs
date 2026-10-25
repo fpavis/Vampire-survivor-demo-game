@@ -161,6 +161,72 @@ if (want('roads')) {
   }
 }
 
+// ---- new spells and runes
+if (want('spells')) {
+  const trial = (id, setup) => ev(([id, setup]) => {
+    const g = window.game, p = g.state.player, sp = g.spells;
+    g.state.enemies.forEach((e) => { e.dead = true; }); g.reap();
+    sp.clearProjectiles();
+    // stand on open ground
+    for (let r = 0; r < 40; r++) { if (!g.world.blocked(p.wx, p.wy, 40) && !g.world.blocked(p.wx + 260, p.wy, 40)) break; p.wx += 96; }
+    g.cam.x = p.wx; g.cam.y = p.wy; g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    sp.setLoadout([], [null, null, null]);
+    const it = sp.addSpell(id);
+    if (setup.runes) it.runes = setup.runes;
+    sp.equip(it.uid, 0);
+    sp.timers = {};
+    const foes = (setup.foes || [[180, 0]]).map(([dx, dy]) => { const e = g.makeEnemy('SLIME', p.wx + dx, p.wy + dy, { level: 1 }); e.speed = 0; e.health = e.maxHealth = setup.hp || 1e5; return e; });
+    const out = { zones: 0, glaives: 0, wisps: 0, rings: 0 };
+    if (setup.hurt) g.state.health = g.state.maxHealth * 0.4;
+    const h0 = g.state.health;
+    if (setup.cast) { sp.mana.value = 200; out.cast = sp.cast(0); }
+    for (let f = 0; f < (setup.frames || 150); f++) {
+      if (setup.walk) { p.wx += 3; foes.forEach((e) => { e.wx = p.wx - 40; }); }
+      g.gameLoop(1);
+      out.zones = Math.max(out.zones, sp.zones.length);
+      out.glaives = Math.max(out.glaives, sp.bullets.filter((b) => b.glaive).length);
+      out.wisps = Math.max(out.wisps, sp.bullets.filter((b) => b.wisp).length);
+      out.rings = Math.max(out.rings, sp.rings.length);
+    }
+    out.damage = Math.round(foes.reduce((a, e) => a + (e.maxHealth - Math.max(0, e.health)), 0));
+    out.hit = foes.filter((e) => e.health < e.maxHealth).length;
+    out.knocked = foes.some((e) => Math.abs(e.kvx) + Math.abs(e.kvy) > 0.5);
+    out.healed = Math.round(g.state.health - h0);
+    out.glaivesLeft = sp.bullets.filter((b) => b.glaive).length;
+    g.state.health = g.state.maxHealth;
+    return out;
+  }, [id, setup]);
+
+  const trail = await trial('trail', { walk: true, frames: 120, foes: [[-40, 0]] });
+  check('Ember Trail leaves burning ground that hurts', trail.zones > 3 && trail.damage > 0, JSON.stringify(trail));
+  const wisp = await trial('wisp', { frames: 200, foes: [[220, 40]] });
+  check('Seeker Wisps hunt down an enemy', wisp.wisps > 0 && wisp.damage > 0, JSON.stringify(wisp));
+  const glaive = await trial('glaive', { frames: 100, foes: [[160, 0], [240, 0]] });   // one throw: out ~270 px and back, before the next
+  check('Returning Glaive cuts through a line and comes back', glaive.glaives > 0 && glaive.hit === 2 && glaive.glaivesLeft === 0, JSON.stringify(glaive));
+  const cloud = await trial('cloud', { frames: 150, foes: [[200, 0], [220, 20]] });
+  check('Spore Cloud settles on a crowd and hurts it', cloud.zones > 0 && cloud.hit === 2, JSON.stringify(cloud));
+  const slam = await trial('slam', { cast: true, frames: 6, foes: [[80, 0], [-90, 30], [400, 0]] });
+  check('Earthshatter hurts and hurls what is close, not what is far', slam.cast && slam.hit === 2 && slam.knocked, JSON.stringify(slam));
+  const heal = await trial('heal', { cast: true, hurt: true, frames: 120, foes: [[900, 0]] });
+  check('Mending Light heals the hero over time', heal.cast && heal.healed >= 8, JSON.stringify(heal));
+  const after = await trial('nova', { runes: ['aftershock', null], frames: 60, foes: [[60, 0]] });
+  check('Aftershock sends a second ring', after.rings >= 2 || after.damage > 22 * 1.5, JSON.stringify(after));
+  const rico = await trial('bolt', { runes: ['ricochet', null], frames: 75, foes: [[160, 0], [230, 50], [230, -50]] });
+  check('Ricochet bounces one bolt between enemies', rico.hit >= 2, JSON.stringify(rico));
+
+  const kills = await ev(() => {
+    const g = window.game, sp = g.spells, p = g.state.player;
+    const it = sp.addSpell('bolt'); it.runes = ['splinter', 'siphon'];
+    let shards = 0; const orig = sp.shards.bind(sp); sp.shards = (...a) => { shards++; return orig(...a); };
+    sp.mana.value = 0;
+    const e = g.makeEnemy('SLIME', p.wx + 50, p.wy, { level: 1 });
+    g.damageEnemy(e, 1e6, { noCrit: true, spell: it });
+    sp.shards = orig;
+    return { shards, mana: sp.mana.value, spawned: sp.bullets.filter((b) => b.shard).length };
+  });
+  check('Splinter bursts kills into shards and Mana Siphon refills mana', kills.shards === 1 && kills.spawned === 3 && kills.mana >= 2, JSON.stringify(kills));
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 preview.kill();

@@ -246,6 +246,25 @@ export class EntityManager {
         return container;
     }
 
+    /** A drifting arcane wisp: a soft glow around a bright core with a little sparkle. */
+    static createWisp(x, y, color = 0xd8a0ff) {
+        const container = new PIXI.Container();
+        const body = new PIXI.Container();
+        const glow = glowCircle(18, color, 0.5);
+        const core = new PIXI.Graphics();
+        core.beginFill(color, 0.9); core.drawCircle(0, 0, 6); core.endFill();
+        core.beginFill(0xffffff); core.drawCircle(-1.2, -1.2, 3.2); core.endFill();
+        core.lineStyle(1.2, 0xffffff, 0.8);
+        core.moveTo(-9, 0); core.lineTo(9, 0); core.moveTo(0, -9); core.lineTo(0, 9);
+        core.lineStyle(0);
+        body.addChild(glow, core);
+        body.y = -26;
+        container.addChild(makeShadow(6, 2.4, 0.25), body);
+        container.wx = x;
+        container.wy = y;
+        return container;
+    }
+
     static createBlade(color = 0x9ff2ff) {
         const container = new PIXI.Container();
         const body = new PIXI.Container();

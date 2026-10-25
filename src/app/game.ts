@@ -991,7 +991,7 @@ class Game {
 
     damageEnemy(e, amount, opts = {}) {
         if (e.dead || e.untargetable) return;
-        const crit = !opts.noCrit && Math.random() < this.stats.crit;
+        const crit = !opts.noCrit && Math.random() < this.stats.crit + (opts.critBonus || 0);
         const dmg = amount * (crit ? 2 : 1) * (1 - (e.armor || 0));
         e.health -= dmg;
         if (!opts.quiet) {
