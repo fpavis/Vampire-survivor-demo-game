@@ -95,10 +95,12 @@ await page.evaluate(() => window.game.spells.addSpell('blink'));
 await page.waitForTimeout(100);
 
 // ---- 4. salvage, lock
-const g0 = await page.evaluate(() => window.game.state.wallet.gold);
+// the 400 kills above can drop a Piercing rune of their own: count them rather than expect none left
+const piercing = () => page.evaluate(() => window.game.spells.runes.filter((r) => r === 'piercing').length);
+const g0 = await page.evaluate(() => window.game.state.wallet.gold), p0 = await piercing();
 await drag(page.locator('.vs-rune', { hasText: 'Piercing' }), page.locator('.vs-salv'));
-const g1 = await page.evaluate(() => ({ gold: window.game.state.wallet.gold, has: window.game.spells.runes.includes('piercing') }));
-check('salvaging a rune pays gold and removes it', g1.gold > g0 && !g1.has, JSON.stringify(g1));
+const g1 = { gold: await page.evaluate(() => window.game.state.wallet.gold), piercing: await piercing(), before: p0 };
+check('salvaging a rune pays gold and removes it', g1.gold > g0 && g1.piercing === p0 - 1, JSON.stringify(g1));
 await page.locator('.vs-item', { hasText: 'Meteor' }).first().locator('.vs-lockb').click();
 await drag(page.locator('.vs-item', { hasText: 'Meteor' }).first(), page.locator('.vs-salv'));
 check('locked spells cannot be salvaged', await page.evaluate(() => window.game.spells.spells.some((s) => s.tpl === 'meteor')));
