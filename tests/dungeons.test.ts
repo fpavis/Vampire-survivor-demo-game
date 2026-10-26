@@ -4,8 +4,11 @@ import { createInterior } from '../src/core/world/interiors';
 import { BIOME, WARLORDS } from '../src/core/world/biomes';
 import {
   BOSS_LEVEL_BONUS, FLOOR_LEVEL_STEP, bossChestTier, bossLevel, dungeonForLand, dungeonName, floorLevel, floorSeed, isSeaDungeonCell,
-  plateauPoi, seaDungeonPoi, type DungeonInfo
+  plateauPoi, seaDungeonPoi, type DungeonInfo,
+  KRAKEN_CELL, KRAKEN_CLEARANCE, KRAKEN_MIN_DIST, krakenForCell
 } from '../src/core/world/dungeons';
+import { isWaterBiome } from '../src/core/world/biomes';
+import { ENEMY_TYPES } from '../src/core/config';
 import { newTower, plateauCentre } from '../src/core/world/towers';
 import type { Poi, PoiType } from '../src/core/types';
 
@@ -157,5 +160,41 @@ describe('plateau and sea dungeons', () => {
     expect(f.kind).toBe('ruins');
     expect(f.floors).toBe(3);
     expect(BIOME.RUIN_FLOOR).toBeGreaterThan(0);
+  });
+});
+
+describe('kraken lairs', () => {
+  const biome = (x: number, y: number) => src.biomeAt(x, y);
+  const lairs: { cx: number; cy: number; tx: number; ty: number; id: string }[] = [];
+  for (let cy = -12; cy <= 12; cy++) for (let cx = -12; cx <= 12; cx++) {
+    const l = krakenForCell(2024, cx, cy, biome);
+    if (l) lairs.push({ cx, cy, ...l });
+  }
+
+  it('lie in the open sea, out of sight of land, and never near the start', () => {
+    expect(lairs.length).toBeGreaterThan(3);
+    for (const l of lairs) {
+      expect(src.biomeAt(l.tx, l.ty)).toBe(BIOME.DEEP);
+      expect(Math.hypot(l.tx, l.ty)).toBeGreaterThanOrEqual(KRAKEN_MIN_DIST);
+      for (let j = -KRAKEN_CLEARANCE; j <= KRAKEN_CLEARANCE; j++) for (let i = -KRAKEN_CLEARANCE; i <= KRAKEN_CLEARANCE; i++) {
+        if (i * i + j * j <= KRAKEN_CLEARANCE ** 2) expect(isWaterBiome(src.biomeAt(l.tx + i, l.ty + j))).toBe(true);
+      }
+      // inside their own cell
+      expect(Math.floor(l.tx / KRAKEN_CELL)).toBe(l.cx);
+      expect(Math.floor(l.ty / KRAKEN_CELL)).toBe(l.cy);
+      expect(l.id).toBe(`kraken:${l.cx},${l.cy}`);
+    }
+  });
+
+  it('are the same every time', () => {
+    for (const l of lairs.slice(0, 6)) expect(krakenForCell(2024, l.cx, l.cy, biome)).toEqual({ id: l.id, tx: l.tx, ty: l.ty });
+  });
+
+  it('are a boss that swims', () => {
+    const k = ENEMY_TYPES.KRAKEN;
+    expect(k.boss).toBe(true);
+    expect(k.waterBound).toBe(true);
+    expect(k.ai.kind).toBe('boss');
+    expect(k.ai.summon.type).toBe('JELLY');
   });
 });

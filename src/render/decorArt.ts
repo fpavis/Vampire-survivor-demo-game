@@ -815,6 +815,76 @@ function drawPortal(g) {
     glow(g, 0, -34, 36, 0x4cc8ff, 0.12);
 }
 
+/**
+ * A vault gate. Facing the camera (`front`): two stone posts with an iron portcullis between them, raised when open.
+ * Edge-on (the corridor runs left to right): a tall post with the bars seen from the side.
+ */
+function drawVaultGate(g, front, open) {
+    const stone = 0x8a8478, iron = 0x3a3a44;
+    if (front) {
+        shadow(g, 52, 9, 0.3);
+        if (!open) {
+            g.lineStyle(3.2, INK, 0.95);
+            for (let x = -36; x <= 36; x += 9) { g.moveTo(x, -4); g.lineTo(x, -70); }
+            g.moveTo(-40, -24); g.lineTo(40, -24); g.moveTo(-40, -50); g.lineTo(40, -50);
+            g.lineStyle(2, iron, 1);
+            for (let x = -36; x <= 36; x += 9) { g.moveTo(x, -4); g.lineTo(x, -70); }
+            g.moveTo(-40, -24); g.lineTo(40, -24); g.moveTo(-40, -50); g.lineTo(40, -50);
+            noLine(g);
+            for (let x = -36; x <= 36; x += 9) opoly(g, [x - 2.4, -4, x, 2, x + 2.4, -4], 0x5a5a66, 1);   // spikes at the foot
+            ink(g, 1.2); g.beginFill(0xd8b040); g.drawCircle(0, -37, 5); g.endFill(); noLine(g);           // the lock plate
+            g.beginFill(0x2a1a0a); g.drawCircle(0, -38, 1.6); g.drawRect(-0.8, -38, 1.6, 4); g.endFill();
+        } else {
+            g.lineStyle(2, iron, 0.9);
+            for (let x = -36; x <= 36; x += 9) { g.moveTo(x, -76); g.lineTo(x, -88); }
+            noLine(g);
+        }
+        for (const x of [-48, 48]) {
+            opoly(g, [x - 9, 0, x - 9, -88, x + 9, -88, x + 9, 0], shade(stone, 0.8), 1.8);
+            fpoly(g, [x - 9, 0, x - 9, -88, x + 2, -88, x + 2, 0], stone);
+            g.lineStyle(1, shade(stone, 0.55), 0.6); for (let y = -14; y > -88; y -= 14) { g.moveTo(x - 9, y); g.lineTo(x + 9, y); } noLine(g);
+        }
+        opoly(g, [-58, -86, -58, -96, 58, -96, 58, -86], shade(stone, 1.1), 1.8);
+        g.beginFill(open ? 0x7ad8ff : 0xffb04a, 0.9); g.drawCircle(0, -91, 3); g.endFill();
+    } else {
+        shadow(g, 18, 22, 0.3);
+        opoly(g, [-8, 0, -8, -92, 8, -92, 8, 0], shade(stone, 0.85), 1.8);
+        fpoly(g, [-8, 0, -8, -92, 1, -92, 1, 0], stone);
+        if (!open) {
+            g.lineStyle(3.2, INK, 0.95); for (let k = 0; k < 5; k++) { g.moveTo(-14, -8 - k * 16); g.lineTo(14, -2 - k * 16); } noLine(g);
+            g.lineStyle(2, iron, 1); for (let k = 0; k < 5; k++) { g.moveTo(-14, -8 - k * 16); g.lineTo(14, -2 - k * 16); } noLine(g);
+            ink(g, 1.2); g.beginFill(0xd8b040); g.drawCircle(0, -40, 4); g.endFill(); noLine(g);
+        }
+        g.beginFill(open ? 0x7ad8ff : 0xffb04a, 0.9); g.drawCircle(0, -86, 2.6); g.endFill();
+    }
+}
+
+/** A lever on a stone base: up (waiting) or down (pulled, its rune lit). */
+function drawLever(g, pulled) {
+    shadow(g, 16, 5, 0.3);
+    opoly(g, [-14, 0, -14, -12, 14, -12, 14, 0], 0x6a6a76, 1.6);
+    fpoly(g, [-14, -12, -14, 0, 0, 0, 0, -12], 0x7e7e8a);
+    g.beginFill(pulled ? 0x7ad8ff : 0x4a4a56); g.drawCircle(8, -6, 2.6); g.endFill();
+    const tip = pulled ? [16, -18] : [-10, -38];
+    ostroke(g, 3, 0x6a4a2a, () => { g.moveTo(0, -12); g.lineTo(tip[0], tip[1]); });
+    ink(g, 1.2); g.beginFill(0xc83a3a); g.drawCircle(tip[0], tip[1], 4.2); g.endFill(); noLine(g);
+    g.beginFill(0xffffff, 0.5); g.drawCircle(tip[0] - 1.2, tip[1] - 1.4, 1.3); g.endFill();
+    if (pulled) glow(g, 8, -6, 9, 0x7ad8ff, 0.18);
+}
+
+/** A stone pedestal holding the vault key (or empty once it has been taken). */
+function drawKeyStand(g, hasKey) {
+    shadow(g, 16, 5, 0.3);
+    opoly(g, [-12, 0, -9, -26, 9, -26, 12, 0], 0x8a8478, 1.6);
+    fpoly(g, [-12, 0, -9, -26, 0, -26, 0, 0], 0x9e988c);
+    opoly(g, [-14, -26, -14, -31, 14, -31, 14, -26], 0xa8a294, 1.4);
+    if (hasKey) {
+        glow(g, 0, -40, 14, 0xffd84a, 0.16);
+        ostroke(g, 2.4, 0xe8c040, () => { g.moveTo(-6, -40); g.lineTo(8, -40); g.moveTo(4, -40); g.lineTo(4, -36); g.moveTo(8, -40); g.lineTo(8, -36); });
+        ink(g, 1.3); g.beginFill(0x000000, 0); g.lineStyle(3.6, INK, 0.95); g.drawCircle(-9, -40, 4); g.lineStyle(2.2, 0xe8c040, 1); g.drawCircle(-9, -40, 4); g.endFill(); noLine(g);
+    }
+}
+
 /** A warlord's lair marker: a crooked pole with a horned skull, a torn banner and bones at its foot. */
 function drawLairTotem(g) {
     shadow(g, 20, 6, 0.32);
@@ -918,5 +988,8 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     well: D(56, 60, 10, 22, true, [drawWell]),
     portal: D(72, 90, 12, 0, false, [drawPortal]),
     signpost: D(52, 58, 8, 0, false, [drawSignpost]),
-    lairtotem: D(48, 92, 8, 8, true, [drawLairTotem])
+    lairtotem: D(48, 92, 8, 8, true, [drawLairTotem]),
+    vaultgate: D(130, 104, 12, 0, false, [(g) => drawVaultGate(g, true, false), (g) => drawVaultGate(g, true, true), (g) => drawVaultGate(g, false, false), (g) => drawVaultGate(g, false, true)]),
+    lever: D(44, 50, 8, 0, false, [(g) => drawLever(g, false), (g) => drawLever(g, true)]),
+    keystand: D(40, 56, 8, 0, false, [(g) => drawKeyStand(g, true), (g) => drawKeyStand(g, false)])
 };

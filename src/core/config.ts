@@ -48,6 +48,7 @@ export interface EnemyTypeDef {
     armor?: number;
     phase?: boolean;
     boss?: boolean;
+    waterBound?: boolean;        // swims: moves freely over water and never onto land
     onDeath?: { spawn: string; count: number };
     ai: { kind: AiKind; [param: string]: any };
 }
@@ -128,7 +129,11 @@ export const ENEMY_TYPES: Record<string, EnemyTypeDef> = {
     CRAB_KING: { name: 'Crab King', art: 'crabking', color: 0xd04a2a, radius: 50, speed: 1.4, health: 1100, damage: 28, experience: 165, flying: false, boss: true, armor: 0.3,
         ai: { kind: 'boss', abilities: ['dash', 'slam', 'summon', 'dash'], dash: { windup: 34, speed: 8.6, time: 32, recover: 40 }, slam: { radius: 140, windup: 46, damage: 30 }, summon: { type: 'CRAB', count: 2 } } },
     STONE_TITAN: { name: 'Stone Titan', art: 'titan', color: 0x7a7e8a, radius: 56, speed: 0.95, health: 1500, damage: 32, experience: 190, flying: false, boss: true, armor: 0.25,
-        ai: { kind: 'boss', abilities: ['slam', 'lob', 'summon', 'lob'], slam: { radius: 160, windup: 64, damage: 36 }, lob: { count: 4, radius: 80, damage: 26 }, summon: { type: 'BAT', count: 6 } } }
+        ai: { kind: 'boss', abilities: ['slam', 'lob', 'summon', 'lob'], slam: { radius: 160, windup: 64, damage: 36 }, lob: { count: 4, radius: 80, damage: 26 }, summon: { type: 'BAT', count: 6 } } },
+
+    // ---- the sea's own boss: rises from deep water near a boat
+    KRAKEN: { name: 'Kraken', art: 'kraken', color: 0x9a3a5a, radius: 60, speed: 1.15, health: 1800, damage: 30, experience: 230, flying: true, waterBound: true, boss: true, armor: 0.2,
+        ai: { kind: 'boss', abilities: ['slam', 'volley', 'summon', 'volley'], slam: { radius: 170, windup: 56, damage: 34 }, volley: { count: 12, speed: 3.4, damage: 12, color: 0x2a1a3a }, summon: { type: 'JELLY', count: 3 } } }
 };
 
 export const INITIAL_STATE = {
@@ -205,7 +210,7 @@ const PERCEPTION_OVERRIDES: Record<string, Partial<Perception>> = {
   HARPY: { sight: 560, leash: 700 }, YETI: { sight: 400 },
   BOAR_KING: { sight: 650, leash: 900, memory: 480 }, ANCIENT_TREANT: { sight: 650, leash: 900, memory: 480 },
   SAND_PHARAOH: { sight: 650, leash: 900, memory: 480 }, CRAB_KING: { sight: 650, leash: 900, memory: 480 },
-  STONE_TITAN: { sight: 650, leash: 900, memory: 480 }
+  STONE_TITAN: { sight: 650, leash: 900, memory: 480 }, KRAKEN: { sight: 700, leash: 900, memory: 480 }
 };
 
 export function perceptionOf(type: string): Perception {

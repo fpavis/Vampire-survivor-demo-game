@@ -11,7 +11,9 @@ export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
     'A codex, a training dummy in every town, a log and statistics',
     'Ten new monsters for the far regions, and lairs marked by totems',
     'Warlord cards, an ending with credits, and a new death screen',
-    'Hit-stop, a camera that looks ahead, and sounds for every region'
+    'Hit-stop, a camera that looks ahead, and sounds for every region',
+    'Dungeon vaults with keys, levers and pressure plates',
+    'Monsters walk around lava, and a kraken waits in the open sea'
   ]
 };
 

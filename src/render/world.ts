@@ -12,7 +12,7 @@ import { nodeId } from '../core/economy/gather';
 import { addDecorItem } from '../core/world/terrain';
 import { boatBlocked } from '../core/world/towers';
 import { DECOR_LIGHTS } from './lighting';
-import { SURFACES, SURFACE_IDS, surfaceByNum } from '../core/world/surfaces';
+import { SURFACES, SURFACE_IDS, surfaceByNum, NAV_COST_BY_NUM } from '../core/world/surfaces';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -64,6 +64,8 @@ export class World {
         this.views = new Map();
         this.time = 0;
         this.source = null;
+        this.dynTiles = new Set();     // see addBlocker
+        this.dynCircles = [];
         this.focusChunk = { x: 0, y: 0 };
         this.onChunk = null; // callback(chunkData) when a chunk is first drawn (used by the map)
         this.removed = new Set(); // harvested resource nodes (ids from core/economy/gather)
@@ -77,6 +79,19 @@ export class World {
         this.views.clear();
         this.data.clear();
         this.source = source;
+        this.dynTiles.clear();
+        this.dynCircles.length = 0;
+    }
+
+    // Things that block until they move away (vault gates): tiles for navigation, circles for collision.
+    static dynKey(tx, ty) { return (tx + 32768) * 65536 + (ty + 32768); }
+    addBlocker(tiles, circles) {
+        for (const [tx, ty] of tiles) this.dynTiles.add(World.dynKey(tx, ty));
+        for (const c of circles) this.dynCircles.push(c);
+    }
+    removeBlocker(tiles, circles) {
+        for (const [tx, ty] of tiles) this.dynTiles.delete(World.dynKey(tx, ty));
+        for (const c of circles) { const i = this.dynCircles.indexOf(c); if (i >= 0) this.dynCircles.splice(i, 1); }
     }
 
     get bounded() { return !!(this.source && this.source.bounded); }
@@ -242,8 +257,17 @@ export class World {
 
     // hard tile obstacle (cheap, used by navigation and line of sight)
     tileBlocked(tx, ty) {
+        if (this.dynTiles.size && this.dynTiles.has(World.dynKey(tx, ty))) return true;
         const cx = Math.floor(tx / CT), cy = Math.floor(ty / CT);
         return this.getChunk(cx, cy).hard[(ty - cy * CT) * CT + (tx - cx * CT)] === 1;
+    }
+
+    // walking cost for the monsters' flow field: 0 = impassable, 1 = plain ground, more on lava, swamp ...
+    navCost(tx, ty) {
+        if (this.dynTiles.size && this.dynTiles.has(World.dynKey(tx, ty))) return 0;
+        const cx = Math.floor(tx / CT), cy = Math.floor(ty / CT);
+        const chunk = this.getChunk(cx, cy), i = (ty - cy * CT) * CT + (tx - cx * CT);
+        return chunk.hard[i] === 1 ? 0 : NAV_COST_BY_NUM[chunk.surf[i]];
     }
 
     // sea = true: the mover is a boat, so open water is free and everything else is closed
@@ -259,6 +283,10 @@ export class World {
                 const dx = x - nx, dy = y - ny;
                 if (dx * dx + dy * dy < r * r) return true;
             }
+        }
+        for (let i = 0; i < this.dynCircles.length; i++) {
+            const c = this.dynCircles[i], dx = x - c.x, dy = y - c.y, rr = r + c.r;
+            if (dx * dx + dy * dy < rr * rr) return true;
         }
         const pad = r + 50;
         const c0x = Math.floor((x - pad) / CHUNK_SIZE), c1x = Math.floor((x + pad) / CHUNK_SIZE);

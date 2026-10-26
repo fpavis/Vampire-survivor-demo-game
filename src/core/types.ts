@@ -63,4 +63,6 @@ export interface TerrainSource {
 // Minimal world surface the navigation code needs (lets tests use a fake grid).
 export interface SolidQuery {
     tileBlocked(tx: number, ty: number): boolean;
+    /** Walking cost of a tile for monsters: 0 = impassable, 1 = plain ground, more for hazards. Replaces tileBlocked in the flow field when present. */
+    navCost?(tx: number, ty: number): number;
 }

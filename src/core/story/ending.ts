@@ -33,6 +33,13 @@ export function bossIntroCard(lord: string | null, typeName: string, group: stri
   return { kind: 'boss', name: typeName, title: region ? `Warlord of the ${region}` : 'A warlord', text: 'It has ruled here a long time, and means to go on.', lord: null };
 }
 
+/** The sea's own boss has its own cards: it is no one's warlord. */
+export function krakenCard(kind: 'boss' | 'victory'): BossCard {
+  return kind === 'boss'
+    ? { kind, name: 'The Kraken', title: 'Terror of the Deep', text: 'The water heaves under the hull, and something vast looks up.', lord: null }
+    : { kind, name: 'The Kraken', title: 'sinks', text: 'The sea goes flat and quiet. Sailors will tell this one for years.', lord: null };
+}
+
 /** The card shown when a boss falls. */
 export function victoryCard(lord: string | null, typeName: string, group: string | null): BossCard {
   if (lord === SOVEREIGN.id) return { kind: 'victory', name: SOVEREIGN.name, title: 'is no more', text: LORD_FALL.sovereign, lord };

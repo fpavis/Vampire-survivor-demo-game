@@ -45,6 +45,18 @@ export function rollKillLoot(rand: () => number, k: KillInfo): KillLoot {
   return { xp: true, gold, resource, skill: rand() < sChance, power: k.boss ? 3 : Math.min(3, strength + (k.elite ? 1 : 0)) };
 }
 
+// ---------------------------------------------------------------- dungeon loot
+/** Schools of magic each region's (or realm's) dungeons favour in their chests. */
+export const LOOT_AFFINITY: Record<string, string[]> = {
+  field: ['arcane', 'life'], forest: ['life', 'force'], desert: ['fire', 'arcane'], shore: ['frost', 'lightning'],
+  mountain: ['force', 'frost'], plateau: ['lightning', 'arcane'], sea: ['frost', 'lightning']
+};
+/** The affinity of a dungeon: its realm when that is special (plateau, sea), otherwise its region. */
+export const dungeonAffinity = (group: string, realm?: string): string[] =>
+  (realm && realm !== 'land' && LOOT_AFFINITY[realm]) || LOOT_AFFINITY[group] || [];
+/** Extra rarity for chests deeper down: half a step per floor. */
+export const dungeonPower = (floor: number): number => Math.max(0, floor) * 0.5;
+
 // ---------------------------------------------------------------- salvage
 export function runeValue(id: string): number { return 6 * Math.pow(2.2, RUNES[id].rarity); }
 export function spellValue(s: SpellItem): number {

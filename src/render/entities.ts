@@ -144,6 +144,7 @@ export class EntityManager {
             flying: type.flying,
             phasing: !!type.phase,
             isBoss: !!type.boss,
+            waterBound: !!type.waterBound,
             kvx: 0, kvy: 0,
             slowUntil: 0, slowAmount: 0,
             hitFlash: 0,

@@ -3,7 +3,7 @@
 // with its closing roll, the death screen and the "you wake in ..." card after a respawn.
 import { ui as uiBridge } from '../ui/bridge';
 import { ENEMY_TYPES } from '../core/config';
-import { EPILOGUE, bossIntroCard, runSummary, victoryCard } from '../core/story/ending';
+import { EPILOGUE, bossIntroCard, krakenCard, runSummary, victoryCard } from '../core/story/ending';
 import { CREDITS } from '../core/version';
 
 export class StoryDirector {
@@ -25,7 +25,7 @@ export class StoryDirector {
     /** A warlord, demon lord or the Sovereign has noticed the party. */
     bossIntro(e) {
         const g = this.game;
-        const c = bossIntroCard(e.lord || null, ENEMY_TYPES[e.type] ? ENEMY_TYPES[e.type].name : e.type, this.groupOf(e));
+        const c = e.kraken ? krakenCard('boss') : bossIntroCard(e.lord || null, ENEMY_TYPES[e.type] ? ENEMY_TYPES[e.type].name : e.type, this.groupOf(e));
         this.card(c, 4200);
         g.audio.stinger('stingBoss');
         g.ui.logMessage(`${c.name}, ${c.title}`, c.lord ? 'lord' : 'lair', true);
@@ -33,7 +33,7 @@ export class StoryDirector {
 
     victory(e) {
         const g = this.game;
-        const c = victoryCard(e.lord || null, ENEMY_TYPES[e.type] ? ENEMY_TYPES[e.type].name : e.type, this.groupOf(e));
+        const c = e.kraken ? krakenCard('victory') : victoryCard(e.lord || null, ENEMY_TYPES[e.type] ? ENEMY_TYPES[e.type].name : e.type, this.groupOf(e));
         this.card(c, 5200);
         g.audio.stinger('stingVictory');
         g.ui.logMessage(`${c.name} ${c.title}`, 'crown', true);

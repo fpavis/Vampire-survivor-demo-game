@@ -3,6 +3,7 @@ import { makeRng } from './noise';
 import { BIOME, INTERIOR_ROSTERS, GROUP } from './biomes';
 import { addDecorItem } from './terrain';
 import { floorSeed, type DungeonInfo } from './dungeons';
+import { addVault, type Puzzle } from './puzzles';
 import type { ChunkLike, InteriorTheme, Poi, TerrainSource, Vec2 } from '../types';
 
 export interface InteriorSpawn { type: string; x: number; y: number; elite?: boolean }
@@ -60,6 +61,8 @@ export class InteriorSource implements TerrainSource {
     stairsDown: Vec2 | null = null;
     stairsUp: Vec2 | null = null;
     boss: Vec2 | null = null;
+    /** a vault behind a gate and the puzzle that opens it (some dungeon floors) */
+    puzzle: Puzzle | null = null;
     /** The elite guardians of a floor: the stairs down stay sealed until every one of them has fallen. */
     get guardians(): number { return this.spawns.filter((s) => s.elite).length; }
 
@@ -96,8 +99,8 @@ export class InteriorSource implements TerrainSource {
         }
     }
 
-    // BFS distance (in tiles) from a tile across floor tiles
-    distanceMap(sx: number, sy: number): Int16Array {
+    // BFS distance (in tiles) from a tile across floor tiles; `blocked` tiles (indices) count as wall
+    distanceMap(sx: number, sy: number, blocked?: Set<number>): Int16Array {
         const dist = new Int16Array(this.w * this.h).fill(-1);
         const q = [sx + sy * this.w];
         dist[q[0]] = 0;
@@ -108,6 +111,7 @@ export class InteriorSource implements TerrainSource {
                 const nx = cx + dx, ny = cy + dy;
                 if (!this.inBounds(nx, ny) || !this.isFloor(nx, ny)) continue;
                 const ni = nx + ny * this.w;
+                if (blocked && blocked.has(ni)) continue;
                 if (dist[ni] >= 0) continue;
                 dist[ni] = dist[cur] + 1;
                 q.push(ni);
@@ -153,6 +157,15 @@ function addDungeonFeatures(src: InteriorSource, info: DungeonInfo, floor: numbe
     }
     if (floor > 0) src.stairsUp = { x: (startTx + 0.5) * T, y: (startTy + 0.5) * T };
 }
+/** A vault and its puzzle, when the floor rolls one (its own random stream, so the rest of the floor is unchanged). */
+function withVault(src: InteriorSource, seed: number, floorTile: number): void {
+    const pz = addVault(src, seed, floorTile);
+    if (!pz) return;
+    src.puzzle = pz;
+    const roster = INTERIOR_ROSTERS[src.kind] ?? INTERIOR_ROSTERS.cave;
+    (pz.guards ?? []).forEach((g, i) => src.spawns.push({ type: roster[i % roster.length], x: g.x, y: g.y }));
+}
+
 function generateCave(poi: Poi, floor = 0): InteriorSource {
     const rng = makeRng(floorSeed(poi.seed, floor));
     const w = 64, h = 64;
@@ -251,6 +264,7 @@ function generateCave(poi: Poi, floor = 0): InteriorSource {
     });
 
     if (poi.dungeon) addDungeonFeatures(src, poi.dungeon, floor, cells, FLOOR, src.chests.map((c) => ({ x: c.tx, y: c.ty })), sx, sy);
+    if (poi.dungeon) withVault(src, floorSeed(poi.seed, floor), FLOOR);
 
     // decoration
     const feature = src.stairsDown ?? src.boss;
@@ -327,6 +341,7 @@ function generateRuins(poi: Poi, floor = 0): InteriorSource {
         const cells: { x: number; y: number; d: number }[] = [];
         for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const d = dist[y * w + x]; if (d >= 0 && x >= guardian.x && x < guardian.x + guardian.w && y >= guardian.y && y < guardian.y + guardian.h && Math.hypot(x - guardian.cx, y - guardian.cy) < 1.5) cells.push({ x, y, d: d + 20 }); }
         addDungeonFeatures(src, poi.dungeon, floor, cells.length ? cells : [{ x: guardian.cx, y: guardian.cy, d: 99 }], FLOOR, src.chests.map((c) => ({ x: c.tx, y: c.ty })), startRoom.cx, startRoom.cy);
+        withVault(src, floorSeed(poi.seed, floor), FLOOR);
     }
 
     // dressing

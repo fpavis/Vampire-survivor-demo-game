@@ -2,7 +2,7 @@
 // seeded share of the ordinary places; plateau dungeons hide on the plateau a climbing tower opens; sea dungeons
 // sit on remote islands only a boat reaches. Pure and deterministic, like the rest of the world.
 import { WORLD_CONFIG } from '../config';
-import { GROUP, WARLORDS } from './biomes';
+import { BIOME, GROUP, WARLORDS, isWaterBiome } from './biomes';
 import { hash } from './noise';
 import { CACHE_CELL, cacheForCell, plateauCentre, type TowerRec } from './towers';
 import type { Poi, PoiType } from '../types';
@@ -82,6 +82,44 @@ export function seaDungeonPoi(seed: number, cx: number, cy: number, biomeAt: (x:
 }
 
 export { CACHE_CELL };
+
+// ----------------------------------------------------------------- kraken
+export const KRAKEN_CELL = CACHE_CELL * 2;        // lair grid, in tiles
+export const KRAKEN_SHARE = 0.3;                  // of cells that have open sea to offer
+export const KRAKEN_MIN_DIST = 70;                // tiles from the start: never in the first waters
+export const KRAKEN_CLEARANCE = 6;                // tiles of water all around the lair
+export const KRAKEN_LEVEL_BONUS = 3;              // over the zone level of its waters
+
+export interface KrakenLair { id: string; tx: number; ty: number }
+
+/** Every tile within `r` of the centre is water (and the centre itself deep). */
+export function openSea(tx: number, ty: number, r: number, biomeAt: (x: number, y: number) => number): boolean {
+  if (biomeAt(tx, ty) !== BIOME.DEEP) return false;
+  // a cheap ring first: most spots near a coast fail here
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    if (!isWaterBiome(biomeAt(Math.round(tx + Math.cos(a) * r), Math.round(ty + Math.sin(a) * r)))) return false;
+  }
+  for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
+    if (i * i + j * j > r * r) continue;
+    if (!isWaterBiome(biomeAt(tx + i, ty + j))) return false;
+  }
+  return true;
+}
+
+/** A kraken's lair in this cell of the sea, or null: deep water well away from land and from the start. */
+export function krakenForCell(seed: number, cx: number, cy: number, biomeAt: (x: number, y: number) => number): KrakenLair | null {
+  if (hash(cx, cy, seed + 7200) >= KRAKEN_SHARE) return null;
+  const m = KRAKEN_CLEARANCE + 1;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const tx = cx * KRAKEN_CELL + m + Math.floor(hash(cx, cy, seed + 7210 + attempt) * (KRAKEN_CELL - 2 * m));
+    const ty = cy * KRAKEN_CELL + m + Math.floor(hash(cx, cy, seed + 7240 + attempt) * (KRAKEN_CELL - 2 * m));
+    if (Math.hypot(tx, ty) < KRAKEN_MIN_DIST) continue;
+    if (!openSea(tx, ty, KRAKEN_CLEARANCE, biomeAt)) continue;
+    return { id: `kraken:${cx},${cy}`, tx, ty };
+  }
+  return null;
+}
 
 /** Cave or ruins layout for a floor: land dungeons follow their entrance, the others are always ruins. */
 export const floorSeed = (poiSeed: number, floor: number): number => (floor === 0 ? poiSeed : (poiSeed + floor * 7919) >>> 0);

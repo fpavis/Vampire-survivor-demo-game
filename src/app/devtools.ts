@@ -1,3 +1,4 @@
+import { createInterior } from '../core/world/interiors';
 import { encodeSave, toBase64, fromBase64, decodeSave } from '../core/save/codec';
 import { buildSave } from './saveManager';
 import { tierName } from '../core/world/difficulty';
@@ -26,7 +27,7 @@ const css = `
 
 export function installDevTools(game: any): void {
   // handles for scripted visual checks (scripts/artsheet.mjs)
-  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game, towersApi, engage, BIOME };
+  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game, towersApi, engage, BIOME, createInterior };
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);

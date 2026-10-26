@@ -297,11 +297,17 @@ export function describeSpell(r: ResolvedSpell): string[] {
   return out;
 }
 
-/** Weighted loot roll for the 0.1 % "skill" drop. `power` biases toward rarer results. */
-export function rollSkillDrop(rand: () => number, power = 0): { kind: 'spell'; tpl: string } | { kind: 'rune'; id: string } {
+/**
+ * Weighted loot roll for the 0.1 % "skill" drop, chests and altars: a spell or a rune. `power` (0..3+) leans runes toward rarer ones; `affinity`
+ * names schools that turn up three times as often (a desert dungeon favours fire, the sea frost and storm).
+ */
+export function rollSkillDrop(rand: () => number, power = 0, affinity: readonly string[] = []): { kind: 'spell'; tpl: string } | { kind: 'rune'; id: string } {
   if (rand() < 0.2) {
     const pool = Object.values(TEMPLATES).filter((t) => t.id !== 'dash' || rand() < 0.5);
-    return { kind: 'spell', tpl: pool[Math.floor(rand() * pool.length)].id };
+    const sw = pool.map((t) => (affinity.includes(t.core) ? 3 : 1));
+    let r = rand() * sw.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < pool.length; i++) { r -= sw[i]; if (r <= 0) return { kind: 'spell', tpl: pool[i].id }; }
+    return { kind: 'spell', tpl: pool[pool.length - 1].id };
   }
   const runes = Object.values(RUNES);
   const weights = runes.map((r) => Math.max(0.05, Math.pow(0.45, Math.max(0, r.rarity - power * 0.6))));

@@ -514,6 +514,180 @@ if (want('species')) {
   check('they join the bestiary when defeated, and lairs have a totem sprite', sp.codex && sp.totem, JSON.stringify(sp));
 }
 
+// ---- 9e: the kraken, hazard-aware monsters, dungeon vaults and their puzzles
+if (want('kraken')) {
+  const rise = await ev(() => {
+    const g = window.game, T = 48, pl = g.state.player;
+    const l = g.sea.krakensNear(0, 0, 300).sort((a, b) => Math.hypot(a.tx, a.ty) - Math.hypot(b.tx, b.ty))[0];
+    window.__lair = l;
+    // come in over open water from the side of the nearest shore
+    let best = null;
+    for (let i = 0; i < 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      for (let k = 7; k < 40; k++) if (!g.world.isWaterAt((l.tx + 0.5 + Math.cos(a) * k) * T, (l.ty + 0.5 + Math.sin(a) * k) * T)) { if (!best || k < best.k) best = { k, a }; break; }
+    }
+    window.__shore = best;
+    for (const e of [...g.state.enemies]) e.dead = true; g.reap();
+    pl.wx = (l.tx + 0.5) * T + Math.cos(best.a) * 600; pl.wy = (l.ty + 0.5) * T + Math.sin(best.a) * 600;
+    g.boat = { dockId: '__e2e' };
+    let k = null;
+    for (let f = 0; f < 120 && !k; f++) { g.gameLoop(1); k = g.state.enemies.find((e) => e.kraken && !e.dead); }
+    return { lair: l && l.id, spawned: !!k, boss: !!(k && k.isBoss), water: !!k && g.world.isWaterAt(k.wx, k.wy), marker: g.map.extras().some((m) => m.icon === 'kraken') };
+  });
+  check('sailing near a lair raises the kraken from deep water', rise.spawned && rise.boss && rise.water, JSON.stringify(rise));
+  const kcard = await until(() => /The Kraken/.test(document.querySelector('[data-card="boss"]')?.innerText || ''));
+  check('the kraken shows itself with its own card and goes on the map', kcard && rise.marker);
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/kraken.png` });
+  const fight = await ev(() => {
+    const g = window.game, T = 48, pl = g.state.player, l = window.__lair, a = window.__shore.a;
+    const k = g.state.enemies.find((e) => e.kraken && !e.dead);
+    // step ashore: the kraken follows to the waterline and no further
+    let land = null;
+    for (let r = 7; r < 40 && !land; r++) { const x = (l.tx + 0.5 + Math.cos(a) * r) * T, y = (l.ty + 0.5 + Math.sin(a) * r) * T; if (!g.world.isWaterAt(x, y) && !g.world.blocked(x, y, 16)) land = { x: x + Math.cos(a) * 96, y: y + Math.sin(a) * 96 }; }
+    g.boat = null;
+    let offWater = 0, minD = 1e9;
+    for (let f = 0; f < 480; f++) { pl.wx = land.x; pl.wy = land.y; g.gameLoop(1); if (!g.world.isWaterAt(k.wx, k.wy)) offWater++; minD = Math.min(minD, Math.hypot(k.wx - pl.wx, k.wy - pl.wy)); }
+    const start = Math.hypot(k.home.x - land.x, k.home.y - land.y);
+    g.damageEnemy(k, 1e12, { noCrit: true });
+    for (let i = 0; i < 3; i++) g.gameLoop(1);
+    // sailing past again does not wake it
+    g.boat = { dockId: '__e2e' };
+    pl.wx = k.home.x + 500; pl.wy = k.home.y;
+    for (let i = 0; i < 70; i++) g.gameLoop(1);
+    const again = g.state.enemies.some((e) => e.kraken && !e.dead);
+    g.boat = null;
+    pl.wx = land.x; pl.wy = land.y; for (let i = 0; i < 3; i++) g.gameLoop(1);
+    return { offWater, closer: Math.round(start - minD), defeated: g.session.defeatedLairs[l.id] !== undefined, again, marker: g.map.extras().some((m) => m.icon === 'kraken'), codex: g.codex.monsters.includes('KRAKEN') };
+  });
+  check('the kraken chases to the waterline but never onto land', fight.offWater === 0 && fight.closer > 100, JSON.stringify(fight));
+  check('a slain kraken is remembered, leaves the map and the bestiary has it', fight.defeated && !fight.again && !fight.marker && fight.codex, JSON.stringify(fight));
+  const vk = await until(() => /sinks/.test(document.querySelector('[data-card="victory"]')?.innerText || ''));
+  check('the kraken falls with a victory card', vk);
+}
+
+if (want('hazards')) {
+  const lava = await ev(() => {
+    const g = window.game, src = g.overworld, W = g.world, T = 48, pl = g.state.player;
+    let spot = null;
+    for (let r = 40; r < 900 && !spot; r += 6) for (let a = 0; a < 64 && !spot; a++) {
+      const tx = Math.round(Math.cos(a / 64 * 6.283) * r), ty = Math.round(Math.sin(a / 64 * 6.283) * r);
+      if (src.surfaceNumAt(tx, ty, src.biomeAt(tx, ty)) !== 1) continue;
+      let w = 0; while (w < 30 && src.surfaceNumAt(tx + w, ty, src.biomeAt(tx + w, ty)) === 1) w++;
+      if (w >= 4) spot = { tx, ty, w };
+    }
+    if (!spot) return { spot };
+    let lx = spot.tx - 1; while (W.navCost(lx, spot.ty) !== 1) lx--;
+    let rx = spot.tx + spot.w; while (W.navCost(rx, spot.ty) !== 1) rx++;
+    for (const e of [...g.state.enemies]) e.dead = true; g.reap();
+    const hx = (rx + 2.5) * T, hy = (spot.ty + 0.5) * T;
+    pl.wx = hx; pl.wy = hy;
+    g.flow.update(hx, hy, true);
+    const costly = g.flow.costGrid.filter((c) => c >= 5).length;
+    const e = g.makeEnemy('WOLF', (lx - 1.5) * T, hy, { level: 1 });
+    e.health = e.maxHealth = 1e9;
+    window.__dev.engage(g, e);
+    const d0 = Math.hypot(e.wx - hx, e.wy - hy);
+    let onLava = 0, minD = 1e9;
+    for (let f = 0; f < 900; f++) {
+      pl.wx = hx; pl.wy = hy; g.gameLoop(1);
+      const sd = W.surfaceAtPos(e.wx, e.wy); if (sd && sd.id === 'lava') onLava++;
+      minD = Math.min(minD, Math.hypot(e.wx - hx, e.wy - hy));
+    }
+    e.dead = true; g.reap();
+    return { spot, costly, d0: Math.round(d0), minD: Math.round(minD), onLava };
+  });
+  check('the monsters\' flow field weighs lava as costly ground', !!lava.spot && lava.costly > 20, JSON.stringify(lava));
+  check('a monster walks around a lava field to reach the hero, never through it', lava.onLava === 0 && lava.minD < 250 && lava.d0 > 400, JSON.stringify(lava));
+}
+
+if (want('vaults')) {
+  // dungeon floors with a vault of each kind, found from the seeded world
+  const found = await ev(() => {
+    const g = window.game, src = g.overworld, mk = window.__dev.createInterior, out = {};
+    for (let r = 0; r < 60 && Object.keys(out).length < 3; r++) for (let cy = -r; cy <= r; cy++) for (let cx = -r; cx <= r; cx++) {
+      if (Math.max(Math.abs(cx), Math.abs(cy)) !== r) continue;
+      const q = src.poiForCell(cx, cy); if (!q || !q.dungeon) continue;
+      for (let f = 0; f < q.dungeon.floors; f++) { const it = mk(q, f); if (it.puzzle && !out[it.puzzle.kind]) out[it.puzzle.kind] = { poi: q, f }; }
+    }
+    return out;
+  });
+  check('the world has vaults of every kind: key, levers and plates', !!(found.key && found.levers && found.plates), Object.keys(found).join(','));
+  const solved = {};
+  for (const kind of ['key', 'levers', 'plates']) {
+    if (!found[kind]) continue;
+    const { poi, f } = found[kind];
+    await ev((poi) => window.game.enterPlace(poi), poi);
+    await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 15000 });
+    if (f > 0) await ev(([poi, f]) => { const g = window.game; g.clearWorldEntities(); g.loadFloor(poi, f); }, [poi, f]);
+    solved[kind] = await ev((kind) => {
+      const g = window.game, pz = g.interior.puzzle, pl = g.state.player;
+      for (const e of [...g.state.enemies]) e.dead = true; g.reap();
+      const go = (x, y) => { pl.wx = x; pl.wy = y; g.cam.x = x; g.cam.y = y; for (let i = 0; i < 3; i++) g.gameLoop(1); g.updateInteraction(); };
+      const at = (act) => g.target && g.target.act === act;
+      const toGate = () => { for (const [dx, dy] of [[0, 60], [0, -60], [60, 0], [-60, 0]]) { go(pz.gate.x + dx, pz.gate.y + dy); if (at('gate')) return true; } return false; };
+      const gx = Math.floor(pz.gate.tiles[0] % g.interior.w), gy = Math.floor(pz.gate.tiles[0] / g.interior.w);
+      const shut = { body: g.world.blocked(pz.gate.x, pz.gate.y, 12), nav: g.world.navCost(gx, gy) === 0 };
+      toGate();
+      const lockedText = g.target && g.target.text;
+      g.interact();
+      const stillShut = !g.vaults.status().open;
+      let steps = 0;
+      if (kind === 'key') { go(pz.key.x, pz.key.y + 20); if (at('key')) { g.interact(); steps++; } if (toGate()) { g.interact(); steps++; } }
+      if (kind === 'levers') for (const l of pz.levers) { go(l.x, l.y + 20); if (at('lever')) { g.interact(); steps++; } }
+      if (kind === 'plates') {
+        // one plate alone fades when its time runs out
+        go(pz.plates[0].x, pz.plates[0].y);
+        const one = g.vaults.status().lit;
+        go(pz.plates[0].x + 300, pz.plates[0].y + 300);
+        for (let i = 0; i < pz.window * 60 + 30; i++) g.gameLoop(1);
+        steps = one === 1 && g.vaults.status().lit === 0 ? 1 : 0;
+        for (const q of pz.plates) go(q.x, q.y);
+      }
+      for (let i = 0; i < 5; i++) g.gameLoop(1);
+      const st = g.vaults.status();
+      const opened = { body: !g.world.blocked(pz.gate.x, pz.gate.y, 12), nav: g.world.navCost(gx, gy) > 0 };
+      // the chest inside pays out
+      const coins = () => g.state.gems.filter((x) => x.kind === 'coin').length;
+      const c0 = coins();
+      go(pz.chest.x, pz.chest.y + 30);
+      const chestTarget = g.target && g.target.kind === 'chest';
+      g.interact();
+      const it = g.interactables.find((x) => x.idx === 'vault');
+      return { lockedText, stillShut, shut, steps, st, opened, chestTarget, chestOpened: !!(it && it.opened), coins: coins() - c0 };
+    }, kind);
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/vault-${kind}.png` });
+    const r = solved[kind];
+    check(`a ${kind} vault: the shut gate blocks bodies and the flow field`, r.shut.body && r.shut.nav && r.stillShut && !!r.lockedText, JSON.stringify(r));
+    check(`a ${kind} vault opens when its puzzle is solved, and its chest pays`, r.st.open && r.opened.body && r.opened.nav && r.chestTarget && r.chestOpened && r.coins >= 6 && r.steps > 0, JSON.stringify(r));
+    await ev(() => window.game.exitPlace());
+    await page.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 15000 });
+  }
+  // an open vault and a slain kraken survive a reload
+  await ev(async () => { await window.game.requestSave('test', true); });
+  await page.reload();
+  await page.waitForFunction(() => !!window.game);
+  await page.waitForTimeout(1000);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
+  await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; });
+  const kept = {};
+  for (const kind of Object.keys(solved)) {
+    const { poi, f } = found[kind];
+    await ev((poi) => window.game.enterPlace(poi), poi);
+    await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 15000 });
+    if (f > 0) await ev(([poi, f]) => { const g = window.game; g.clearWorldEntities(); g.loadFloor(poi, f); }, [poi, f]);
+    kept[kind] = await ev(() => {
+      const g = window.game, pz = g.interior.puzzle, it = g.interactables.find((x) => x.idx === 'vault');
+      return { open: g.vaults.status().open, free: !g.world.blocked(pz.gate.x, pz.gate.y, 12), chest: !!(it && it.opened) };
+    });
+    await ev(() => window.game.exitPlace());
+    await page.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 15000 });
+  }
+  check('open vaults and emptied vault chests survive a reload', Object.values(kept).length === 3 && Object.values(kept).every((k) => k.open && k.free && k.chest), JSON.stringify(kept));
+  const krakenKept = await ev(() => Object.keys(window.game.session.defeatedLairs).some((id) => id.startsWith('kraken:')));
+  if (want('kraken')) check('a slain kraken stays slain after a reload', krakenKept);
+}
+
 // ---- title screen: Load, Options and Credits; quit to the title and continue
 if (want('front')) {
   await page.keyboard.press('Escape');

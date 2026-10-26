@@ -22,7 +22,7 @@ import { BOAT_SPEED, TOWER_DEFS } from '../core/world/towers';
 import { NODES, isNode, nodeId, rollYield } from '../core/economy/gather';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
-import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet } from '../core/loot/loot';
+import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet, dungeonAffinity, dungeonPower } from '../core/loot/loot';
 import { STOCK_EPOCH_SECONDS, epochOf, innCost, rumorFor, stockFor } from '../core/economy/shop';
 import { createBoard, createNpc } from '../render/npcArt';
 import { AudioManager } from './audio';
@@ -56,6 +56,7 @@ import { QuestSystem } from './quests';
 import { TipSystem } from './tips';
 import { TrainingDummy } from './dummy';
 import { StoryDirector } from './story';
+import { VaultSystem } from './vaults';
 import { isTyping } from '../ui/nav';
 import { normKey } from '../core/input/bindings';
 import { access, applyAccess, loadAccess } from './access';
@@ -155,6 +156,7 @@ class Game {
         this.tips = new TipSystem(this);
         this.dummy = new TrainingDummy(this);
         this.story = new StoryDirector(this);
+        this.vaults = new VaultSystem(this);
         this.events.on('QuestCompleted', (e) => { if (e.id === 'm6_sovereign') this.story.queueEnding(); });
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.gemStash = null;
@@ -540,6 +542,7 @@ class Game {
         this.critters.reset();
         this.hazards.reset();
         this.dungeons.clearFeatures();
+        this.vaults.clear();
         this.spells.clearProjectiles();
         this.fx.clear();
         if (this.ambience) this.ambience.clear();
@@ -620,6 +623,7 @@ class Game {
             const out = [];
             for (const r of this.towers.recs) out.push({ tx: r.tx, ty: r.ty, icon: r.built ? TOWER_DEFS[r.kind].icon : 'site', label: r.built ? '' : 'Site', color: '#ffd070' });
             for (const c of this.sea.known.values()) if (!this.sea.isOpened(c.id) && this.fog.isRevealed(c.tx, c.ty)) out.push({ tx: c.tx, ty: c.ty, icon: 'x-mark', label: 'Treasure', color: '#ffd84a' });
+            for (const l of this.sea.krakensSeen.values()) if (!this.sea.krakenDefeated(l.id)) out.push({ tx: l.tx, ty: l.ty, icon: 'kraken', label: 'Kraken', color: '#ff7a9a' });
             for (const m of this.quests.markers()) out.push(m);
             return out;
         };
@@ -829,6 +833,7 @@ class Game {
         });
         this.spells.emitLights(L);
         this.dungeons.emitLights(L);
+        this.vaults.emitLights(L);
         for (const g of this.state.gems) if (g.kind === 'gem') L.add({ x: g.wx, y: g.wy, z: 12, r: 46, color: EntityManager.gemTier(g.value).color, i: 0.6 });
         for (const it of this.interactables) {
             if (it.kind === 'chest' && !it.opened) L.add({ x: it.x, y: it.y, z: 16, r: 90, color: 0xffd060, i: 0.55 });
@@ -886,6 +891,7 @@ class Game {
         this.towers.update(delta);
         this.sea.update(delta);
         this.dungeons.update(delta);
+        this.vaults.update(delta);
         this.quests.update(delta);
         this.tips.update(delta);
         this.story.update();
@@ -1225,6 +1231,7 @@ class Game {
         this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss, group: this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.group : this.zoneGroup, dungeon: !!e.dungeonBoss });
         if (e.guardian) this.dungeons.guardianDown();
         if (e.dungeonBoss) this.dungeons.bossDown(e);
+        if (e.kraken) this.sea.krakenDown(e);
         this.popRuntime.onKill(e);
         this.spells.onKill(e, spell);
         this.dropLoot(e);
@@ -1371,6 +1378,7 @@ class Game {
             if (src.altar) consider({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80);
             if (src.floor > 0) consider({ kind: 'up', text: '[E]  Climb back up' }, src.exit.x, src.exit.y, 74);
             else consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
+            this.vaults.considerTargets(consider);
             if (src.stairsDown) {
                 const left = this.dungeons.guardiansLeft();
                 consider({ kind: 'down', sealed: left > 0, text: left > 0 ? `The way down is sealed · ${left} guardian${left > 1 ? 's' : ''} left` : '[E]  Descend' }, src.stairsDown.x, src.stairsDown.y, 80);
@@ -1407,6 +1415,7 @@ class Game {
             case 'up': this.changeFloor(-1); break;
             case 'down': if (t.sealed) { this.audio.play('deny'); this.ui.toast('Defeat the guardians first: the seal holds until they fall'); } else this.changeFloor(1); break;
             case 'chest': this.openChest(t.it); break;
+            case 'vault': this.vaults.interact(t); break;
             case 'gather': this.gatherHit(t.node); break;
             case 'sign': this.readSign(t.sign); break;
             case 'site': case 'tower': this.towers.interact(t); break;
@@ -1565,6 +1574,7 @@ class Game {
             else if (!place.bossChestOpened) this.dungeons.spawnBossChest(src.boss.x, src.boss.y);
         }
         src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
+        this.vaults.setup(src, st);
     }
 
     // Chop a tree / mine a rock: a few strikes, then it is gone for good (saved as a world delta).
@@ -1735,15 +1745,23 @@ class Game {
         this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== 'chest');
         this.map.dirty = true;
         if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); return; }
-        this.grantLoot(it.big ? 1 : 0);
+        if (it.idx === 'vault') { this.vaults.openChest(it); return; }
+        this.grantLoot(it.big ? 1 : 0, this.chestLootOpts());
+    }
+
+    /** Chests inside a dungeon favour its region's schools and pay better the deeper they are. */
+    chestLootOpts() {
+        const poi = this.mode === 'interior' ? this.interiorPoi : null;
+        if (!poi || !poi.dungeon) return {};
+        return { affinity: dungeonAffinity(poi.group, poi.dungeon.realm), bonus: dungeonPower(this.floor || 0) };
     }
 
     // Chests and altars hand out spells and runes (never blocks play).
-    grantLoot(tier) {
+    grantLoot(tier, opts = {}) {
         const rand = Math.random;
         const found = [];
         const roll = (power) => {
-            const d = rollSkillDrop(rand, power);
+            const d = rollSkillDrop(rand, power + (opts.bonus || 0), opts.affinity || []);
             if (d.kind === 'spell') { this.spells.addSpell(d.tpl); found.push(TEMPLATES[d.tpl].name); }
             else { this.spells.addRune(d.id); found.push(`${RUNES[d.id].name} rune`); }
         };
@@ -1768,7 +1786,9 @@ class Game {
     }
 
     grantSkill(power, loud = true) {
-        const d = rollSkillDrop(Math.random, power);
+        // inside a dungeon, kills follow its loot too (its schools; deeper floors give rarer runes)
+        const o = this.chestLootOpts();
+        const d = rollSkillDrop(Math.random, power + (o.bonus || 0), o.affinity || []);
         if (d.kind === 'spell') {
             this.spells.addSpell(d.tpl);
             this.ui.banner(`NEW SPELL: ${TEMPLATES[d.tpl].name.toUpperCase()}`, 0xb9a5ff, TEMPLATES[d.tpl].icon);

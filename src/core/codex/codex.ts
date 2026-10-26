@@ -16,6 +16,11 @@ const BEHAVIOUR: Record<string, string> = {
   boss: 'A warlord: dashes, slams, volleys and summons, and grows enraged below half health.'
 };
 
+/** Monsters whose habits differ from the rest of their kind. */
+const BEHAVIOUR_OF: Record<string, string> = {
+  KRAKEN: 'Rises from the open sea when a boat comes near: slams with its tentacles, sprays ink and calls up jellyfish. It never leaves the water.'
+};
+
 export interface BestiaryEntry { type: string; name: string; behaviour: string; health: number; damage: number; speed: string; flying: boolean; armor: number; boss: boolean }
 
 export function bestiaryEntry(type: string): BestiaryEntry | null {
@@ -23,7 +28,7 @@ export function bestiaryEntry(type: string): BestiaryEntry | null {
   if (!t) return null;
   const kind = t.ai?.kind ?? 'chase';
   return {
-    type, name: t.name, behaviour: BEHAVIOUR[kind] ?? BEHAVIOUR.chase,
+    type, name: t.name, behaviour: BEHAVIOUR_OF[type] ?? BEHAVIOUR[kind] ?? BEHAVIOUR.chase,
     health: t.health, damage: t.damage,
     speed: t.speed >= 2.3 ? 'fast' : t.speed >= 1.4 ? 'steady' : 'slow',
     flying: !!t.flying, armor: t.armor || 0, boss: kind === 'boss'

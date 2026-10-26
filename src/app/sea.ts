@@ -4,7 +4,8 @@ import { WORLD_CONFIG } from '../core/config';
 import { engage } from '../core/ai/ai';
 import { BIOME, isWaterBiome } from '../core/world/biomes';
 import { BOAT_SPEED, CACHE_CELL, boatBlocked, boatSpot, cacheForCell } from '../core/world/towers';
-import { isSeaDungeonCell } from '../core/world/dungeons';
+import { KRAKEN_CELL, KRAKEN_LEVEL_BONUS, isSeaDungeonCell, krakenForCell } from '../core/world/dungeons';
+import { dungeonAffinity } from '../core/loot/loot';
 import { createBoat } from '../render/boatArt';
 import { EntityManager } from '../render/entities';
 import { ui as uiBridge } from '../ui/bridge';
@@ -12,6 +13,8 @@ import { ui as uiBridge } from '../ui/bridge';
 const T = WORLD_CONFIG.tile;
 const TILT = WORLD_CONFIG.tilt;
 const SHOW = T * WORLD_CONFIG.chunkTiles * 3;
+const KRAKEN_WAKE = 650;              // a boat this close to a lair wakes its kraken
+const KRAKEN_SINK = 1600;             // and this far away lets it sink again (unless it is still fighting)
 
 /** Docks give each shore a boat. Boats cross deep water; islands hide treasure; the sea has its own monsters. */
 export class SeaSystem {
@@ -21,6 +24,8 @@ export class SeaSystem {
         this.caches = new Map();         // cache id -> { cache, sprite }
         this.cacheCells = new Map();
         this.known = new Map();          // caches the hero has come near (shown on the map)
+        this.krakenCells = new Map();    // cell key -> lair or null
+        this.krakensSeen = new Map();    // lairs the hero has sailed near (shown on the map)
         this.timer = 0;
         this.spawnTimer = 0;
     }
@@ -29,6 +34,7 @@ export class SeaSystem {
         for (const b of this.boats.values()) this.destroyBoat(b);
         for (const c of this.caches.values()) c.sprite.destroy();
         this.boats.clear(); this.caches.clear(); this.cacheCells.clear(); this.known.clear();
+        this.krakenCells.clear(); this.krakensSeen.clear();
         this.timer = this.spawnTimer = 0;
     }
 
@@ -185,6 +191,7 @@ export class SeaSystem {
         if (this.timer <= 0) {
             this.timer = 30;
             this.refresh();
+            this.watchKrakens();
             const ptx = Math.floor(p.wx / T), pty = Math.floor(p.wy / T);
             for (const c of this.cachesNear(ptx, pty, 30)) {
                 if (this.isOpened(c.id) || this.caches.has(c.id)) continue;
@@ -226,6 +233,69 @@ export class SeaSystem {
             }
         }
         if (g.boat) this.spawnSeaMonsters(delta);
+    }
+
+    // ----------------------------------------------------------- kraken
+    krakensNear(tx, ty, r) {
+        const g = this.game;
+        const out = [];
+        const c0x = Math.floor((tx - r) / KRAKEN_CELL), c1x = Math.floor((tx + r) / KRAKEN_CELL);
+        const c0y = Math.floor((ty - r) / KRAKEN_CELL), c1y = Math.floor((ty + r) / KRAKEN_CELL);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            const key = `${cx},${cy}`;
+            if (!this.krakenCells.has(key)) this.krakenCells.set(key, krakenForCell(g.overworld.seed, cx, cy, (x, y) => g.overworld.biomeAt(x, y)));
+            const l = this.krakenCells.get(key);
+            if (l) out.push(l);
+        }
+        return out;
+    }
+
+    krakenDefeated(id) { return this.game.session.defeatedLairs[id] !== undefined; }
+
+    /** sailing close to a lair wakes its kraken; sailing far away lets it sink back down */
+    watchKrakens() {
+        const g = this.game;
+        const p = g.state.player;
+        const ptx = Math.floor(p.wx / T), pty = Math.floor(p.wy / T);
+        const live = new Map();
+        for (const e of g.state.enemies) if (e.kraken && !e.dead) live.set(e.kraken, e);
+        for (const l of this.krakensNear(ptx, pty, 40)) {
+            if (this.krakenDefeated(l.id)) continue;
+            const x = (l.tx + 0.5) * T, y = (l.ty + 0.5) * T;
+            const d = Math.hypot(x - p.wx, y - p.wy);
+            if (d < SHOW && g.fog.isRevealed(l.tx, l.ty)) this.krakensSeen.set(l.id, l);
+            if (g.boat && d < KRAKEN_WAKE && !live.has(l.id)) this.rise(l);
+        }
+        for (const [id, e] of live) {
+            if (Math.hypot(e.home.x - p.wx, e.home.y - p.wy) > KRAKEN_SINK && e.shell !== 'engaged') { e.dead = true; e.silent = true; }
+        }
+    }
+
+    rise(l) {
+        const g = this.game;
+        const x = (l.tx + 0.5) * T, y = (l.ty + 0.5) * T;
+        const level = Math.max(1, g.overworld.levelAt(l.tx, l.ty)) + KRAKEN_LEVEL_BONUS;
+        const e = g.makeEnemy('KRAKEN', x, y, { level, home: { x, y }, leash: 900 });
+        e.kraken = l.id;
+        e.group = 'shore';
+        this.krakensSeen.set(l.id, l);
+        engage(g, e, false);
+        g.fx.burst(x, y, 30, 0xdff4ff, 40, 4, { size: 1, life: 40, up: 4, glow: true });
+        g.fx.shockwave(x, y, 160, 0xdff4ff, 30, 6);
+        g.fx.addShake(10);
+        g.audio.play('splash', { x, y });
+        g.map.dirty = true;
+        return e;
+    }
+
+    /** the kraken is slain: remembered for good, and it leaves the sea's riches behind */
+    krakenDown(e) {
+        const g = this.game;
+        g.session.defeatedLairs[e.kraken] = g.state.time;
+        g.ui.banner('THE KRAKEN SINKS', 0x9ae8ff);
+        g.grantLoot(3, { affinity: dungeonAffinity('shore', 'sea'), bonus: 1 });
+        for (let i = 0; i < 12; i++) g.dropGem(e.wx + (Math.random() - 0.5) * 160, e.wy + (Math.random() - 0.5) * 110, Math.round(30 + e.level * 8), 'coin');
+        g.map.dirty = true;
     }
 
     spawnSeaMonsters(delta) {

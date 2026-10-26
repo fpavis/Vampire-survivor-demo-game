@@ -1144,6 +1144,72 @@ function yeti(body, t, r) {
     };
 }
 
+/** The sea boss: a kraken's mantle risen out of the deep, ringed by foam, six tentacles thrashing around it. */
+function kraken(body, t, r) {
+    const c = t.color, dark = shade(c, 0.55), light = shade(c, 1.35), water = 0x1f5a85;
+    // [x where it leaves the water, height, which way it curls]: the first three stand behind the mantle
+    const ARMS = [[-46, 64, -1], [-16, 84, 1], [30, 76, 1], [-70, 52, -1], [62, 58, 1], [-38, 38, -1]];
+    const hole = new PIXI.Graphics();
+    hole.beginFill(0x0c2a44, 0.6); hole.drawEllipse(0, 0, 78, 24); hole.endFill();
+    const back = new PIXI.Graphics(), front = new PIXI.Graphics();
+    const arm = (g, x0, h, side, wave, lift) => {
+        const tip = x0 + side * (16 + wave * 10), top = -h * lift;
+        const path = () => { g.moveTo(x0, 2); g.bezierCurveTo(x0 - side * 10, top * 0.45, tip - side * 18, top * 0.9, tip, top); g.quadraticCurveTo(tip + side * 12, top - 6, tip + side * 6, top + 10); };
+        g.lineStyle(13, INK, 0.92); path();
+        g.lineStyle(10, c, 1); path();
+        g.lineStyle(3, light, 0.7); g.moveTo(x0 + side * 3, -4); g.bezierCurveTo(x0 - side * 6, top * 0.45, tip - side * 14, top * 0.9, tip, top + 3);
+        g.lineStyle(0);
+        for (let k = 1; k <= 3; k++) {
+            const f = k / 4.2;
+            g.beginFill(0xf0d8e0, 0.9); g.drawCircle(x0 + (tip - x0) * f - side * 4, top * f * 0.95, 2.1 - k * 0.3); g.endFill();
+        }
+    };
+    const draw = (phase, lift) => {
+        back.clear(); front.clear();
+        ARMS.forEach(([x, h, side], i) => arm(i < 3 ? back : front, x, h, side, Math.sin(phase * 1.3 + i * 1.7), lift * (0.85 + 0.15 * Math.sin(phase * 0.9 + i))));
+    };
+    const mantle = new PIXI.Container();
+    const m = new PIXI.Graphics();
+    iell(m, 0, -50, 40, 48, c, 2);
+    m.beginFill(light, 0.45); m.drawEllipse(-12, -76, 16, 12); m.endFill();
+    for (const [x, y, rr] of [[18, -78, 5], [26, -60, 3.5], [-24, -58, 4], [10, -92, 3]]) { m.beginFill(dark, 0.55); m.drawCircle(x, y, rr); m.endFill(); }
+    // heavy brows over two great eyes
+    poly(m, [-30, -58, -5, -48, -7, -42, -29, -50], dark); poly(m, [30, -58, 5, -48, 7, -42, 29, -50], dark);
+    const eyes = new PIXI.Graphics();
+    for (const x of [-17, 17]) {
+        icirc(eyes, x, -36, 9, 0xffd84a, 1.6);
+        eyes.beginFill(0x140810); eyes.drawEllipse(x, -36, 2.6, 7); eyes.endFill();
+        eyes.beginFill(0xffffff, 0.8); eyes.drawCircle(x - 3, -39, 1.8); eyes.endFill();
+    }
+    const eyeGlow = new PIXI.Container();
+    for (const x of [-17, 17]) { const gl = glowCircle(16, 0xff4a3a, 0.5); gl.position.set(x, -36); eyeGlow.addChild(gl); }
+    eyeGlow.alpha = 0;
+    mantle.addChild(m, eyeGlow, eyes);
+    // the sea closes over the lower mantle; a ring of foam marks the line
+    const sea = new PIXI.Graphics();
+    sea.beginFill(water, 0.92); sea.drawEllipse(0, -4, 48, 13); sea.endFill();
+    const foam = new PIXI.Graphics();
+    body.addChild(hole, back, mantle, sea, front, foam);
+    draw(0, 1);
+    return {
+        height: 118,
+        anim: (e) => {
+            const s = e.ai && e.ai.state, wind = s === 'windup';
+            const lift = wind ? 1.25 : s === 'recover' ? 0.7 : 1;
+            draw(e.phase, lift);
+            mantle.y = Math.sin(e.phase * 0.6) * 3 - (wind ? 6 : 0);
+            mantle.scale.y = wind ? 1.06 : 1;
+            eyeGlow.alpha = wind ? 0.7 + Math.sin(e.phase * 6) * 0.3 : 0;
+            foam.clear();
+            const a = 0.55 + Math.sin(e.phase * 1.4) * 0.15;
+            foam.lineStyle(3, 0xffffff, a); foam.drawEllipse(0, -2, 52 + Math.sin(e.phase) * 3, 14);
+            foam.lineStyle(2, 0xffffff, a * 0.55); foam.drawEllipse(0, 2, 74 + Math.sin(e.phase * 0.8) * 4, 22);
+            foam.lineStyle(0);
+            windupShake(e, body);
+        }
+    };
+}
+
 export const ENEMY_ART = {
     thornback, wight, mantis, thornwitch, sandworm, djinn, siren, lurker, harpy, yeti,
     dummy,
@@ -1156,5 +1222,5 @@ export const ENEMY_ART = {
     gull, jelly, bat,
     golem: (b, t, r) => golem(b, t, r),
     titan: (b, t, r) => golem(b, t, r, { eye: 0xff3a3a, crystals: true }),
-    troll, skeleton, ghost
+    troll, skeleton, ghost, kraken
 };

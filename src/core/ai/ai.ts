@@ -1,7 +1,7 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import { WORLD_CONFIG, ENEMY_TYPES, perceptionOf } from '../config';
 import { BIOME } from '../world/biomes';
-import { lineOfSight } from '../world/nav';
+import { rayCast, RAY_BLOCKED, RAY_CLEAR } from '../world/nav';
 import { EntityManager } from '../../render/entities';
 
 const T = WORLD_CONFIG.tile;
@@ -58,35 +58,39 @@ const nearBuf = [];
 // ---------------------------------------------------------------------------
 // Navigation helpers: line-of-sight raycast, flow field and whisker avoidance
 // ---------------------------------------------------------------------------
+// e.los: nothing hard in between (it can see and shoot); e.clear: the straight walk crosses no hazard either
 function refreshLOS(game, e, tx, ty, d) {
     if (game.frame >= e.losAt) {
-        e.los = d < 80 || lineOfSight(game.world, e.wx, e.wy, tx, ty);
+        const ray = d < 80 ? RAY_CLEAR : rayCast(game.world, e.wx, e.wy, tx, ty);
+        e.los = ray !== RAY_BLOCKED;
+        e.clear = ray === RAY_CLEAR;
         e.losAt = game.frame + 6 + (e.uid % 5);
     }
 }
 
-// Is the point ahead of the enemy free? Two short probes (a "whisker")
-function probe(game, e, dx, dy, look) {
+// Is the point ahead of the enemy free? Two short probes (a "whisker"). onRoute: the flow field chose this
+// way, already weighing any hazard on it against the detour, so only hard obstacles count.
+function probe(game, e, dx, dy, look, onRoute = false) {
     const r = e.radius * 0.8;
     if (game.world.blocked(e.wx + dx * look * 0.5, e.wy + dy * look * 0.5, r) || game.world.blocked(e.wx + dx * look, e.wy + dy * look, r)) return false;
     // ground monsters steer around lava, swamp and quicksand unless they are immune to it
-    if (game.surfaces && !e.flying && (game.surfaces.hazardousFor(e, e.wx + dx * look, e.wy + dy * look) || game.surfaces.hazardousFor(e, e.wx + dx * look * 0.5, e.wy + dy * look * 0.5))) {
+    if (game.surfaces && !e.flying && !onRoute && (game.surfaces.hazardousFor(e, e.wx + dx * look, e.wy + dy * look) || game.surfaces.hazardousFor(e, e.wx + dx * look * 0.5, e.wy + dy * look * 0.5))) {
         // but never refuse to move while already standing in it: that would trap them
         return game.surfaces.hazardousFor(e, e.wx, e.wy);
     }
     return true;
 }
 
-function avoid(game, e, out) {
+function avoid(game, e, out, onRoute = false) {
     const look = e.radius + 36;
-    if (probe(game, e, out.x, out.y, look)) return;
+    if (probe(game, e, out.x, out.y, look, onRoute)) return;
     const a0 = Math.atan2(out.y, out.x);
     const s = e.avoidSign;
     const offsets = [0.6, -0.6, 1.1, -1.1, 1.7, -1.7, 2.4, -2.4];
     for (const o of offsets) {
         const a = a0 + o * s;
         const cx = Math.cos(a), cy = Math.sin(a);
-        if (probe(game, e, cx, cy, look)) {
+        if (probe(game, e, cx, cy, look, onRoute)) {
             out.x = cx; out.y = cy;
             e.avoidSign = (o * s) > 0 ? s : -s;
             return;
@@ -103,7 +107,8 @@ function pathDir(game, e, tx, ty, out) {
     if (e.flying || e.phasing) return out;
 
     refreshLOS(game, e, tx, ty, d);
-    if (!e.los && d < 1500 && game.flow.direction(e.wx, e.wy, flowTmp)) {
+    const onRoute = !e.clear && d < 1500 && game.flow.direction(e.wx, e.wy, flowTmp);
+    if (onRoute) {
         out.x = flowTmp.x;
         out.y = flowTmp.y;
     }
@@ -113,7 +118,7 @@ function pathDir(game, e, tx, ty, out) {
         out.x = Math.cos(a);
         out.y = Math.sin(a);
     }
-    avoid(game, e, out);
+    avoid(game, e, out, onRoute && !e.nudge);
     return out;
 }
 
@@ -133,8 +138,18 @@ function steer(game, e, dx, dy, speed, delta, tracked = true) {
     const decay = Math.pow(0.86, delta);
     e.kvx *= decay;
     e.kvy *= decay;
-    if (e.flying || e.phasing) { e.wx += vx; e.wy += vy; } else game.world.tryMove(e, vx, vy, e.radius * 0.8);
+    if (e.waterBound) swim(game, e, vx, vy);
+    else if (e.flying || e.phasing) { e.wx += vx; e.wy += vy; } else game.world.tryMove(e, vx, vy, e.radius * 0.8);
     if (tracked && speed > 0) e.wantsMove = true;
+}
+
+// sea creatures go anywhere over water and never onto land: a move that would reach land slides along
+// the shore on one axis, or is cancelled
+function swim(game, e, vx, vy) {
+    const w = game.world;
+    if (w.isWaterAt(e.wx + vx, e.wy + vy)) { e.wx += vx; e.wy += vy; }
+    else if (w.isWaterAt(e.wx + vx, e.wy)) e.wx += vx;
+    else if (w.isWaterAt(e.wx, e.wy + vy)) e.wy += vy;
 }
 
 // idle: only knockback is applied
@@ -774,7 +789,7 @@ function canSee(game, e, perc) {
 
 function initSteering(game, e) {
     e.avoidSign = Math.random() < 0.5 ? 1 : -1;
-    e.losAt = 0; e.los = true; e.nudge = 0; e.nudgeA = 0;
+    e.losAt = 0; e.los = true; e.clear = true; e.nudge = 0; e.nudgeA = 0;
     e.stuckAt = game.frame + 20; e.sx = e.wx; e.sy = e.wy; e.wantsMove = false;
 }
 
@@ -898,7 +913,8 @@ export function updateEnemy(game, e, delta) {
         const d = Math.hypot(ox, oy) || 0.01;
         if (d >= min) continue;
         const push = (min - d) * 0.18 * delta;
-        if (e.flying || e.phasing) { e.wx += ox / d * push; e.wy += oy / d * push; }
+        if (e.waterBound) swim(game, e, ox / d * push, oy / d * push);
+        else if (e.flying || e.phasing) { e.wx += ox / d * push; e.wy += oy / d * push; }
         else game.world.tryMove(e, ox / d * push, oy / d * push, e.radius * 0.8);
     }
 

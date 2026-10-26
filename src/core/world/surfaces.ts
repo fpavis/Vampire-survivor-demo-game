@@ -38,6 +38,11 @@ export const SURFACE_IDS: SurfaceId[] = ['lava', 'swamp', 'mud', 'ice', 'quicksa
 export const SURFACE_NUM: Record<SurfaceId, number> = Object.fromEntries(SURFACE_IDS.map((s, i) => [s, i + 1])) as Record<SurfaceId, number>;
 export const surfaceByNum = (n: number): SurfaceDef | null => (n > 0 ? SURFACES[SURFACE_IDS[n - 1]] : null);
 
+/** What a tile of each surface costs a walking monster in the flow field (plain ground costs 1). */
+export const NAV_COST: Partial<Record<SurfaceId, number>> = { lava: 8, quicksand: 6, swamp: 5, mud: 2 };
+/** NAV_COST by the numeric id stored in chunk grids (index 0 = no surface). */
+export const NAV_COST_BY_NUM: Uint8Array = Uint8Array.from([1, ...SURFACE_IDS.map((s) => NAV_COST[s] ?? 1)]);
+
 /** Enemies that shrug off a surface (by enemy type key). Flying enemies ignore every surface. */
 export const IMMUNITY: Record<string, SurfaceId[]> = {
   GOLEM: ['lava', 'quicksand'], STONE_TITAN: ['lava', 'quicksand', 'swamp'], TROLL: ['swamp', 'mud'],

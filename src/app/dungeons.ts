@@ -151,7 +151,7 @@ export class DungeonSystem {
     openBossChest(it) {
         const g = this.game, poi = g.interiorPoi;
         g.visited[poi.id].bossChestOpened = true;
-        g.grantLoot(bossChestTier(poi.dungeon.floors));
+        g.grantLoot(bossChestTier(poi.dungeon.floors), g.chestLootOpts());
         const lvl = this.levelOf(poi, poi.dungeon.floors - 1);
         for (let i = 0; i < 10; i++) g.dropGem(it.x + (Math.random() - 0.5) * 120, it.y + 20 + Math.random() * 40, Math.round(20 + lvl * 5), 'coin');
         g.requestSave('dungeon', true);

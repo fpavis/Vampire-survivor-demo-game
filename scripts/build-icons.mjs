@@ -65,6 +65,8 @@ const MANIFEST = {
   heart: ['mdi:heart', 0xff4a5a], gem: ['gi:cut-diamond', 0x7be0ff], upgrade: ['gi:upgrade', 0xffd84a], hand: ['gi:hand', 0xf0d0a0],
   backpack: ['gi:knapsack', 0xd8a868], door: ['gi:door', 0xc8915a], road: ['gi:horizon-road', 0xc8a070], torch: ['gi:torch', 0xffaa4a],
   hammer: ['gi:hammer-nails', 0xd0b080], journal: ['gi:open-book', 0x9be7ff], codex: ['gi:spell-book', 0xc8a0ff],
+  'vault-key': ['gi:skeleton-key', 0xffd84a], lever: ['gi:lever', 0xc8b090], 'vault-gate': ['gi:gate', 0xb8b0a0],
+  plate: ['gi:vortex', 0x7ad8ff], kraken: ['gi:giant-squid', 0x6a4ab8],
   dummy: ['gi:scarecrow', 0xd8b070], map: ['gi:treasure-map', 0xe8d090], scroll: ['gi:scroll-unfurled', 0xe8d090],
   chest: ['gi:open-treasure-chest', 0xffc84a], swords: ['gi:crossed-swords', 0xe0e6f0], fleur: ['gi:fleur-de-lys', 0xf3d08a],
   warning: ['gi:hazard-sign', 0xff5a5a], sail: ['gi:sailboat', 0x9bd0ff], flag: ['gi:flying-flag', 0xff6a5a], key: ['gi:key', 0xffd84a],

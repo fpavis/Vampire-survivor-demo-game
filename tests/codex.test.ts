@@ -111,3 +111,40 @@ describe('healer lines', () => {
     expect(healerLine(well, 0, -1)).toBeTruthy();
   });
 });
+
+import { rollSkillDrop, TEMPLATES } from '../src/core/spells/spells';
+import { dungeonAffinity, dungeonPower, LOOT_AFFINITY } from '../src/core/loot/loot';
+import { makeRng } from '../src/core/world/noise';
+
+describe('dungeon-weighted loot', () => {
+  const schoolShare = (affinity: string[], school: string) => {
+    const rand = makeRng(42);
+    let spells = 0, hits = 0;
+    for (let i = 0; i < 20000; i++) {
+      const d = rollSkillDrop(rand, 1, affinity);
+      if (d.kind === 'spell') { spells++; if (TEMPLATES[d.tpl].core === school) hits++; }
+    }
+    return hits / spells;
+  };
+  it('favours the schools of the dungeon\'s region', () => {
+    expect(schoolShare(['fire'], 'fire')).toBeGreaterThan(schoolShare([], 'fire') * 1.8);
+    expect(schoolShare(['frost', 'lightning'], 'frost')).toBeGreaterThan(schoolShare([], 'frost') * 1.5);
+  });
+  it('uses the realm for plateau and sea dungeons, the region otherwise', () => {
+    expect(dungeonAffinity('desert', 'land')).toEqual(LOOT_AFFINITY.desert);
+    expect(dungeonAffinity('mountain', 'plateau')).toEqual(LOOT_AFFINITY.plateau);
+    expect(dungeonAffinity('shore', 'sea')).toEqual(LOOT_AFFINITY.sea);
+    expect(dungeonAffinity('nowhere')).toEqual([]);
+    for (const list of Object.values(LOOT_AFFINITY)) for (const s of list) expect(Object.values(TEMPLATES).some((t) => t.core === s), s).toBe(true);
+  });
+  it('gives rarer runes deeper down', () => {
+    const rare = (bonus: number) => {
+      const rand = makeRng(7); let r = 0, n = 0;
+      for (let i = 0; i < 20000; i++) { const d = rollSkillDrop(rand, 1 + bonus); if (d.kind === 'rune') { n++; if (d.id === 'spark' || d.id === 'echo' || d.id === 'splinter' || d.id === 'resonance' || d.id === 'vampiric' || d.id === 'aftershock') r++; } }
+      return r / n;
+    };
+    expect(dungeonPower(0)).toBe(0);
+    expect(dungeonPower(3)).toBe(1.5);
+    expect(rare(dungeonPower(3))).toBeGreaterThan(rare(0));
+  });
+});
