@@ -238,6 +238,17 @@ export class World {
         return id;
     }
 
+    // every harvestable decor item within range (click to interact chooses among them)
+    nodesNear(x, y, range, isNode) {
+        const out = [];
+        const c0x = Math.floor((x - range) / CHUNK_SIZE), c1x = Math.floor((x + range) / CHUNK_SIZE);
+        const c0y = Math.floor((y - range) / CHUNK_SIZE), c1y = Math.floor((y + range) / CHUNK_SIZE);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            for (const d of this.getChunk(cx, cy).decor) if (isNode(d.type) && (d.x - x) ** 2 + (d.y - y) ** 2 < range * range) out.push(d);
+        }
+        return out;
+    }
+
     // nearest harvestable decor item within range
     nearestNode(x, y, range, isNode) {
         let best = null, bd = range * range;

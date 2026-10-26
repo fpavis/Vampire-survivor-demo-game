@@ -101,12 +101,17 @@ const g0 = await page.evaluate(() => window.game.state.wallet.gold), p0 = await 
 await drag(page.locator('.vs-rune', { hasText: 'Piercing' }), page.locator('.vs-salv'));
 const g1 = { gold: await page.evaluate(() => window.game.state.wallet.gold), piercing: await piercing(), before: p0 };
 check('salvaging a rune pays gold and removes it', g1.gold > g0 && g1.piercing === p0 - 1, JSON.stringify(g1));
+// (a lucky kill above may have dropped a second Meteor too: count them)
+const meteors = () => page.evaluate(() => window.game.spells.spells.filter((s) => s.tpl === 'meteor').length);
+const m0 = await meteors();
 await page.locator('.vs-item', { hasText: 'Meteor' }).first().locator('.vs-lockb').click();
 await drag(page.locator('.vs-item', { hasText: 'Meteor' }).first(), page.locator('.vs-salv'));
-check('locked spells cannot be salvaged', await page.evaluate(() => window.game.spells.spells.some((s) => s.tpl === 'meteor')));
+const m1 = await meteors();
+check('locked spells cannot be salvaged', m0 >= 1 && m1 === m0, JSON.stringify({ m0, m1 }));
 await page.locator('.vs-item', { hasText: 'Meteor' }).first().locator('.vs-lockb').click();
 await drag(page.locator('.vs-item', { hasText: 'Meteor' }).first(), page.locator('.vs-salv'));
-check('unlocked spell salvages', await page.evaluate(() => !window.game.spells.spells.some((s) => s.tpl === 'meteor')));
+const m2 = await meteors();
+check('unlocked spell salvages', m2 === m0 - 1, JSON.stringify({ m0, m2 }));
 
 // ---- 5. keyboard path
 await page.evaluate(() => window.game.spells.addRune('heavy'));

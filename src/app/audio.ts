@@ -100,7 +100,9 @@ export class AudioManager {
     if (!this.ctx) return;
     this.duckUntil = Math.max(this.duckUntil, this.ctx.currentTime + sec);
     this.applyMusic();
-    setTimeout(() => this.applyMusic(), sec * 1000 + 40);
+    // the audio clock can run behind the wall clock on a busy machine: look again until the music is back up
+    const lift = () => { this.applyMusic(); if (this.ducked && !this.duckHold) setTimeout(lift, 120); };
+    setTimeout(lift, sec * 1000 + 40);
   }
 
   /** Keep the music lowered while something needs listening to (a conversation). */

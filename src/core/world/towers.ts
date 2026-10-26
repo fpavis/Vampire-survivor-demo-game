@@ -41,6 +41,13 @@ export const TOWER_DEFS: Record<TowerKind, TowerDef> = {
 };
 export const TOWER_KINDS = Object.keys(TOWER_DEFS) as TowerKind[];
 
+/** Test tools: enough of every resource to build each kind of tower `n` times over. */
+export function buildKit(n = 2): Cost {
+  const kit = emptyCost();
+  for (const k of TOWER_KINDS) for (const r of RES) kit[r] += TOWER_DEFS[k].cost[r] * n;
+  return kit;
+}
+
 export interface TowerRec {
   id: string;
   kind: TowerKind;

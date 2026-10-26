@@ -97,4 +97,37 @@ export function stepClaim(st: ClaimState, inside: boolean, dtSeconds: number, wa
   return out;
 }
 
+// ------------------------------------------------------------------ ambush
+/** How far from the plate an ambush appears: out of reach at first, so it threatens instead of surrounding. */
+export const AMBUSH_RING = { min: 380, max: 480 };
+export const AMBUSH_ARC = (65 * Math.PI) / 180;        // each group fans out over this much of the ring
+export const AMBUSH_GAP = (120 * Math.PI) / 180;       // one side always stays open: a way out
+export const AMBUSH_STAGGER = 30;                      // frames between groups closing in
+
+/** Monsters in an ambush: half again the plate's own number (6 to 15). */
+export const ambushCount = (site: Site): number => Math.max(6, Math.min(15, Math.round(site.waves * 1.5)));
+
+export interface AmbushSpawn { x: number; y: number; group: number; delay: number }
+
+/**
+ * Where an ambush's monsters appear and when each group closes in: two or three arcs on a ring around the plate,
+ * all inside a 240-degree sector, so a 120-degree gap is always left open.
+ */
+export function ambushPlan(site: Site, count: number, rand: () => number): AmbushSpawn[] {
+  const groups = count >= 9 ? 3 : 2;
+  const bearing = rand() * Math.PI * 2;                // the centre of the closed side
+  const span = Math.PI * 2 - AMBUSH_GAP;               // 240 degrees
+  const step = (span - AMBUSH_ARC) / (groups - 1);
+  const out: AmbushSpawn[] = [];
+  for (let i = 0; i < count; i++) {
+    const g = i % groups;
+    const inGroup = Math.floor(i / groups), perGroup = Math.ceil((count - g) / groups);
+    const centre = bearing - span / 2 + AMBUSH_ARC / 2 + g * step;
+    const a = centre + ((inGroup + 0.5) / perGroup - 0.5) * AMBUSH_ARC + (rand() - 0.5) * 0.08;
+    const r = AMBUSH_RING.min + rand() * (AMBUSH_RING.max - AMBUSH_RING.min);
+    out.push({ x: site.x + Math.cos(a) * r, y: site.y + Math.sin(a) * r, group: g, delay: g * AMBUSH_STAGGER });
+  }
+  return out;
+}
+
 export const insideSite = (s: Site, x: number, y: number) => (x - s.x) ** 2 + (y - s.y) ** 2 <= s.radius * s.radius;

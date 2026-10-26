@@ -453,10 +453,10 @@ if (want('sound')) {
   const duck = await ev(async () => {
     const a = window.game.audio;
     a.stinger('stingDiscover');
-    const during = a.ducked;
-    await new Promise((r) => setTimeout(r, 3200));
-    return { during, after: a.ducked, played: a.played.stingDiscover || 0 };
+    return { during: a.ducked, played: a.played.stingDiscover || 0 };
   });
+  // the music comes back up once the stinger is over (on the audio clock, which can lag on a busy runner)
+  duck.after = !(await untilLong(() => !window.game.audio.ducked));
   check('a stinger plays with the music ducked under it, then the music returns', duck.during && !duck.after && duck.played >= 1, JSON.stringify(duck));
   const steps = await ev(async () => {
     const g = window.game, a = g.audio;

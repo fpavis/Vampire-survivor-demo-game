@@ -65,6 +65,31 @@ export class SeaSystem {
         }
     }
 
+    /** The dock's boat is somewhere else (left on a far shore) and nobody is aboard: it can be called back. */
+    canRecall(rec) {
+        const g = this.game;
+        if (g.boat && g.boat.dockId === rec.id) return false;
+        const pos = this.posOf(rec), spot = boatSpot(rec);
+        return Math.hypot(pos.x - spot.x, pos.y - spot.y) > 2 * T;
+    }
+
+    /** Call the boat home: it is moored at its dock again, so no one is ever stranded without it. */
+    recall(rec) {
+        const g = this.game;
+        if (!this.canRecall(rec)) return false;
+        const spot = boatSpot(rec);
+        g.session.boats[rec.id] = { x: spot.x, y: spot.y };
+        const b = this.boats.get(rec.id);
+        if (b) { b.x = spot.x; b.y = spot.y; } else this.refresh();
+        g.fx.burst(spot.x, spot.y, 14, 0xdff4ff, 18, 2.4, { size: 0.8, life: 24, glow: true });
+        g.fx.shockwave(spot.x, spot.y, 70, 0xdff4ff, 18, 4);
+        g.audio.play('sail');
+        g.ui.toast('Your boat glides back to the dock', 'sail');
+        g.map.dirty = true;
+        g.requestSave('recall', true);
+        return true;
+    }
+
     /** nearest moored boat within reach, or null */
     boatNear(x, y, range = 96) {
         let best = null, bd = range * range;

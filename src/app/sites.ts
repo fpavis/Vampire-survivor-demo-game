@@ -3,8 +3,10 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { engage } from '../core/ai/ai';
 import {
-    CLAIMED_REGEN, CLAIMED_SAFE_RADIUS, CLAIM_RADIUS, CLAIM_SECONDS, Sites, insideSite, newClaim, stepClaim
+    CLAIMED_REGEN, CLAIMED_SAFE_RADIUS, CLAIM_RADIUS, CLAIM_SECONDS, Sites, ambushCount, ambushPlan, insideSite, newClaim, stepClaim
 } from '../core/world/sites';
+
+const AMBUSH_TELEGRAPH = 40;      // frames an ambusher shows itself before the first group moves
 import { pickRosterEntry } from '../core/world/population';
 import { EntityManager } from '../render/entities';
 import { ui as uiBridge } from '../ui/bridge';
@@ -167,6 +169,11 @@ export class SitesRuntime {
         }
 
         const t = g.frame;
+        // ambushers wake group by group once their telegraph is over
+        for (const w of this.waves) {
+            if (w.kind !== 'ambush') continue;
+            for (const e of w.members) if (e.ambushWake && !e.dead && t >= e.ambushWake) { e.ambushWake = 0; e.dormant = false; engage(g, e, false); }
+        }
         let nowInside = null;
         for (const d of this.shown.values()) {
             const s = d.site;
@@ -238,7 +245,22 @@ export class SitesRuntime {
     spring(site) {
         const g = this.game;
         g.session.triggered[site.id] = g.state.time;
-        const members = this.ring(site, this.enemyMix(site, site.waves, Math.max(1, Math.floor(site.waves / 3))), 150);
+        // they rise on a wide ring around the plate, in two or three groups that close in one after another, and
+        // always leave one side open: a real threat, but never a circle around the hero that cannot be escaped
+        const n = ambushCount(site);
+        const plan = ambushPlan(site, n, Math.random);
+        const mix = this.enemyMix(site, n, Math.max(1, Math.floor(n / 4)));
+        const members = mix.map((m, i) => {
+            const at = plan[i], type = g.enemyTypes[m.type];
+            let x = at.x, y = at.y;
+            if (!type.flying && g.world.blocked(x, y, type.radius)) { const f = g.world.findFree(x, y, type.radius); x = f.x; y = f.y; }
+            const e = g.makeEnemy(m.type, x, y, { level: site.level, elite: m.elite, dormant: true, aggro: 1 });
+            e.siteId = site.id;
+            e.ambushWake = g.frame + AMBUSH_TELEGRAPH + at.delay;
+            g.fx.burst(x, y, 10, 0xff5a3a, 14, 2.4, { size: 0.8, life: 22, glow: true });
+            g.fx.shockwave(x, y, 46, 0xff4a3a, 16, 3);
+            return e;
+        });
         this.waves.push({ site, members, kind: 'ambush' });
         g.ui.banner('AMBUSH!', 0xff4a3a, 'warning');
         g.fx.shockwave(site.x, site.y, 200, 0xff4a3a, 30, 6);

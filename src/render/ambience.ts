@@ -92,6 +92,7 @@ export class Ambience {
         const { width: w, height: h } = this.app.screen;
         const st = this.style;
         this.layer.position.set(world.x, world.y);
+        this.layer.scale.set(world.scale.x, world.scale.y);     // follow the camera zoom too
         const want = st ? Math.min(MAX, st.count) : 0;
         while (this.parts.length < want) this.spawn(cam, w, h, this.parts.length < want * 0.6);
         const vw = w * 0.65, vh = (h / TILT) * 0.65;

@@ -108,10 +108,14 @@ await ev((p) => { window.game.enterPlace(p); }, poi);
 await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
 const town = await ev(() => { const g = window.game; return { healer: g.interactables.some((i) => i.kind === 'healer'), last: g.session.lastCity }; });
 check('town has a healer and becomes the respawn point', town.healer && !!town.last, JSON.stringify(town));
-await ev(() => {
+const aim = await ev(() => {
   const g = window.game, it = g.interactables.find((i) => i.kind === 'healer'), p = g.state.player;
+  // townsfolk wander: one standing closer than the healer would take the E press, so send any near ones off
+  for (const c of g.critters.list) if (c.kind === 'villager' && Math.hypot(c.wx - it.x, c.wy - it.y) < 260) { c.wx = it.x + 900; c.wy = it.y; }
   p.wx = it.x - 40; p.wy = it.y; g.gameLoop(1);
+  return g.target && g.target.kind;
 });
+check('the healer is the thing in reach', aim === 'healer', String(aim));
 await page.keyboard.press('e');
 await page.waitForSelector('.vs-heal');
 check('E talks to the healer', (await page.locator('.vs-hrow').count()) === 3);

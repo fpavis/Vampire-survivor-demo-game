@@ -40,7 +40,9 @@ export class UIManager {
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.game && this.game.input) this.game.input.escape();
         });
-        window.addEventListener('resize', () => this.layoutHUD());
+        // Pixi resizes the canvas on the next animation frame after the window changes; the renderer's own
+        // 'resize' event fires after that, when app.screen holds the new size (a window listener would read the old one)
+        app.renderer.on('resize', () => this.layoutHUD());
 
         app.stage.sortableChildren = true;
         this.layoutHUD();
@@ -578,7 +580,7 @@ export class UIManager {
         if (this.mapOverlay) {
             this.app.stage.removeChild(this.mapOverlay.root);
             this.mapOverlay.root.destroy({ children: true });
-            window.removeEventListener('resize', this.mapOverlay.onResize);
+            this.app.renderer.off('resize', this.mapOverlay.onResize);
             this.mapOverlay = null;
             gameState.paused = false;
             return;
@@ -635,7 +637,7 @@ export class UIManager {
         };
         build();
         const onResize = () => build();
-        window.addEventListener('resize', onResize);
+        this.app.renderer.on('resize', onResize);
         this.mapOverlay = { root, onResize };
     }
 
@@ -723,7 +725,7 @@ export class UIManager {
             }, 100);
         });
 
-        window.addEventListener('resize', () => {
+        this.app.renderer.on('resize', () => {
             this.updateJoystickPosition(joystick);
         });
 

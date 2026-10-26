@@ -217,7 +217,8 @@ export class TowerSystem {
             const need = remaining(def.cost, r.delivered);
             return { kind: 'site', rec: r, text: `[E]  Deliver materials · ${Math.round(progressOf(r) * 100)}%  ·  needs ${costText(need)}` };
         }
-        const text = { spire: '[E]  Arm the Spire', waypoint: '[E]  Use the Waypoint', dock: null, beacon: '[E]  Read the plaque', ward: '[E]  Read the plaque', climb: '[E]  Read the plaque', bridge: '[E]  Read the plaque' }[r.kind];
+        if (r.kind === 'dock') return this.game.sea.canRecall(r) ? { kind: 'tower', act: 'recall', rec: r, text: '[E]  Recall your boat' } : null;
+        const text = { spire: '[E]  Arm the Spire', waypoint: '[E]  Use the Waypoint', beacon: '[E]  Read the plaque', ward: '[E]  Read the plaque', climb: '[E]  Read the plaque', bridge: '[E]  Read the plaque' }[r.kind];
         return text ? { kind: 'tower', rec: r, text } : null;
     }
 
@@ -225,6 +226,7 @@ export class TowerSystem {
         const g = this.game;
         if (t.kind === 'site') return this.deliver(t.rec);
         const r = t.rec, def = TOWER_DEFS[r.kind];
+        if (t.act === 'recall') { g.sea.recall(r); return; }
         if (r.kind === 'spire') { uiBridge.towerPanel.value = r.id; g.audio.play('equip'); }
         else if (r.kind === 'waypoint') { uiBridge.waypointOpen.value = r.id; g.audio.play('equip'); }
         else uiBridge.dialog.value = { speaker: def.name, icon: def.icon, text: def.blurb };

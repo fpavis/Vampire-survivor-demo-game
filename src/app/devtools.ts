@@ -7,6 +7,8 @@ import * as PIXI from 'pixi.js';
 import { EntityManager } from '../render/entities';
 import { ENEMY_TYPES } from '../core/config';
 import * as towersApi from '../core/world/towers';
+import { ui as uiBridge } from '../ui/bridge';
+import { setSettings } from './settings';
 import { engage } from '../core/ai/ai';
 import { BIOME } from '../core/world/biomes';
 import { iconDef } from '../core/icons/icons';
@@ -111,6 +113,72 @@ export function installDevTools(game: any): void {
   button(tp, 'Nearest place', () => nearest('poi'));
   button(tp, 'Nearest warlord lair', () => nearest('lair'));
 
+  // ---- economy and building: materials to test construction without gathering
+  const wallet = () => game.state.wallet;
+  const syncWallet = () => { uiBridge.wallet.value = { ...wallet() }; };
+  // where the party stands on the overworld (inside a place: its door)
+  const overworldAt = () => game.mode === 'overworld' ? { x: game.state.player.wx, y: game.state.player.wy } : { x: game.interiorPoi?.ex ?? 0, y: game.interiorPoi?.ey ?? 0 };
+  const tools = {
+    addGold(n: number) { wallet().gold += n; syncWallet(); },
+    addResources(n: number) { const w = wallet(); w.wood += n; w.stone += n; w.iron += n; syncWallet(); },
+    buildKit() { const k = towersApi.buildKit(2), w = wallet(); for (const r of towersApi.RES) w[r] += k[r]; syncWallet(); game.ui.toast('Build kit: enough for every tower twice', 'build'); },
+    emptyWallet() { const w = wallet(); w.gold = w.wood = w.stone = w.iron = 0; syncWallet(); },
+    /** finish the nearest construction site (or every one) as if all its materials had been delivered */
+    finishSites(all = false) {
+      const p = game.state.player;
+      const open = game.towers.recs.filter((r: any) => !r.built).sort((a: any, b: any) => Math.hypot(a.tx * 48 - p.wx, a.ty * 48 - p.wy) - Math.hypot(b.tx * 48 - p.wx, b.ty * 48 - p.wy));
+      const todo = all ? open : open.slice(0, 1);
+      if (!todo.length) { game.ui.toast('No construction site'); return 0; }
+      for (const rec of todo) { rec.delivered = { ...towersApi.TOWER_DEFS[rec.kind as keyof typeof towersApi.TOWER_DEFS].cost }; game.towers.complete(rec); }
+      return todo.length;
+    },
+    /** the nearest discovered-or-not places of a kind: towns ('city') or dungeons */
+    nearestPlaces(kind: 'city' | 'dungeon', n = 8) {
+      const out: any[] = [], at = overworldAt();
+      const ptx = Math.floor(at.x / 48), pty = Math.floor(at.y / 48);
+      for (let r = 0; r < 40 && out.length < n; r++) for (let cy = -r; cy <= r; cy++) for (let cx = -r; cx <= r; cx++) {
+        if (Math.max(Math.abs(cx), Math.abs(cy)) !== r) continue;
+        const q = game.overworld.poiForCell(Math.floor(ptx / 16) + cx, Math.floor(pty / 16) + cy);
+        if (q && (kind === 'city' ? q.type === 'city' : !!q.dungeon) && !out.includes(q)) out.push(q);
+      }
+      return out.slice(0, n);
+    },
+    /** walk in through the door of a place (anywhere in the world) */
+    enter(poi: any) {
+      if (!ready()) return;
+      if (game.mode === 'overworld') { game.enterPlace(poi); return; }
+      game.exitPlace();
+      const wait = setInterval(() => { if (!game.busy && game.mode === 'overworld') { clearInterval(wait); game.enterPlace(poi); } }, 50);
+    }
+  };
+  (window as any).__dev.tools = tools;
+  (window as any).__dev.setSettings = (patch: any) => setSettings(game, patch);
+
+  const eco = section('Economy & building');
+  button(eco, '+1000 gold', () => tools.addGold(1000));
+  button(eco, '+10000 gold', () => tools.addGold(10000));
+  button(eco, '+100 wood/stone/iron', () => tools.addResources(100));
+  button(eco, 'Build kit', () => tools.buildKit());
+  button(eco, 'Finish nearest site', () => tools.finishSites(false));
+  button(eco, 'Finish all sites', () => tools.finishSites(true));
+  button(eco, 'Empty wallet', () => tools.emptyWallet());
+
+  const places = section('Places (nearest)');
+  const placeList = document.createElement('div');
+  placeList.className = 'row';
+  panel.insertBefore(placeList, places.nextSibling);
+  const listPlaces = (kind: 'city' | 'dungeon') => {
+    if (!ready()) return;
+    placeList.innerHTML = '';
+    for (const q of tools.nearestPlaces(kind)) {
+      const at = overworldAt();
+      const d = ` ${Math.round(Math.hypot(q.ex - at.x, q.ey - at.y) / 48)}t`;
+      button(placeList, `${q.name}${q.dungeon ? ` (${q.dungeon.floors}f)` : ''}${d}`, () => tools.enter(q));
+    }
+  };
+  button(places, 'Towns', () => listPlaces('city'));
+  button(places, 'Dungeons', () => listPlaces('dungeon'));
+
   const hero = section('Hero');
   button(hero, 'Heal', () => { if (ready()) game.state.health = game.state.maxHealth; });
   button(hero, '+1000 XP', () => { if (ready()) game.gainExp(1000); });
@@ -129,23 +197,38 @@ export function installDevTools(game: any): void {
   const spawn = section('World');
   button(spawn, 'Warlord here', () => { if (ready() && game.mode === 'overworld') game.spawnBoss(); });
   button(spawn, 'Reveal map (60 tiles)', () => { if (ready()) { const p = game.state.player; (game.mode === 'overworld' ? game.fog : game.interiorFog).revealCircle(Math.floor(p.wx / 48), Math.floor(p.wy / 48), 60); } });
+  button(spawn, 'Reveal 300 tiles', () => { if (ready() && game.mode === 'overworld') { const p = game.state.player; game.fog.revealCircle(Math.floor(p.wx / 48), Math.floor(p.wy / 48), 300); } });
+  button(spawn, 'Reveal this floor', () => { if (ready() && game.mode === 'interior') { const s = game.interior; game.interiorFog.revealCircle(s.w >> 1, s.h >> 1, Math.max(s.w, s.h)); } });
+  button(spawn, 'Visit nearby towns', () => {
+    if (!ready()) return;
+    for (const q of tools.nearestPlaces('city', 12)) if (!game.session.cities.some((c: any) => c.id === q.id)) game.session.cities.push({ id: q.id, name: q.name, ex: q.ex, ey: q.ey });
+    game.map.dirty = true; game.ui.toast('Nearby towns marked as visited');
+  });
   button(spawn, 'Respawn all camps', () => { game.session.clearedCamps = {}; game.ui.toast('Camps will respawn'); });
   button(spawn, 'Kill all nearby', () => { for (const e of [...game.state.enemies]) if (!e.dead) game.damageEnemy(e, 1e9, { noCrit: true }); });
 
   const save = section('Save');
   button(save, 'Save now', () => { game.requestSave('manual', true); });
+  const box = document.createElement('textarea');
+  box.rows = 3;
+  box.placeholder = 'Export fills this box; paste a save here and press Import';
+  box.style.cssText = 'width:100%;box-sizing:border-box;margin-top:4px;background:#0c1222;color:#dfe8ff;border:1px solid #3a4a70;border-radius:6px;font:11px ui-monospace,monospace';
+  panel.insertBefore(box, save.nextSibling);
+  const note = (t: string) => { box.value = t; };
   button(save, 'Export', () => {
     const text = toBase64(encodeSave(buildSave(game)));
-    navigator.clipboard?.writeText(text).then(() => game.ui.toast('Save copied to clipboard'), () => window.prompt('Copy your save:', text));
+    box.value = text;
+    box.select();
+    navigator.clipboard?.writeText(text).then(() => game.ui.toast('Save copied to clipboard'), () => game.ui.toast('Save is in the box: copy it from there'));
   });
   button(save, 'Import', async () => {
-    const text = window.prompt('Paste a save:');
-    if (!text) return;
+    const text = box.value.trim();
+    if (!text) { game.ui.toast('Paste a save into the box first'); return; }
     try {
       const data = decodeSave(fromBase64(text));
       await game.store.save(game.saveSlot, data);
       location.reload();
-    } catch (e) { window.alert(`Not a valid save: ${(e as Error).message}`); }
+    } catch (e) { note(`Not a valid save: ${(e as Error).message}`); }
   });
   button(save, 'Delete save + reload', async () => { await game.store.remove(game.saveSlot); location.reload(); });
 

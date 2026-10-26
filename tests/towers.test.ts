@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BIOME, isSolidBiome, isWaterBiome } from '../src/core/world/biomes';
 import { OverworldSource } from '../src/core/world/terrain';
 import {
-  DIRS, TOWER_DEFS, TOWER_KINDS, boatBlocked, boatSpot, cacheForCell, checkPlacement, deposit, editMap, emptyCost, fareBetween,
+  DIRS, TOWER_DEFS, TOWER_KINDS, boatBlocked, buildKit, boatSpot, cacheForCell, checkPlacement, deposit, editMap, emptyCost, fareBetween,
   isFunded, newTower, planBridge, planClimb, plateauCentre, plateauDecor, progressOf, remaining, stageOf, towerEdits, type PlaceEnv, type TowerRec
 } from '../src/core/world/towers';
 
@@ -43,6 +43,13 @@ const bridgeIsNeeded = (tx: number, ty: number, plan: { dir: number; len: number
 };
 
 describe('construction', () => {
+  it('the test build kit funds every kind of tower twice over', () => {
+    const kit = buildKit(2);
+    for (const k of TOWER_KINDS) {
+      const w = { ...kit };
+      for (let i = 0; i < 2; i++) { const rec = newTower(k, 0, 0); deposit(rec, w); expect(isFunded(rec), k).toBe(true); }
+    }
+  });
   it('towers are expensive and ordered sensibly', () => {
     for (const k of TOWER_KINDS) {
       const c = TOWER_DEFS[k].cost;

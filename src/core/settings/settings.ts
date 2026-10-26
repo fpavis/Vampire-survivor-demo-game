@@ -28,6 +28,7 @@ export interface Settings {
   // controls
   clickToMove: boolean;
   aimAtCursor: boolean;
+  mouseInteract: boolean;       // experimental: clicking something within reach uses it, like pressing E
 }
 
 export const ZOOMS = [0.8, 1, 1.2];
@@ -36,7 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoPick: false, confirmSalvage: false, pauseOnBlur: true,
   quality: 'high', renderScale: 1, fpsCap: 0, zoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
   hudScale: 1, minimap: 'medium', minimapOpacity: 1, healthBars: 'hurt', tracker: true,
-  clickToMove: false, aimAtCursor: false
+  clickToMove: false, aimAtCursor: false, mouseInteract: false
 };
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -65,7 +66,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     healthBars: pick(r.healthBars, ['hurt', 'always', 'off'] as const, d.healthBars),
     tracker: bool(r.tracker, d.tracker),
     clickToMove: bool(r.clickToMove, d.clickToMove),
-    aimAtCursor: bool(r.aimAtCursor, d.aimAtCursor)
+    aimAtCursor: bool(r.aimAtCursor, d.aimAtCursor),
+    mouseInteract: bool(r.mouseInteract, d.mouseInteract)
   };
 }
 

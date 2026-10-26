@@ -59,6 +59,7 @@ import { StoryDirector } from './story';
 import { VaultSystem } from './vaults';
 import { isTyping } from '../ui/nav';
 import { normKey } from '../core/input/bindings';
+import { pickClicked } from '../core/input/pick';
 import { access, applyAccess, loadAccess } from './access';
 import { cameraLead, hitStopFrames } from '../core/sim/feel';
 import { PerfOverlay } from './perfOverlay';
@@ -175,7 +176,7 @@ class Game {
         this.saveSlot = 'autosave';
         this.storeReady = createSaveStore().then((store) => { this.store = store; return store; });
 
-        window.addEventListener('resize', () => this.handleResize());
+        this.app.renderer.on('resize', () => this.handleResize());     // after Pixi's own (deferred) resize
         const flush = () => { if (this.state.player && !this.state.gameOver && this.mode) this.requestSave('hidden', true); };
         document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
         window.addEventListener('pagehide', flush);
@@ -238,7 +239,8 @@ class Game {
 
     handleResize() {
         this.layoutAtmosphere();
-        if (this.state.player) this.applyCamera();
+        // the world stays centred and its edges loaded even while the game is paused (step() does not run then)
+        if (this.state.player) { this.applyCamera(); this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH, true); }
     }
 
     applyCamera() {
@@ -403,7 +405,7 @@ class Game {
             note.position.set(w / 2, h * 0.93);
         };
         layout();
-        window.addEventListener('resize', layout);
+        app.renderer.on('resize', layout);
 
         let started = false;
         let save = null;          // the newest readable save (Continue)
@@ -417,7 +419,7 @@ class Game {
             uiBridge.optionsOpen.value = false;
             uiBridge.slotsOpen.value = null;
             uiBridge.creditsOpen.value = false;
-            window.removeEventListener('resize', layout);
+            app.renderer.off('resize', layout);
             menuNav.remove();
             app.stage.removeChild(screen);
             screen.destroy({ children: true });
@@ -510,9 +512,17 @@ class Game {
 
         this.app.stage.eventMode = 'static';
         this.app.stage.hitArea = this.app.screen;
+        let hoverAt = 0;
         this.app.stage.on('pointermove', (e) => {
             this.pointerKind = e.pointerType || 'mouse';
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
+            // the cursor turns into a hand over something that can be clicked (checked at most ten times a second)
+            const now = performance.now();
+            if (settings.mouseInteract && this.pointerKind === 'mouse' && now - hoverAt > 100 && gameState.player && !gameState.paused) {
+                hoverAt = now;
+                const at = this.screenToWorld(e.global.x, e.global.y);
+                this.app.view.style.cursor = pickClicked(this.clickTargets(), at.x, at.y) ? 'pointer' : '';
+            } else if (!settings.mouseInteract && this.app.view.style.cursor) this.app.view.style.cursor = '';
         });
         this.app.stage.on('pointerdown', (e) => {
             this.audio.unlock();
@@ -521,6 +531,12 @@ class Game {
             if (this.towers.build && !gameState.gameOver && !gameState.paused) { if (this.pointerKind === 'mouse') { this.towers.updateBuild(); this.towers.confirmBuild(); } return; }
             if (gameState.levelUp || gameState.gameOver || gameState.paused) return;
             gameState.pointerPosition = { x: e.global.x, y: e.global.y };
+            // experimental: clicking something within reach uses it (as E would) and does not start a walk
+            if (settings.mouseInteract && this.pointerKind === 'mouse' && !this.busy) {
+                const at = this.screenToWorld(e.global.x, e.global.y);
+                const t = pickClicked(this.clickTargets(), at.x, at.y);
+                if (t) { this.target = t; this.interact(); return; }
+            }
             // click to move: walk to the clicked spot; otherwise the hero follows the held pointer
             if (settings.clickToMove && this.pointerKind === 'mouse') { this.moveTarget = this.screenToWorld(e.global.x, e.global.y); return; }
             gameState.pointerDown = true;
@@ -1366,29 +1382,66 @@ class Game {
                 const d = Math.hypot(p.wx - x, p.wy - y);
                 if (d < r && d < best) { best = d; target = t; }
             };
-            for (const it of this.interactables) {
-                if (it.kind === 'chest' && !it.opened) consider({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64);
-                if (it.npc) consider({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper', elder: '[E]  Speak with the Elder', board: '[E]  Read the bounty board' }[it.kind] }, it.x, it.y, 90);
-            }
-            for (const c of this.critters.list) {
-                if (c.kind === 'villager') consider({ kind: 'npc', c, text: '[E]  Talk' }, c.wx, c.wy, 56);
-            }
-            const src = this.interior;
-            if (src.fountain) consider({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96);
-            if (src.altar) consider({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80);
-            if (src.floor > 0) consider({ kind: 'up', text: '[E]  Climb back up' }, src.exit.x, src.exit.y, 74);
-            else consider({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74);
-            this.vaults.considerTargets(consider);
-            if (src.stairsDown) {
-                const left = this.dungeons.guardiansLeft();
-                consider({ kind: 'down', sealed: left > 0, text: left > 0 ? `The way down is sealed · ${left} guardian${left > 1 ? 's' : ''} left` : '[E]  Descend' }, src.stairsDown.x, src.stairsDown.y, 80);
-            }
+            this.interiorCandidates((t, x, y, r) => consider(t, x, y, r));
         }
         this.target = target;
         if ((uiBridge.towerPanel.value || uiBridge.waypointOpen.value) && (!target || target.kind !== 'tower')) { uiBridge.towerPanel.value = null; uiBridge.waypointOpen.value = null; }
         const open = uiBridge.healerOpen.value ? 'healer' : uiBridge.shopOpen.value ? 'merchant' : uiBridge.innOpen.value ? 'innkeeper' : uiBridge.boardOpen.value ? 'board' : uiBridge.dialog.value ? (uiBridge.dialog.value.script ? 'elder' : 'npc') : null;
         if (open && (!target || target.kind !== open)) this.closeNpcPanels();
         this.ui.setPrompt(target ? target.text : null);
+    }
+
+    /** Everything that can be used inside a place: add(target, x, y, reach, height on screen in world units). */
+    interiorCandidates(add) {
+        for (const it of this.interactables) {
+            if (it.kind === 'chest' && !it.opened) add({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64, 70);
+            if (it.npc) add({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper', elder: '[E]  Speak with the Elder', board: '[E]  Read the bounty board' }[it.kind] }, it.x, it.y, 90, 150);
+        }
+        for (const c of this.critters.list) {
+            if (c.kind === 'villager') add({ kind: 'npc', c, text: '[E]  Talk' }, c.wx, c.wy, 56, 130);
+        }
+        const src = this.interior;
+        if (src.fountain) add({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96, 170);
+        if (src.altar) add({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80, 170);
+        if (src.floor > 0) add({ kind: 'up', text: '[E]  Climb back up' }, src.exit.x, src.exit.y, 74, 150);
+        else add({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74, 150);
+        this.vaults.considerTargets((t, x, y, r) => add(t, x, y, r, t.act === 'gate' ? 220 : 110));
+        if (src.stairsDown) {
+            const left = this.dungeons.guardiansLeft();
+            add({ kind: 'down', sealed: left > 0, text: left > 0 ? `The way down is sealed · ${left} guardian${left > 1 ? 's' : ''} left` : '[E]  Descend' }, src.stairsDown.x, src.stairsDown.y, 80, 110);
+        }
+    }
+
+    /**
+     * Experimental mouse interaction: every target within the hero's reach, each with the box it is drawn in, so a
+     * click on it can use it. Only things already in reach are offered: clicking never extends the range.
+     */
+    clickTargets() {
+        const p = this.state.player, out = [];
+        const reach = (x, y, r) => Math.hypot(p.wx - x, p.wy - y) < r;
+        const tall = (type, fallback) => {
+            const set = this.world.decorTextures && this.world.decorTextures[type];
+            return set && set[0] ? set[0].texture.height * set[0].anchorY / TILT : fallback;
+        };
+        if (this.mode === 'overworld') {
+            if (this.boat) return out;
+            const poi = this.world.nearestPoi(p.wx, p.wy, 72);
+            if (poi) out.push({ t: { kind: 'enter', poi, text: `[E]  Enter ${poi.name}` }, x: poi.ex, y: poi.ey, w: 140, h: 280 });
+            const tower = this.towers.targetFor(p);
+            if (tower) out.push({ t: tower, x: (tower.rec.tx + 0.5) * T, y: (tower.rec.ty + 0.5) * T, w: 130, h: 360 });
+            const boat = this.sea.boatNear(p.wx, p.wy);
+            if (boat) out.push({ t: { kind: 'boat', id: boat.id, text: '[E]  Board the boat' }, x: boat.x, y: boat.y, w: 120, h: 90 });
+            const cache = this.sea.cacheTarget(p.wx, p.wy);
+            if (cache) out.push({ t: { kind: 'cache', cache, text: '[E]  Dig up the buried treasure' }, x: (cache.tx + 0.5) * T, y: (cache.ty + 0.5) * T, w: 70, h: 80 });
+            for (const node of this.world.nodesNear(p.wx, p.wy, 64, isNode)) {
+                const def = NODES[node.type];
+                out.push({ t: { kind: 'gather', node, text: `[E]  ${def.verb} (${def.resource})` }, x: node.x, y: node.y, w: 70, h: tall(node.type, 120) });
+            }
+            for (const sign of this.world.nodesNear(p.wx, p.wy, 70, (t) => t === 'signpost')) out.push({ t: { kind: 'sign', sign, text: '[E]  Read the signpost' }, x: sign.x, y: sign.y, w: 60, h: 120 });
+        } else if (this.interior) {
+            this.interiorCandidates((t, x, y, r, h) => { if (reach(x, y, r)) out.push({ t, x, y, w: 80, h }); });
+        }
+        return out;
     }
 
     /** A signpost names the towns its roads lead to. */
