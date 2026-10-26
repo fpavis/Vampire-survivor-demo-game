@@ -23,10 +23,14 @@ await context.addInitScript(() => { window.__forceSeed = 2024; });
 const page = await context.newPage();
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
+// THROTTLE=4 slows the CPU like a busy CI runner, to reproduce timing failures locally
+if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const loop = (n) => ev((n) => { for (let i = 0; i < n; i++) window.game.gameLoop(1); }, n);
 // the panels refresh from the game loop, which runs slowly on a software GPU: wait for the state, not a fixed time
 const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 4000 }).then(() => true, () => false);
+// scene changes (respawn, travel) run a fade on the game's own ticker: allow them longer on a slow runner
+const untilLong = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 }).then(() => true, () => false);
 
 await page.goto(`http://localhost:${PORT}/`);
 await page.waitForFunction(() => !!window.game);
@@ -490,11 +494,12 @@ if (want('story')) {
   const deathText = await ev(() => document.querySelector('.vs-death')?.innerText || '');
   if (process.env.SHOTS) { await page.waitForTimeout(1000); await page.screenshot({ path: `${process.env.SHOTS}/death.png` }); }
   await ev(() => document.querySelector('.vs-death [data-act="respawn"]').click());
-  const back = await until(() => !window.game.state.gameOver && !document.querySelector('.vs-death'));
+  const back = await untilLong(() => !window.game.state.gameOver && !document.querySelector('.vs-death') && !window.game.busy);
   for (let i = 0; i < 60 && !(await ev(() => !!document.querySelector('[data-card="wake"]'))); i++) await loop(2);
   const wake = await ev(() => document.querySelector('[data-card="wake"]')?.innerText || '');
   await ev(() => { window.game.godMode = true; });
-  check('the death screen shows the run and respawns the party', death && /You fell/i.test(deathText) && /Monsters defeated/.test(deathText) && back, deathText.slice(0, 60));
+  check('the death screen shows how far the run got', death && /You fell/i.test(deathText) && /Monsters defeated/.test(deathText), deathText.replace(/\n/g, ' | ').slice(0, 120));
+  check('respawning brings the party back', back, JSON.stringify(await ev(() => ({ over: window.game.state.gameOver, busy: window.game.busy, screen: !!document.querySelector('.vs-death') }))));
   check('after a respawn a card says where you woke', /You wake in/.test(wake), wake);
 }
 
@@ -621,6 +626,8 @@ if (want('vaults')) {
     if (f > 0) await ev(([poi, f]) => { const g = window.game; g.clearWorldEntities(); g.loadFloor(poi, f); }, [poi, f]);
     solved[kind] = await ev((kind) => {
       const g = window.game, pz = g.interior.puzzle, pl = g.state.player;
+      // the floor the game built must be the one predicted from the seed (generation is engine-independent)
+      if (!pz || pz.kind !== kind) return { loaded: pz ? pz.kind : null, floor: g.floor, shut: {}, st: {}, opened: {} };
       for (const e of [...g.state.enemies]) e.dead = true; g.reap();
       const go = (x, y) => { pl.wx = x; pl.wy = y; g.cam.x = x; g.cam.y = y; for (let i = 0; i < 3; i++) g.gameLoop(1); g.updateInteraction(); };
       const at = (act) => g.target && g.target.act === act;

@@ -3,7 +3,7 @@
 // that opens the gate is reachable with the gate shut, the way on (stairs or boss) never needs the vault, and the
 // plates' time window is set from the shortest walk between them. Pure and deterministic.
 import { WORLD_CONFIG } from '../config';
-import { makeRng } from './noise';
+import { makeRng, shuffle } from './noise';
 import type { InteriorSource } from './interiors';
 
 const T = WORLD_CONFIG.tile;
@@ -55,7 +55,7 @@ export function carveVault(src: InteriorSource, rng: () => number, floorTile: nu
   }
   for (let attempt = 0; attempt < 220 && cands.length; attempt++) {
     const c = cands[Math.floor(rng() * cands.length)];
-    const dirs = DIRS.slice().sort(() => rng() - 0.5);
+    const dirs = shuffle(DIRS.slice(), rng);
     for (const [fx, fy] of dirs) {
       const sx = fy !== 0 ? 1 : 0, sy = fx !== 0 ? 1 : 0;               // the side axis, across the corridor
       const at = (k: number, s: number) => ({ x: c.x + fx * k + sx * s, y: c.y + fy * k + sy * s });

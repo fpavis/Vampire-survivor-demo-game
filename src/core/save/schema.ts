@@ -3,7 +3,7 @@
 
 export const SAVE_VERSION = 9;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
-export const GENERATOR_VERSION = 1;
+export const GENERATOR_VERSION = 2;   // 2: seeded Fisher–Yates shuffles in dungeon floors (were engine-dependent)
 
 export interface SpellSave { uid: string; tpl: string; level: number; xp: number; runes: (string | null)[]; locked?: boolean; fav?: boolean }
 

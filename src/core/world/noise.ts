@@ -40,3 +40,16 @@ export function makeRng(seed: number): () => number {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
+
+/**
+ * Shuffle in place with a seeded random source (Fisher–Yates). Never shuffle with `sort(() => rng() - 0.5)`:
+ * how many times a sort calls its comparator differs between JS engines, so the same seed would build a
+ * different world in another browser.
+ */
+export function shuffle<T>(arr: T[], rng: () => number): T[] {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+}

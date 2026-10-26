@@ -1,5 +1,5 @@
 import { WORLD_CONFIG } from '../config';
-import { makeRng } from './noise';
+import { makeRng, shuffle } from './noise';
 import { BIOME, INTERIOR_ROSTERS, GROUP } from './biomes';
 import { addDecorItem } from './terrain';
 import { floorSeed, type DungeonInfo } from './dungeons';
@@ -252,12 +252,10 @@ function generateCave(poi: Poi, floor = 0): InteriorSource {
     }
     // guardians stand on open floor next to each chest
     src.chests.forEach((c) => {
-        const near = cells
-            .filter((cell) => {
-                const d = Math.hypot(cell.x - c.tx, cell.y - c.ty);
-                return d >= 1.5 && d <= 4;
-            })
-            .sort(() => rng() - 0.5);
+        const near = shuffle(cells.filter((cell) => {
+            const d = Math.hypot(cell.x - c.tx, cell.y - c.ty);
+            return d >= 1.5 && d <= 4;
+        }), rng);
         for (let i = 0; i < 2 && i < near.length; i++) {
             src.spawns.push({ type: roster[Math.floor(rng() * roster.length)], elite: true, x: (near[i].x + 0.5) * T, y: (near[i].y + 0.5) * T });
         }
