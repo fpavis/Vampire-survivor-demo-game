@@ -155,7 +155,7 @@ function SettingsTabs({ title }: { title: boolean }) {
         {tab === 'audio' && (
           <>
             <button class="vs-btn" onClick={() => { ui.muted.value = !ui.muted.value; game.audio.setMuted(ui.muted.value); }}><Icon name={ui.muted.value ? 'sound-off' : 'sound-on'} /> {ui.muted.value ? 'Sound is off' : 'Sound is on'}</button>
-            {([['master', 'Master volume'], ['music', 'Music'], ['sfx', 'Effects'], ['ui', 'Menu sounds']] as const).map(([bus, label]) => (
+            {([['master', 'Master volume'], ['music', 'Music'], ['sfx', 'Effects'], ['ambient', 'Ambience'], ['ui', 'Menu sounds']] as const).map(([bus, label]) => (
               <Slider key={bus} label={label} min={0} max={1} step={0.05} value={game.audio.volumes[bus]} fmt={pct}
                 onInput={(v) => { game.audio.setVolume(bus, v); if (bus !== 'music') game.audio.play(bus === 'ui' ? 'uiMove' : 'pickup'); bump((n) => n + 1); }} />
             ))}

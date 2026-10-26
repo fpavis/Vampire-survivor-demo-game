@@ -1,14 +1,19 @@
 // Mixer, sound effects and music, all synthesized with Web Audio (no files).
-// master ─┬─ music bus ← track gains (crossfaded) ← scheduled notes
-//         ├─ sfx bus   ← effect voices (panned and attenuated by distance)
-//         └─ ui bus    ← interface clicks
+// master ─┬─ music bus   ← track gains (crossfaded) ← scheduled notes   (ducked under stingers and dialogue)
+//         ├─ sfx bus     ← effect voices (panned and attenuated by distance)
+//         ├─ ambient bus ← the bed of sound for where you are (crossfaded) and its occasional calls
+//         └─ ui bus      ← interface clicks
 import { SFX, sfxLength, spatial, voiceLayers, type Layer } from '../core/audio/sfx';
 import { TRACKS, barNotes, midiToHz, secondsPerBar, type NoteEvent, type TrackDef } from '../core/audio/music';
+import { BEDS, type BedEvent, type BedId } from '../core/audio/ambience';
 
-export type BusName = 'master' | 'music' | 'sfx' | 'ui';
+export type BusName = 'master' | 'music' | 'sfx' | 'ambient' | 'ui';
 const PREFS_KEY = 'vs.audio.v1';
 const MAX_VOICES = 28;
-const DEFAULT_VOL: Record<BusName, number> = { master: 0.8, music: 0.5, sfx: 0.8, ui: 0.7 };
+const DEFAULT_VOL: Record<BusName, number> = { master: 0.8, music: 0.5, sfx: 0.8, ambient: 0.6, ui: 0.7 };
+const CHILD_BUSES: BusName[] = ['music', 'sfx', 'ambient', 'ui'];
+/** Music level while a stinger plays or a conversation is open. */
+const DUCK = 0.35;
 
 export interface PlayOpts { x?: number; y?: number; pitch?: number; vol?: number }
 
@@ -16,6 +21,11 @@ export class AudioManager {
   ctx: AudioContext | null = null;
   private buses: Partial<Record<BusName, GainNode>> = {};
   private noise: AudioBuffer | null = null;
+  private longNoise: AudioBuffer | null = null;
+  private duckUntil = 0;
+  private duckHold = false;
+  /** True while the music is ducked (for tests and the debug overlay). */
+  ducked = false;
   private last: Record<string, number> = {};
   private active: Record<string, number> = {};
   private voices = 0;
@@ -24,6 +34,7 @@ export class AudioManager {
   muted = false;
   listener = { x: 0, y: 0 };
   music = new MusicPlayer(this);
+  ambience = new AmbiencePlayer(this);
   played: Record<string, number> = {};          // counts per sound, for tests and the debug overlay
 
   constructor() {
@@ -50,24 +61,61 @@ export class AudioManager {
     const master = ctx.createGain();
     master.connect(ctx.destination);
     this.buses.master = master;
-    for (const b of ['music', 'sfx', 'ui'] as BusName[]) { const g = ctx.createGain(); g.connect(master); this.buses[b] = g; }
-    // one second of white noise, shared by every noise layer and drum
-    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    this.noise = buf;
+    for (const b of CHILD_BUSES) { const g = ctx.createGain(); g.connect(master); this.buses[b] = g; }
+    // white noise: one second shared by every noise layer and drum, five seconds for the ambient beds (no audible loop)
+    const fill = (sec: number) => {
+      const buf = ctx.createBuffer(1, Math.round(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    };
+    this.noise = fill(1);
+    this.longNoise = fill(5);
     this.applyVolumes();
     this.music.start();
+    this.ambience.start();
   }
 
   bus(name: BusName): GainNode | null { return this.buses[name] ?? null; }
-  noiseBuffer() { return this.noise; }
+  noiseBuffer(long = false) { return long ? this.longNoise : this.noise; }
 
   private applyVolumes() {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     this.buses.master!.gain.setTargetAtTime(this.muted ? 0 : this.volumes.master, now, 0.05);
-    for (const b of ['music', 'sfx', 'ui'] as BusName[]) this.buses[b]!.gain.setTargetAtTime(this.volumes[b], now, 0.05);
+    for (const b of CHILD_BUSES) if (b !== 'music') this.buses[b]!.gain.setTargetAtTime(this.volumes[b], now, 0.05);
+    this.applyMusic();
+  }
+
+  /** The music bus at its level, or ducked while a stinger plays or a conversation is open. */
+  private applyMusic() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.ducked = this.duckHold || now < this.duckUntil - 0.02;
+    this.buses.music!.gain.setTargetAtTime(this.volumes.music * (this.ducked ? DUCK : 1), now, this.ducked ? 0.08 : 0.45);
+  }
+
+  /** Lower the music for `sec` seconds. */
+  duck(sec: number) {
+    if (!this.ctx) return;
+    this.duckUntil = Math.max(this.duckUntil, this.ctx.currentTime + sec);
+    this.applyMusic();
+    setTimeout(() => this.applyMusic(), sec * 1000 + 40);
+  }
+
+  /** Keep the music lowered while something needs listening to (a conversation). */
+  setDuckHold(on: boolean) {
+    if (this.duckHold === on) return;
+    this.duckHold = on;
+    this.applyMusic();
+  }
+
+  /** A short musical phrase (discovery, boss, victory) with the music ducked under it. */
+  stinger(name: string) {
+    const def = SFX[name];
+    if (!def || !this.ctx || this.ctx.state !== 'running' || this.muted) return;
+    this.play(name);
+    this.duck(sfxLength(def) + 0.5);
   }
 
   private savePrefs() {
@@ -141,7 +189,8 @@ export class AudioManager {
   stats() {
     return {
       state: this.ctx?.state ?? 'none', voices: this.voices, track: this.music.trackId, dark: this.music.dark,
-      intensity: this.music.intensity, bars: this.music.barsPlayed, volumes: { ...this.volumes }, muted: this.muted
+      intensity: this.music.intensity, bars: this.music.barsPlayed, volumes: { ...this.volumes }, muted: this.muted,
+      bed: this.ambience.bedId, calls: this.ambience.calls, ducked: this.ducked
     };
   }
 }
@@ -254,5 +303,108 @@ export class MusicPlayer {
       case 'hat': g.gain.setValueAtTime(n.vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05); noise('highpass', 7000, t0 + 0.06); break;
     }
     setTimeout(() => { g.disconnect(); extra.forEach((x) => x.disconnect()); }, (t0 - ctx.currentTime + len + 2) * 1000);
+  }
+}
+
+/** The ambient bed for where the hero is: looping bands of filtered noise (wind, waves, rustle) that swell slowly,
+ *  and calls now and then (birds, gulls, an owl, drips). Crossfades when the place changes. */
+export class AmbiencePlayer {
+  bedId: BedId | null = null;
+  /** Calls played so far (for tests). */
+  calls = 0;
+  private want: BedId | null = null;
+  private cur: { id: BedId; gain: GainNode; nodes: AudioScheduledSourceNode[]; next: number[] } | null = null;
+  private timer: any = null;
+
+  constructor(private mgr: AudioManager) {}
+
+  start() {
+    if (this.timer) return;
+    this.timer = setInterval(() => this.tick(), 200);
+    if (this.want) this.switchTo(this.want);
+  }
+
+  setBed(id: BedId) {
+    this.want = id;
+    if (!this.mgr.ctx) return;
+    if (this.cur && this.cur.id === id) return;
+    this.switchTo(id);
+  }
+
+  private switchTo(id: BedId) {
+    const ctx = this.mgr.ctx!, bus = this.mgr.bus('ambient');
+    if (!bus) return;
+    const now = ctx.currentTime;
+    if (this.cur) {
+      const old = this.cur;
+      old.gain.gain.cancelScheduledValues(now);
+      old.gain.gain.setValueAtTime(old.gain.gain.value, now);
+      old.gain.gain.linearRampToValueAtTime(0.0001, now + 2.5);
+      setTimeout(() => { for (const n of old.nodes) { try { n.stop(); } catch { /* already stopped */ } } old.gain.disconnect(); }, 2800);
+    }
+    const def = BEDS[id];
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(1, now + 2.5);
+    gain.connect(bus);
+    const nodes: AudioScheduledSourceNode[] = [];
+    for (const b of def.bands) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.mgr.noiseBuffer(true);
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = b.type; f.frequency.value = b.f; f.Q.value = b.q;
+      const g = ctx.createGain();
+      g.gain.value = b.vol;
+      src.connect(f).connect(g).connect(gain);
+      if (b.swell) {
+        // a slow sine moves the loudness between (1 - depth) and 1 of the band's level: gusts, waves
+        g.gain.value = b.vol * (1 - b.swell.depth / 2);
+        const lfo = ctx.createOscillator(), depth = ctx.createGain();
+        lfo.frequency.value = b.swell.rate;
+        depth.gain.value = (b.vol * b.swell.depth) / 2;
+        lfo.connect(depth).connect(g.gain);
+        lfo.start(now);
+        nodes.push(lfo);
+      }
+      src.start(now, Math.random() * 4);
+      nodes.push(src);
+    }
+    const r = (e: BedEvent) => e.every[0] + Math.random() * (e.every[1] - e.every[0]);
+    this.cur = { id, gain, nodes, next: def.events.map((e) => now + r(e)) };
+    this.bedId = id;
+  }
+
+  private tick() {
+    const ctx = this.mgr.ctx, c = this.cur;
+    if (!ctx || !c || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+    BEDS[c.id].events.forEach((e, i) => {
+      if (now < c.next[i]) return;
+      c.next[i] = now + e.every[0] + Math.random() * (e.every[1] - e.every[0]);
+      this.call(e, c.gain, now);
+    });
+  }
+
+  private call(e: BedEvent, dest: AudioNode, now: number) {
+    const ctx = this.mgr.ctx!;
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    const out: AudioNode = pan ?? dest;
+    if (pan) { pan.pan.value = Math.random() * 1.4 - 0.7; pan.connect(dest); }
+    const k = 0.9 + Math.random() * 0.2;
+    for (let n = 0; n < e.notes; n++) {
+      const t0 = now + n * e.gap, t1 = t0 + e.t;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = e.wave;
+      o.frequency.setValueAtTime(e.f * k, t0);
+      o.frequency.exponentialRampToValueAtTime(e.f2 * k, t1);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(e.vol, t0 + Math.min(0.02, e.t / 3));
+      g.gain.exponentialRampToValueAtTime(0.0001, t1);
+      o.connect(g).connect(out);
+      o.start(t0); o.stop(t1 + 0.02);
+    }
+    this.calls++;
+    setTimeout(() => pan?.disconnect(), (e.notes * e.gap + e.t + 0.3) * 1000);
   }
 }

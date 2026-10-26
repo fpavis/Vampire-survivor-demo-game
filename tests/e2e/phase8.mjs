@@ -163,7 +163,7 @@ const h0 = await ev(() => window.game.party.active);
 const title0 = await ev(() => document.querySelector('.vs-load h2').innerText);
 await ev(() => { window.game.party.cdUntil = 0; });
 await tap(B.RB);
-await page.waitForTimeout(150);
+await page.waitForFunction((t0) => document.querySelector('.vs-load h2').innerText.split('\n')[0] !== t0, title0.split('\n')[0], { timeout: 4000 }).catch(() => {});
 const title1 = await ev(() => document.querySelector('.vs-load h2').innerText);
 check('RB switches the hero whose loadout is shown', title0.split('\n')[0] !== title1.split('\n')[0], JSON.stringify({ title0, title1, h0 }));
 await tap(B.B);

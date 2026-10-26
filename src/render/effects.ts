@@ -4,6 +4,7 @@ import { access } from '../app/access';
 import { WORLD_CONFIG } from '../core/config';
 import { FONT_UI } from '../ui/fonts';
 import { settings } from '../app/settings';
+import { canStack } from '../core/sim/feel';
 
 const TILT = WORLD_CONFIG.tilt;
 const MAX_PARTICLES = 450;
@@ -16,6 +17,7 @@ export class Effects {
         this.particles = [];
         this.popups = [];
         this.popupPool = [];
+        this.stacks = new Map();     // monster uid -> its live damage number
         this.shake = 0;
 
         const g = new PIXI.Graphics();
@@ -132,8 +134,31 @@ export class Effects {
         this.flash(x, y, big ? 240 : 110, color, big ? 30 : 14);
     }
 
+    /**
+     * A damage number on a monster: hits in quick succession on the same monster add up in one number that pops
+     * a little each time, instead of a pile of small ones. Crits get their own, larger number.
+     */
+    damageNumber(key, x, y, amount, color, size, z) {
+        const live = this.stacks.get(key);
+        if (live && live.t.visible && canStack(live.since, live.age)) {
+            live.amount += amount;
+            live.t.text = String(Math.round(live.amount));
+            live.life = Math.max(live.life, 34);
+            live.since = 0;
+            live.t.alpha = 1;
+            live.t.scale.set(Math.min(1.45, live.t.scale.x + 0.22));
+            live.vz = Math.max(live.vz, 0.5);
+            return;
+        }
+        const p = this.popup(x, y, String(Math.round(amount)), color, size, z);
+        if (!p) return;
+        p.key = key;
+        p.amount = amount;
+        this.stacks.set(key, p);
+    }
+
     popup(x, y, text, color = 0xffffff, size = 16, z = 34) {
-        if (this.popups.length > 60) return;
+        if (this.popups.length > 60) return null;
         let t = this.popupPool.pop();
         if (!t) {
             t = new PIXI.Text('', {
@@ -154,7 +179,9 @@ export class Effects {
         t.scale.set(0.6);
         t.visible = true;
         this.game.occlusion.layer.addChild(t);     // above the world, the trees and the light map
-        this.popups.push({ t, wx: x + (Math.random() - 0.5) * 16, wy: y, z, vz: 1.6, life: 40, target: 1 });
+        const p = { t, wx: x + (Math.random() - 0.5) * 16, wy: y, z, vz: 1.6, life: 40, target: 1, age: 0, since: 0, key: null, amount: 0 };
+        this.popups.push(p);
+        return p;
     }
 
     addShake(amount) {
@@ -184,12 +211,17 @@ export class Effects {
         for (let i = this.popups.length - 1; i >= 0; i--) {
             const p = this.popups[i];
             p.life -= delta;
+            p.age = (p.age || 0) + delta;
+            p.since = (p.since || 0) + delta;
             p.z += p.vz * delta;
             p.vz *= 0.94;
             p.t.position.set(p.wx, p.wy * TILT - p.z);
-            p.t.scale.set(Math.min(1, p.t.scale.x + 0.15 * delta));
+            // grow in, and settle back after a stacked hit made it pop
+            const sc = p.t.scale.x;
+            p.t.scale.set(sc < p.target ? Math.min(p.target, sc + 0.15 * delta) : Math.max(p.target, sc - 0.05 * delta));
             if (p.life < 14) p.t.alpha = Math.max(0, p.life / 14);
             if (p.life <= 0) {
+                if (p.key != null && this.stacks.get(p.key) === p) this.stacks.delete(p.key);
                 p.t.visible = false;
                 p.t.parent?.removeChild(p.t);
                 this.popupPool.push(p.t);
@@ -246,6 +278,7 @@ export class Effects {
             this.popupPool.push(p.t);
         });
         this.popups.length = 0;
+        this.stacks.clear();
         this.flashes.length = 0;
         this.waves.forEach((w) => w.g.destroy()); this.waves.length = 0;
         this.pillars.forEach((p) => p.s.destroy()); this.pillars.length = 0;

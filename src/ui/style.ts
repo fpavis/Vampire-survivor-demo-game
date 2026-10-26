@@ -30,6 +30,10 @@ export const CSS = `
 .vs-pill{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2;padding:7px 16px;border-radius:20px;background:linear-gradient(var(--c-gold),#e8a317);color:#2a1a00;font-weight:700;font-size:14px;border:0;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);animation:vs-pulse 1.3s infinite}
 @keyframes vs-pulse{50%{transform:translateX(-50%) scale(1.07)}}
 .vs-panel{position:absolute;z-index:5;background:linear-gradient(rgba(18,24,44,.96),rgba(10,13,26,.96));border:2px solid var(--c-line-2);border-radius:var(--r-l);padding:14px;box-shadow:0 6px 28px rgba(0,0,0,.6),inset 0 0 0 1px rgba(217,164,64,.18)}
+/* panels ease in (opacity and the independent scale/translate properties, so each panel keeps its own transform);
+   reduced motion turns every animation off below */
+@keyframes vs-panel-in{from{opacity:0;scale:.97;translate:0 6px}to{opacity:1;scale:1;translate:0 0}}
+.vs-panel{animation:vs-panel-in .14s cubic-bezier(.2,.8,.3,1) both}
 .vs-panel h2{margin:0 0 4px;font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:.5px;color:#f3e6c4;display:flex;align-items:center;gap:8px}
 .vs-panel .sub{font-size:12px;color:var(--c-muted);margin-bottom:10px}
 .vs-cards{right:16px;bottom:150px;width:min(320px,calc(100vw - 32px));max-height:calc(100vh - 290px);overflow:auto}
@@ -291,6 +295,50 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-btn[data-act="assist"].on{border-color:var(--c-good)}
 .vs-subtabs .vs-btn.on{border-color:var(--c-gold);color:#fff3cc}
 .vs-says{font-style:italic;color:var(--c-soft)}
+/* story moments: boss and victory cards in a letterbox, the ending roll, the death screen */
+.vs-story-card{position:fixed;left:0;right:0;top:0;bottom:0;z-index:30;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.vs-story-card .bar{position:fixed;left:0;right:0;height:10vh;background:#000;animation:vs-bar-in .45s ease-out both}
+.vs-story-card .bar.top{top:0}
+.vs-story-card .bar.bottom{bottom:0}
+@keyframes vs-bar-in{from{height:0}to{height:10vh}}
+.vs-story-card .in{text-align:center;padding:18px 32px;width:min(760px,94vw);background:linear-gradient(90deg,transparent,rgba(6,8,16,.84) 18%,rgba(6,8,16,.84) 82%,transparent);animation:vs-card-in .6s cubic-bezier(.2,.8,.3,1) both}
+@keyframes vs-card-in{from{opacity:0;letter-spacing:6px}to{opacity:1}}
+.vs-story-card .k{font-size:12px;letter-spacing:5px;text-transform:uppercase;color:var(--c-muted)}
+.vs-story-card .n{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,5.2vw,50px);letter-spacing:2px;color:#f3e6c4;text-shadow:0 2px 14px rgba(0,0,0,.8)}
+.vs-story-card.boss .n{color:#ff9a86}
+.vs-story-card.victory .n{color:var(--c-gold)}
+.vs-story-card .t{font-family:var(--font-display);font-size:clamp(15px,2.2vw,20px);color:#e8cf8a;margin-top:2px}
+.vs-story-card .x{font-size:14px;font-style:italic;color:var(--c-soft);margin-top:8px;text-wrap:balance}
+.vs-story-card.wake{align-items:flex-end;padding-bottom:20vh}
+.vs-story-card.wake .n{font-size:clamp(22px,3.6vw,32px)}
+.vs-panel.vs-ending{position:fixed;inset:0;border:0;border-radius:0;z-index:40;display:flex;flex-direction:column;align-items:center;padding:16px;background:radial-gradient(ellipse at 50% 40%,rgba(30,26,48,.94),rgba(4,4,10,.98))}
+.vs-ending .vs-x{position:absolute;top:12px;right:16px}
+.vs-roll-view{flex:1;width:min(640px,100%);overflow:hidden;position:relative;-webkit-mask-image:linear-gradient(transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(transparent,#000 12%,#000 88%,transparent)}
+.vs-roll{text-align:center;padding:60vh 0 20vh;animation:vs-roll 58s linear both}
+@keyframes vs-roll{from{transform:translateY(0)}to{transform:translateY(-100%)}}
+html.vs-reduced .vs-roll-view{overflow-y:auto}
+html.vs-reduced .vs-roll{padding:24px 0}
+.vs-roll h1{font-family:var(--font-display);font-size:clamp(30px,5vw,46px);color:#f3e6c4;margin:0 0 18px}
+.vs-roll h2{font-family:var(--font-display);font-size:20px;color:var(--c-gold);margin:42px 0 10px;letter-spacing:1px}
+.vs-roll p{font-size:16px;line-height:1.7;color:var(--c-soft);margin:6px auto;max-width:56ch}
+.vs-roll dl{margin:0 auto;max-width:380px}
+.vs-roll dl div{display:flex;justify-content:space-between;gap:16px;padding:4px 0;border-bottom:1px solid rgba(46,58,98,.45)}
+.vs-roll dt{color:var(--c-muted)}
+.vs-roll dd{margin:0;color:var(--c-text);font-variant-numeric:tabular-nums;font-weight:700}
+.vs-roll .fin{font-family:var(--font-display);font-size:22px;color:#f3e6c4;margin-top:56px}
+.vs-panel.vs-death{position:fixed;inset:0;border:0;border-radius:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at 50% 45%,rgba(60,8,14,.55),rgba(10,0,4,.94));animation:vs-death-in .9s ease-out both}
+@keyframes vs-death-in{from{opacity:0}to{opacity:1}}
+.vs-death .box{width:min(440px,100%);text-align:center}
+.vs-death h1{font-family:var(--font-display);font-weight:700;font-size:clamp(40px,8vw,64px);letter-spacing:3px;color:#ff7a6a;margin:0;text-shadow:0 3px 18px rgba(160,10,10,.6)}
+.vs-death .sub{font-size:14px;color:var(--c-soft);margin:4px 0 16px}
+.vs-death .rows{background:var(--c-frame);border:1px solid var(--c-line);border-radius:var(--r-m);padding:6px 14px;text-align:left}
+.vs-death .row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(46,58,98,.45);font-size:14px}
+.vs-death .row:last-child{border-bottom:0}
+.vs-death .row span{flex:1;color:var(--c-muted)}
+.vs-death .row b{font-variant-numeric:tabular-nums;color:var(--c-text);font-size:16px}
+.vs-acts.col{flex-direction:column;align-items:stretch;margin-top:14px}
+.vs-death .vs-btn.go{border-color:#5fd88a;background:rgba(30,90,50,.6);color:#d8ffe4}
+.vs-death .hint{font-size:12px;color:var(--c-muted);margin-top:10px}
 .vs-meter{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--c-panel);border:1px solid var(--c-line);border-radius:var(--r-m);font-size:13px;pointer-events:none}
 .vs-meter .vs-icon{font-size:26px}
 .vs-meter>span{display:flex;flex-direction:column;gap:1px}

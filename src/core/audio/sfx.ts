@@ -79,6 +79,18 @@ export const SFX: Record<string, SfxDef> = {
   switch: { layers: [L('triangle', 400, 0.08, { f2: 800, vol: 0.1 }), L('sine', 800, 0.08, { at: 0.07, f2: 600, vol: 0.08 })], gap: 0.1, max: 1 },
   quest: { layers: [L('triangle', 587, 0.1, { vol: 0.08 }), L('triangle', 880, 0.2, { at: 0.09, vol: 0.08 })], gap: 0.2, max: 1 },
   questDone: { layers: [L('triangle', 523, 0.1, { vol: 0.09 }), L('triangle', 659, 0.1, { at: 0.1, vol: 0.09 }), L('triangle', 784, 0.1, { at: 0.2, vol: 0.09 }), L('triangle', 1046, 0.4, { at: 0.3, vol: 0.09 }), L('sine', 523, 0.6, { at: 0.3, vol: 0.05 })], gap: 0.5, max: 1 },
+  // ------------------------------------------------------------ footsteps (by the ground underfoot)
+  stepGrass: { layers: [L('noise', 1100, 0.05, { vol: 0.03, q: 0.7 })], jitter: 0.15, gap: 0.1, max: 2 },
+  stepSand: { layers: [L('noise', 2600, 0.07, { vol: 0.022, q: 0.5, attack: 0.012 })], jitter: 0.15, gap: 0.1, max: 2 },
+  stepStone: { layers: [L('noise', 3200, 0.03, { vol: 0.03, q: 1.4 }), L('triangle', 220, 0.04, { f2: 150, vol: 0.025 })], jitter: 0.12, gap: 0.1, max: 2 },
+  stepSnow: { layers: [L('noise', 800, 0.08, { vol: 0.035, q: 0.9, attack: 0.01 }), L('noise', 2400, 0.04, { at: 0.03, vol: 0.015, hp: true })], jitter: 0.15, gap: 0.1, max: 2 },
+  stepWater: { layers: [L('noise', 900, 0.1, { f2: 500, vol: 0.035, q: 0.8 })], jitter: 0.2, gap: 0.1, max: 2 },
+  stepWood: { layers: [L('triangle', 170, 0.05, { f2: 120, vol: 0.04 }), L('noise', 1800, 0.03, { vol: 0.02, q: 1.2 })], jitter: 0.1, gap: 0.1, max: 2 },
+  stepMud: { layers: [L('noise', 420, 0.09, { f2: 260, vol: 0.04, q: 1.1, attack: 0.01 })], jitter: 0.15, gap: 0.1, max: 2 },
+  // ------------------------------------------------------------ stingers (short phrases over ducked music)
+  stingDiscover: { layers: [L('sine', 784, 0.5, { vol: 0.06 }), L('sine', 988, 0.5, { at: 0.12, vol: 0.06 }), L('sine', 1175, 0.6, { at: 0.24, vol: 0.06 }), L('sine', 1568, 0.9, { at: 0.36, vol: 0.05 }), L('triangle', 392, 1.2, { at: 0.36, vol: 0.04, attack: 0.1 })], gap: 1.5, max: 1 },
+  stingBoss: { layers: [L('sawtooth', 98, 1.1, { vol: 0.08, attack: 0.08 }), L('sawtooth', 147, 1.1, { at: 0.05, vol: 0.06, attack: 0.08 }), L('square', 196, 0.5, { at: 0.5, f2: 185, vol: 0.04 }), L('noise', 200, 1, { vol: 0.08, q: 0.5, attack: 0.3 })], gap: 3, max: 1 },
+  stingVictory: { layers: [L('triangle', 523, 0.16, { vol: 0.09 }), L('triangle', 659, 0.16, { at: 0.15, vol: 0.09 }), L('triangle', 784, 0.16, { at: 0.3, vol: 0.09 }), L('triangle', 1046, 0.9, { at: 0.45, vol: 0.09 }), L('sine', 523, 1.2, { at: 0.45, vol: 0.06, attack: 0.05 }), L('sine', 659, 1.2, { at: 0.45, vol: 0.05, attack: 0.05 })], gap: 3, max: 1 },
   // ------------------------------------------------------------ interface
   blip: { layers: [L('square', 740, 0.03, { vol: 0.025 })], bus: 'ui', jitter: 0.06, gap: 0.03, max: 1 },
   uiMove: { layers: [L('triangle', 880, 0.03, { vol: 0.035 })], bus: 'ui', gap: 0.02, max: 1 },

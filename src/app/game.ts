@@ -27,6 +27,7 @@ import { STOCK_EPOCH_SECONDS, epochOf, innCost, rumorFor, stockFor } from '../co
 import { createBoard, createNpc } from '../render/npcArt';
 import { AudioManager } from './audio';
 import { pickTrack } from '../core/audio/music';
+import { STEP_SOUND, STRIDE, ambientFor, footstepFor } from '../core/audio/ambience';
 import { mountUi } from '../ui/mount';
 import { ui as uiBridge } from '../ui/bridge';
 import { OverworldSource } from '../core/world/terrain';
@@ -54,9 +55,11 @@ import { DungeonSystem } from './dungeons';
 import { QuestSystem } from './quests';
 import { TipSystem } from './tips';
 import { TrainingDummy } from './dummy';
+import { StoryDirector } from './story';
 import { isTyping } from '../ui/nav';
 import { normKey } from '../core/input/bindings';
-import { applyAccess, loadAccess } from './access';
+import { access, applyAccess, loadAccess } from './access';
+import { cameraLead, hitStopFrames } from '../core/sim/feel';
 import { PerfOverlay } from './perfOverlay';
 import { quickGlyph } from '../ui/hints';
 
@@ -113,6 +116,9 @@ class Game {
         this.pointerKind = 'mouse';
         this.audio = new AudioManager();
         this.lastMove = { x: 0, y: 0 };
+        this.camLead = { x: 0, y: 0 };
+        this.hitStop = 0;              // frames the action holds still after a heavy hit
+        this.lastCritStop = -1e9;
         this.safeFor = 0;
         this.hazards = new Hazards(this);
         this.critters = new Critters(this);
@@ -148,6 +154,8 @@ class Game {
         this.quests = new QuestSystem(this);
         this.tips = new TipSystem(this);
         this.dummy = new TrainingDummy(this);
+        this.story = new StoryDirector(this);
+        this.events.on('QuestCompleted', (e) => { if (e.id === 'm6_sovereign') this.story.queueEnding(); });
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.gemStash = null;
         this.fog = new FogOfWar();
@@ -863,6 +871,8 @@ class Game {
         // keep the fade animation running during scene changes
         if (this.busy) { this.ui.updateExtras(this, rawDelta); this.world.animate(rawDelta); return; }
         if (s.levelUp || s.paused) return;
+        // hit-stop: the action holds for a moment after a crit or a big kill
+        if (this.hitStop > 0) { this.hitStop = Math.max(0, this.hitStop - 1); return; }
 
         const delta = Math.min(rawDelta, 2.5);
         this.frame += delta;
@@ -878,6 +888,7 @@ class Game {
         this.dungeons.update(delta);
         this.quests.update(delta);
         this.tips.update(delta);
+        this.story.update();
         this.updateShakers(delta);
         this.spells.update(delta);
         this.party.update(delta);
@@ -958,7 +969,18 @@ class Game {
             mul *= this.surfaces.fx.speed;
             const speed = this.state.playerSpeed * this.stats.speed * delta * mul;
             this.world.tryMove(player, dx * speed, dy * speed * 1.2, player.radius, !!this.boat);
-            this.state.distance += Math.hypot(player.wx - ox, player.wy - oy);
+            const walked = Math.hypot(player.wx - ox, player.wy - oy);
+            this.state.distance += walked;
+            // footsteps, by the ground underfoot
+            if (!this.boat) {
+                this.stepDist = (this.stepDist || 0) + walked;
+                if (this.stepDist >= STRIDE) {
+                    this.stepDist = 0;
+                    const step = footstepFor(this.world.biomeAtPos(player.wx, player.wy), this.surfaces.current ? this.surfaces.current.id : null);
+                    this.lastStep = step;
+                    this.audio.play(STEP_SOUND[step], { vol: 0.85 });
+                }
+            }
             moving = true;
             this.lastMove = { x: dx / (Math.hypot(dx, dy) || 1), y: dy / (Math.hypot(dx, dy) || 1) };
             if (Math.abs(dx) > 0.15) player.facing = dx > 0 ? 1 : -1;
@@ -1014,9 +1036,23 @@ class Game {
     updateCamera(delta) {
         const p = this.state.player;
         const t = 1 - Math.pow(0.001, delta / 60);
-        this.cam.x += (p.wx - this.cam.x) * t;
-        this.cam.y += (p.wy - this.cam.y) * t;
+        // the camera looks a little ahead of the hero while walking (not under reduced motion)
+        const want = access.reducedMotion || this.busy ? { x: 0, y: 0 } : cameraLead(this.lastMove.x, this.lastMove.y, !!p.moving, Math.min(6, Math.hypot(this.playerVel.x, this.playerVel.y)));   // a blink or dash must not swing the camera
+        const k = 1 - Math.pow(0.04, delta / 60);
+        this.camLead.x += (want.x - this.camLead.x) * k;
+        this.camLead.y += (want.y - this.camLead.y) * k;
+        this.cam.x += (p.wx + this.camLead.x - this.cam.x) * t;
+        this.cam.y += (p.wy + this.camLead.y - this.cam.y) * t;
         this.applyCamera();
+    }
+
+    /** Freeze the action for a moment (crits, big kills); scaled by the shake setting, off under reduced motion. */
+    addHitStop(kind) {
+        if (access.reducedMotion) return;
+        const n = hitStopFrames(kind, settings.shake, this.frame, this.lastCritStop);
+        if (!n) return;
+        if (kind === 'crit') this.lastCritStop = this.frame;
+        this.hitStop = Math.max(this.hitStop, n);
     }
 
     // ------------------------------------------------------------- enemies
@@ -1037,6 +1073,8 @@ class Game {
             const e = list[i];
             if (e.dead || e.dummy) continue;
             updateEnemy(this, e, delta);
+            // a warlord or demon lord that notices the party gets its card
+            if ((e.isBoss || e.dungeonBoss) && !e.introduced && !e.dormant && (!e.home || e.shell === 'engaged')) { e.introduced = true; this.story.bossIntro(e); }
             // a warning sound when a big hitter starts to wind up (charges, slams, dives, boss abilities)
             const st = e.ai && e.ai.state;
             if (st !== e.lastAiState) {
@@ -1148,8 +1186,12 @@ class Game {
         e.health -= dmg;
         if (!opts.quiet) {
             e.hitFlash = 6;
-            if (showDamageNumber(settings.damageNumbers, crit)) this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
+            if (showDamageNumber(settings.damageNumbers, crit)) {
+                if (crit) this.fx.popup(e.wx, e.wy, Math.round(dmg), 0xffd84a, 24, e.baseHeight + 8);
+                else this.fx.damageNumber(e.uid, e.wx, e.wy, dmg, opts.color || 0xffffff, 16, e.baseHeight + 8);
+            }
             this.audio.play(crit ? 'crit' : 'hit', { x: e.wx, y: e.wy });
+            if (crit) this.addHitStop('crit');
         }
         // the training dummy only counts the damage: no knock-back, no waking, no death
         if (e.dummy) { this.dummy.hit(dmg); e.hitFlash = 6; e.health = e.maxHealth; return; }
@@ -1176,6 +1218,8 @@ class Game {
         s.score += e.experienceValue * 2;
         this.fx.death(e.wx, e.wy, type.color, e.isBoss);
         this.audio.play(e.isBoss ? 'bossDown' : e.radius > 22 || e.elite ? 'killBig' : 'kill', { x: e.wx, y: e.wy });
+        if (e.isBoss || e.dungeonBoss) this.addHitStop('bossKill');
+        else if (e.elite || e.radius > 22) this.addHitStop('bigKill');
 
         if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy, e.level);
         this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss, group: this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.group : this.zoneGroup, dungeon: !!e.dungeonBoss });
@@ -1193,7 +1237,7 @@ class Game {
             this.dropGem(e.wx, e.wy + 20, 0, 'heart');
             this.dropGem(e.wx + 30, e.wy, 0, 'heart');
             this.fx.addShake(12);
-            this.ui.banner(`${e.dungeonBoss ? e.bossName : type.name.toUpperCase()} DEFEATED!`, 0xffd84a);
+            this.story.victory(e);
             this.requestSave('boss', true);
         } else {
             this.dropGem(e.wx, e.wy, e.experienceValue);
@@ -1233,12 +1277,15 @@ class Game {
         a.listener.x = this.cam.x; a.listener.y = this.cam.y;
         this.musicHeat = (this.musicHeat || 0) + ((Math.min(1, (this.engagedNear || 0) / 7)) - (this.musicHeat || 0)) * Math.min(1, 0.02 * delta);
         if ((this.frame | 0) % 30 !== 0) return;
-        if (!p || s.gameOver) { a.music.setTrack('title'); return; }
+        // keep the music down while someone is talking
+        a.setDuckHold(!!uiBridge.dialog.value);
+        if (!p || s.gameOver) { a.music.setTrack('title'); a.ambience.setBed('silence'); return; }
         const boss = s.enemies.some((e) => e.isBoss && !e.dead && Math.abs(e.wx - p.wx) < 1100 && Math.abs(e.wy - p.wy) < 900);
         const inside = this.mode === 'interior' && this.interiorPoi;
         const id = pickTrack({ boss, place: inside ? this.interiorPoi.type : null, dungeon: !!(inside && this.interior && this.interior.dungeon), sailing: !!this.boat, group: this.zoneGroup });
         a.music.setTrack(id, !inside && (this.zoneTier || 0) >= 2);
         a.music.setIntensity(boss ? 1 : this.musicHeat);
+        a.ambience.setBed(ambientFor({ group: this.zoneGroup, place: inside ? this.interiorPoi.type : null, dungeon: !!(inside && this.interior && this.interior.dungeon), sailing: !!this.boat }));
         if (s.health > 0 && s.health / s.maxHealth < 0.25) a.play('heartbeat');
     }
 
@@ -1270,6 +1317,7 @@ class Game {
             if (this.frame > 30) {
                 this.ui.showZone(region.name.toUpperCase(), 'fleur', 0xf3d08a);
                 this.ui.toast(`${first ? 'Discovered ' : ''}${region.title}${region.capital ? ` · capital: ${region.capital.name}` : ''}`, first ? 'map' : '');
+                if (first) this.audio.stinger('stingDiscover');
             }
             this.events.emit('RegionEntered', { id: regionId, name: region.name, first });
         }
@@ -1403,6 +1451,7 @@ class Game {
             this.popRuntime.clearActive();
             this.clearOverworldDisplays();
 
+            if (!this.visited[poi.id]) this.audio.stinger('stingDiscover');      // the first time inside a place
             this.visited[poi.id] = this.visited[poi.id] || { opened: [], cleared: false, altarUsed: false };
             // visited towns become respawn points
             if (poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id)) {
@@ -1827,6 +1876,7 @@ class Game {
         const s = this.state;
         const p = s.player;
         const magnet = 95 * this.stats.magnet;
+        const trails = settings.quality !== 'low';
         for (let i = s.gems.length - 1; i >= 0; i--) {
             const g = s.gems[i];
             const dx = p.wx - g.wx, dy = p.wy - g.wy;
@@ -1838,6 +1888,11 @@ class Game {
                 const step = Math.min(dist, (g.vel + 2) * delta);
                 g.wx += (dx / dist) * step;
                 g.wy += (dy / dist) * step;
+                // a short sparkle trail behind a gem flying in (inside the particle budget, not on low quality)
+                if (trails && g.vel > 4 && ((this.frame | 0) + i) % 3 === 0) {
+                    const col = g.kind === 'gem' ? EntityManager.gemTier(g.value).color : g.kind === 'coin' ? 0xffd84a : g.kind === 'heart' ? 0xff7a94 : 0xcfd8e8;
+                    this.fx.burst(g.wx, g.wy, 10, col, 1, 0.25, { size: 0.42, life: 14, glow: true });
+                }
             }
 
             if (dist < 20) {
@@ -2009,6 +2064,7 @@ class Game {
 
     respawn(target) {
         const s = this.state;
+        uiBridge.death.value = null;
         this.ui.fade(1, 0.1, () => {
             s.gameOver = false;
             this.gemStash = null;
@@ -2019,7 +2075,7 @@ class Game {
             this.applyOverworld(target.x, target.y);
             this.map.dirty = true;
             this.invulnUntil = this.frame + 120;
-            this.ui.fade(0, 0.06, () => {});
+            this.ui.fade(0, 0.06, () => this.story.wake(target.label));
             this.requestSave('respawn', true);
         });
     }
@@ -2035,108 +2091,20 @@ class Game {
         this.fx.death(s.player.wx, s.player.wy, 0x6aa8ff, true);
         s.player.visible = false;
         this.events.emit('HeroDied', { respawnAt: this.respawnTarget().label });
+        this.story.showDeath(this.respawnTarget());
+    }
 
-        const { app } = this;
-        const screen = new PIXI.Container();
-        screen.zIndex = 3000;
-        screen.eventMode = 'static';
-        screen.alpha = 0;
-        app.stage.addChild(screen);
+    /** Respawn from the death screen. */
+    deathRespawn() {
+        if (!this.state.gameOver || this.busy) return;
+        this.respawn(this.respawnTarget());
+    }
 
-        const dim = new PIXI.Graphics();
-        const title = new PIXI.Text('YOU FELL', {
-            fontFamily: FONT, fontSize: 76, fontWeight: 'bold', fill: ['#ff6a6a', '#a10d0d'],
-            stroke: 0x1a0000, strokeThickness: 8, dropShadow: true, dropShadowDistance: 6, dropShadowAlpha: 0.6, letterSpacing: 4
-        });
-        title.anchor.set(0.5);
-
-        const panel = new PIXI.Container();
-        const pbg = new PIXI.Graphics();
-        pbg.beginFill(0x0c1120, 0.85);
-        pbg.lineStyle(2, 0xffffff, 0.2);
-        pbg.drawRoundedRect(-190, -95, 380, 190, 16);
-        pbg.endFill();
-        const rows = [
-            ['Time played', this.formatTime(s.time)],
-            ['Hero level', `${s.level}`],
-            ['Enemies defeated', `${s.kills}`],
-            ['Zone level', `${this.zoneLevelNow}`]
-        ];
-        panel.addChild(pbg);
-        rows.forEach(([k, v], i) => {
-            const y = -66 + i * 43;
-            const kt = new PIXI.Text(k, { fontFamily: FONT, fontSize: 19, fill: 0xa9b3cc });
-            kt.position.set(-160, y - 12);
-            const vt = new PIXI.Text(v, { fontFamily: FONT, fontSize: 24, fontWeight: 'bold', fill: 0xffffff });
-            vt.anchor.set(1, 0);
-            vt.position.set(160, y - 15);
-            panel.addChild(kt, vt);
-        });
-
-        const target = this.respawnTarget();
-        const green = { base: 0x3fcf6a, hover: 0x5fe28a, text: 0x0b2a14 };
-        const blue = { base: 0x4a7fe0, hover: 0x6a9aff, text: 0x061233 };
-        const respawnBtn = this.makeMenuButton(`RESPAWN AT ${target.label.toUpperCase()}`, green, 420);
-        const newBtn = this.makeMenuButton('NEW GAME', blue, 420);
-        const hint = new PIXI.Text('Your progress, the map and cleared places are kept.', { fontFamily: FONT, fontSize: 14, fill: 0xb8c4e0 });
-        hint.anchor.set(0.5);
-        screen.addChild(dim, title, panel, respawnBtn, hint, newBtn);
-
-        const layout = () => {
-            const w = app.screen.width, h = app.screen.height;
-            dim.clear();
-            dim.beginFill(0x120404, 0.72);
-            dim.drawRect(0, 0, w, h);
-            dim.endFill();
-            const sc = clamp(w / 800, 0.55, 1);
-            title.scale.set(sc);
-            title.position.set(w / 2, h * 0.17);
-            panel.position.set(w / 2, h * 0.42);
-            respawnBtn.position.set(w / 2, h * 0.42 + 150);
-            hint.position.set(w / 2, h * 0.42 + 190);
-            newBtn.position.set(w / 2, h * 0.42 + 240);
-        };
-        layout();
-        window.addEventListener('resize', layout);
-
-        const fade = (d) => {
-            screen.alpha = Math.min(1, screen.alpha + 0.04 * d);
-            if (screen.alpha >= 1) app.ticker.remove(fade);
-        };
-        app.ticker.add(fade);
-
-        let done = false;
-        let confirmNew = false;
-        const close = () => {
-            done = true;
-            app.ticker.remove(fade);
-            window.removeEventListener('resize', layout);
-            menuNav.remove();
-            app.stage.removeChild(screen);
-            screen.destroy({ children: true });
-        };
-        const doRespawn = () => {
-            if (done || screen.alpha < 0.6) return;
-            close();
-            this.respawn(target);
-        };
-        const runNew = () => {
-            if (done || screen.alpha < 0.6) return;
-            if (!confirmNew) {
-                confirmNew = true;
-                newBtn.label.text = 'THIS ERASES YOUR SAVE - PRESS AGAIN TO CONFIRM';
-                setTimeout(() => { confirmNew = false; if (!done) newBtn.label.text = 'NEW GAME'; }, 3500);
-                return;
-            }
-            close();
-            this.state.gameOver = false;
-            this.init(null);
-        };
-        const menuNav = this.input.pushMenu({ items: () => [{ btn: respawnBtn, run: doRespawn }, { btn: newBtn, run: runNew }] });
-        respawnBtn.onHover = () => menuNav.menu.select(respawnBtn);
-        newBtn.onHover = () => menuNav.menu.select(newBtn);
-        respawnBtn.on('pointerdown', (e) => { e.stopPropagation(); doRespawn(); });
-        newBtn.on('pointerdown', (e) => { e.stopPropagation(); runNew(); });
+    /** Start over from the death screen (the screen asks for a second press first). */
+    deathNewGame() {
+        uiBridge.death.value = null;
+        this.state.gameOver = false;
+        this.init(null);
     }
 
     formatTime(seconds) {

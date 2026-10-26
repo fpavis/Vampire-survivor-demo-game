@@ -3,16 +3,15 @@ export const GAME_VERSION = '0.9.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'A new look and more options',
+  title: 'A new look, new monsters and an ending',
   notes: [
-    'Icons drawn for the game everywhere, and new typefaces',
-    'Three save slots with backups, plus export and import',
-    'Settings in tabs: quality, render scale, frame limit, camera zoom, HUD size and more',
-    'A message log and a statistics page in the journal',
-    'Load, Options and Credits on the title screen',
-    'Edit any hero\'s spells, keep three loadout sets, and let a resting hero assist',
-    'A codex of the monsters, spells, runes and places you have found',
-    'A training dummy with a damage meter in every town'
+    'Icons drawn for the game, new typefaces, and towns redrawn in ink',
+    'Three save slots with backups, export and import; settings in tabs',
+    'Edit any hero\'s spells, keep loadout sets, let a resting hero assist',
+    'A codex, a training dummy in every town, a log and statistics',
+    'Ten new monsters for the far regions, and lairs marked by totems',
+    'Warlord cards, an ending with credits, and a new death screen',
+    'Hit-stop, a camera that looks ahead, and sounds for every region'
   ]
 };
 

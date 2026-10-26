@@ -6,6 +6,7 @@ import { ENEMY_TYPES } from '../core/config';
 import { CACHE_CELL, bossChestTier, bossLevel, floorLevel, isSeaDungeonCell, plateauPoi, seaDungeonPoi } from '../core/world/dungeons';
 import { findPlace } from '../core/quest/places';
 import { bossTitle } from '../core/story/story';
+import { lordFor } from '../core/story/ending';
 
 const T = WORLD_CONFIG.tile;
 const TILT = WORLD_CONFIG.tilt;
@@ -105,6 +106,8 @@ export class DungeonSystem {
         if (g.world.blocked(x, y, type.radius)) { const f = g.world.findFree(x, y, type.radius); x = f.x; y = f.y; }
         const e = g.makeEnemy(info.boss, x, y, { dormant: true, aggro: 520, level: bossLevel(this.baseLevel(poi), info.floors) });
         e.dungeonBoss = poi.id;
+        e.group = poi.group;
+        e.lord = lordFor(poi.group, info.realm, this.isLordLair(poi), !!(g.quests && g.quests.state.flags['lords.all']));
         const title = bossTitle(poi.group, info.realm, this.isLordLair(poi), g.quests ? g.quests.state : { flags: {} });
         if (title) e.bossName = title.toUpperCase();
         g.interiorHostiles++;

@@ -383,6 +383,137 @@ if (want('codex')) {
   check('the codex is saved', saved.monsters.includes('BOAR') && saved.spells.includes('nova') && saved.spells.length >= 3, JSON.stringify(saved));
 }
 
+// ---- 9d: game feel, sound, story moments, new species
+if (want('feel')) {
+  const feel = await ev(() => {
+    const g = window.game, p = g.state.player;
+    g.hitStop = 0; g.lastCritStop = -1e9;
+    const elite = g.makeEnemy('SLIME', p.wx + 80, p.wy, { level: 1, elite: true });
+    g.damageEnemy(elite, 1e9, { noCrit: true });
+    const stop = g.hitStop;
+    for (let i = 0; i < 12; i++) g.gameLoop(1);
+    // three quick hits on one monster make one number that adds up
+    const golem = g.makeEnemy('GOLEM', p.wx + 260, p.wy, { level: 5 });
+    golem.armor = 0;
+    const n0 = g.fx.popups.length;
+    g.damageEnemy(golem, 7, { noCrit: true }); g.damageEnemy(golem, 7, { noCrit: true }); g.damageEnemy(golem, 7, { noCrit: true });
+    const stack = g.fx.stacks.get(golem.uid);
+    return { stop, added: g.fx.popups.length - n0, text: stack && stack.t.text };
+  });
+  check('a big kill holds the action for a moment', feel.stop >= 4, JSON.stringify(feel));
+  check('quick hits on one monster stack into one number', feel.added === 1 && feel.text === '21', JSON.stringify(feel));
+  const lead = await ev(() => {
+    const g = window.game, p = g.state.player;
+    for (const e of [...g.state.enemies]) e.dead = true; g.reap();
+    // walk the way that is open (a wall ahead would stop the hero, and a hero who does not move has no lead)
+    let best = { moved: -1, ahead: 0 };
+    for (const [key, dx, dy] of [['d', 1, 0], ['a', -1, 0], ['s', 0, 1], ['w', 0, -1]]) {
+      const x0 = p.wx, y0 = p.wy;
+      g.state.keys = { [key]: true }; for (let i = 0; i < 150; i++) g.gameLoop(1); g.state.keys = {};
+      const moved = (p.wx - x0) * dx + (p.wy - y0) * dy;
+      const ahead = (g.cam.x - p.wx) * dx + (g.cam.y - p.wy) * dy;
+      for (let i = 0; i < 240; i++) g.gameLoop(1);
+      if (moved > best.moved) best = { moved: Math.round(moved), ahead: Math.round(ahead), key };
+      if (moved > 150) break;
+    }
+    return { ...best, still: Math.round(Math.hypot(g.cam.x - p.wx, g.cam.y - p.wy)) };
+  });
+  check('the camera looks ahead while walking and settles when standing', lead.moved > 150 && lead.ahead > 15 && lead.still < 6, JSON.stringify(lead));
+  const trail = await ev(() => {
+    const g = window.game, p = g.state.player;
+    g.dropGem(p.wx + 150, p.wy, 5);
+    const gem = g.state.gems[g.state.gems.length - 1]; gem.magnetized = true; gem.vel = 8;
+    const n0 = g.fx.particles.length;
+    for (let i = 0; i < 6; i++) g.gameLoop(1);
+    return g.fx.particles.length - n0;
+  });
+  check('a gem flying in leaves a short trail', trail > 0, String(trail));
+  await page.keyboard.press('j');
+  await until(() => !!document.querySelector('.vs-journal'));
+  const anim = await ev(() => getComputedStyle(document.querySelector('.vs-journal')).animationName);
+  await ev(() => document.documentElement.classList.add('vs-reduced'));
+  const reduced = await ev(() => getComputedStyle(document.querySelector('.vs-journal')).animationName);
+  await ev(() => document.documentElement.classList.remove('vs-reduced'));
+  await page.keyboard.press('j');
+  check('panels ease in, and not under reduced motion', anim === 'vs-panel-in' && reduced === 'none', JSON.stringify({ anim, reduced }));
+}
+
+if (want('sound')) {
+  const s0 = await ev(async () => {
+    const g = window.game, a = g.audio;
+    a.unlock(); await a.ctx.resume();
+    for (let i = 0; i < 40; i++) g.gameLoop(1);
+    return a.stats();
+  });
+  check('an ambient bed plays for the region', s0.state === 'running' && ['field', 'forest', 'desert', 'shore', 'mountain'].includes(s0.bed), JSON.stringify(s0));
+  const duck = await ev(async () => {
+    const a = window.game.audio;
+    a.stinger('stingDiscover');
+    const during = a.ducked;
+    await new Promise((r) => setTimeout(r, 3200));
+    return { during, after: a.ducked, played: a.played.stingDiscover || 0 };
+  });
+  check('a stinger plays with the music ducked under it, then the music returns', duck.during && !duck.after && duck.played >= 1, JSON.stringify(duck));
+  const steps = await ev(async () => {
+    const g = window.game, a = g.audio;
+    const before = Object.entries(a.played).filter(([k]) => k.startsWith('step')).reduce((n, [, v]) => n + v, 0);
+    // back and forth, so a wall ahead cannot stop the walk; real time between strides lets each step sound play
+    const d0 = g.state.distance;
+    for (let k = 0; k < 4; k++) { g.state.keys = k % 2 ? { a: true } : { d: true }; for (let i = 0; i < 30; i++) g.gameLoop(1); g.state.keys = {}; await new Promise((r) => setTimeout(r, 130)); }
+    const after = Object.entries(a.played).filter(([k]) => k.startsWith('step')).reduce((n, [, v]) => n + v, 0);
+    return { steps: after - before, last: g.lastStep, walked: Math.round(g.state.distance - d0) };
+  });
+  check('footsteps follow the ground underfoot', steps.walked > 100 && steps.steps >= 2 && !!steps.last, JSON.stringify(steps));
+}
+
+if (want('story')) {
+  await ev(() => { const g = window.game; for (const e of [...g.state.enemies]) e.dead = true; g.reap(); g.spawnBoss(); for (let i = 0; i < 3; i++) g.gameLoop(1); });
+  const boss = await until(() => !!document.querySelector('[data-card="boss"] .n'));
+  const bossText = await ev(() => document.querySelector('.vs-story-card')?.innerText || '');
+  check('a warlord shows itself with a card', boss && /great foe/i.test(bossText) && /Warlord of/i.test(bossText), bossText.replace(/\n/g, ' | '));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/card-boss.png` });
+  await ev(() => { const g = window.game, e = g.state.enemies.find((x) => x.isBoss && !x.dead); e.lord = 'forest'; g.damageEnemy(e, 1e12, { noCrit: true }); for (let i = 0; i < 3; i++) g.gameLoop(1); });
+  const vic = await until(() => /Thornax/.test(document.querySelector('[data-card="victory"]')?.innerText || ''));
+  check('a demon lord falls with a victory card', vic);
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/card-victory.png` });
+  // the ending, after the Sovereign's quest is turned in
+  await ev(() => { const g = window.game; g.events.emit('QuestCompleted', { id: 'm6_sovereign' }); for (let i = 0; i < 3; i++) g.gameLoop(1); });
+  const ending = await until(() => !!document.querySelector('.vs-ending .vs-roll'));
+  const endState = await ev(() => ({ paused: window.game.state.paused, text: document.querySelector('.vs-ending')?.innerText || '' }));
+  if (process.env.SHOTS) { await page.waitForTimeout(4000); await page.screenshot({ path: `${process.env.SHOTS}/ending.png` }); }
+  await page.keyboard.press('Escape');
+  const skipped = await until(() => !document.querySelector('.vs-ending') && !window.game.state.paused);
+  check('the ending rolls the epilogue, the run and the credits, paused, and can be skipped', ending && endState.paused && /The road so far/.test(endState.text) && /game-icons\.net/.test(endState.text) && skipped, endState.text.slice(0, 80));
+  // the death screen and the way back
+  await ev(() => { const g = window.game; g.godMode = false; for (const h of g.party.heroes) h.dead = true; for (let i = 0; i < 4; i++) { g.state.health = 0; g.step(1); } });
+  const death = await until(() => !!document.querySelector('.vs-death [data-act="respawn"]'));
+  const deathText = await ev(() => document.querySelector('.vs-death')?.innerText || '');
+  if (process.env.SHOTS) { await page.waitForTimeout(1000); await page.screenshot({ path: `${process.env.SHOTS}/death.png` }); }
+  await ev(() => document.querySelector('.vs-death [data-act="respawn"]').click());
+  const back = await until(() => !window.game.state.gameOver && !document.querySelector('.vs-death'));
+  for (let i = 0; i < 60 && !(await ev(() => !!document.querySelector('[data-card="wake"]'))); i++) await loop(2);
+  const wake = await ev(() => document.querySelector('[data-card="wake"]')?.innerText || '');
+  await ev(() => { window.game.godMode = true; });
+  check('the death screen shows the run and respawns the party', death && /You fell/i.test(deathText) && /Monsters defeated/.test(deathText) && back, deathText.slice(0, 60));
+  check('after a respawn a card says where you woke', /You wake in/.test(wake), wake);
+}
+
+if (want('species')) {
+  const sp = await ev(() => {
+    const g = window.game, p = g.state.player;
+    for (const e of [...g.state.enemies]) e.dead = true; g.reap();
+    const keys = ['THORNBACK', 'WIGHT', 'MANTIS', 'THORNWITCH', 'SANDWORM', 'DJINN', 'SIREN', 'LURKER', 'HARPY', 'YETI'];
+    const made = keys.map((k, i) => g.makeEnemy(k, p.wx - 400 + (i % 5) * 200, p.wy - 140 + Math.floor(i / 5) * 260, { level: 30 }));
+    for (let i = 0; i < 240; i++) g.gameLoop(1);
+    const states = new Set(made.map((e) => e.ai && e.ai.state));
+    const drawn = made.every((e) => e.body && e.body.children.length > 0 && e.baseHeight > 30);
+    for (const e of made) if (!e.dead) g.damageEnemy(e, 1e12, { noCrit: true });
+    return { n: made.length, drawn, states: [...states], totem: !!g.world.decorTextures.lairtotem, codex: keys.every((k) => g.codex.monsters.includes(k)) };
+  });
+  check('ten new species for tiers 2 and 3 spawn, act and are drawn', sp.n === 10 && sp.drawn && sp.states.length >= 2, JSON.stringify(sp));
+  check('they join the bestiary when defeated, and lairs have a totem sprite', sp.codex && sp.totem, JSON.stringify(sp));
+}
+
 // ---- title screen: Load, Options and Credits; quit to the title and continue
 if (want('front')) {
   await page.keyboard.press('Escape');

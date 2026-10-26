@@ -94,7 +94,11 @@ export const ui = {
   creditsOpen: signal(false),
   newGameSeed: signal(''),                    // seed for the next new game ('' = random)
   log: signal<LogEntry[]>([]),
-  dummy: signal<{ dps: number; total: number; peak: number } | null>(null),   // the training dummy's damage meter                // recent toasts and banners, newest last
+  dummy: signal<{ dps: number; total: number; peak: number } | null>(null),   // the training dummy's damage meter
+  // story moments: a boss or victory card over the action, the ending and its closing roll, the death screen
+  card: signal<{ id: number; kind: 'boss' | 'victory' | 'wake'; name: string; title: string; text: string } | null>(null),
+  ending: signal<{ epilogue: string[]; roll: [string, string][]; credits: { section: string; lines: string[] }[] } | null>(null),
+  death: signal<{ place: string; rows: [string, string, string][] } | null>(null),                // recent toasts and banners, newest last
   game: null as any
 };
 
@@ -102,6 +106,7 @@ export const ui = {
 export const panelOpen = () =>
   ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
   ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
-  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value || !!ui.slotsOpen.value || ui.optionsOpen.value || ui.creditsOpen.value;
+  ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value || !!ui.slotsOpen.value || ui.optionsOpen.value || ui.creditsOpen.value ||
+  !!ui.death.value || !!ui.ending.value;
 
 export const PICK_KEYS = ['1', '2', '3'];

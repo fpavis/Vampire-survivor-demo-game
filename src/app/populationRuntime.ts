@@ -1,3 +1,4 @@
+import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { POPULATION, Population, pickRosterEntry, type Camp } from '../core/world/population';
 import type { OverworldSource } from '../core/world/terrain';
@@ -9,7 +10,8 @@ const SPAWN_DIST = CHUNK * 3.0;
 const DESPAWN_DIST = CHUNK * 4.2;
 const ROAMER_LEASH = 320;
 
-interface ActiveCamp { camp: Camp; members: any[] }
+interface ActiveCamp { camp: Camp; members: any[]; totem?: any }
+const TILT = WORLD_CONFIG.tilt;
 
 /** Brings seeded camps to life near the player, tracks clears, and adds a few ambient roamers. */
 export class PopulationRuntime {
@@ -30,6 +32,7 @@ export class PopulationRuntime {
 
   /** forget live references (the entities themselves are removed by the game) */
   clearActive(): void {
+    for (const a of this.active.values()) if (a.totem && !a.totem.destroyed) a.totem.destroy();
     this.active.clear();
     this.roamers = [];
     this.timer = 0;
@@ -84,13 +87,28 @@ export class PopulationRuntime {
       });
       members.push(e);
     });
-    this.active.set(camp.id, { camp, members });
+    this.active.set(camp.id, { camp, members, totem: camp.lair ? this.placeTotem(camp) : null });
+  }
+
+  /** A warlord's lair is marked by a horned-skull totem beside it. */
+  private placeTotem(camp: Camp): any {
+    const g = this.game;
+    const set = g.world.decorTextures && g.world.decorTextures.lairtotem;
+    if (!set) return null;
+    const f = g.world.findFree(camp.x + 70, camp.y - 40, 10);
+    const s = new PIXI.Sprite(set[0].texture);
+    s.anchor.set(0.5, set[0].anchorY);
+    s.position.set(f.x, f.y * TILT);
+    s.zIndex = f.y;
+    g.objectLayer.addChild(s);
+    return s;
   }
 
   private despawn(id: string): void {
     const a = this.active.get(id);
     if (!a) return;
     for (const e of a.members) if (!e.dead) { e.dead = true; e.silent = true; }
+    if (a.totem) a.totem.destroy();
     this.active.delete(id);
   }
 
@@ -101,6 +119,7 @@ export class PopulationRuntime {
     const a = this.active.get(e.campId);
     if (!a) return;
     if (a.members.some((m) => !m.dead)) return;
+    if (a.totem && !a.totem.destroyed) a.totem.destroy();       // the lair's totem falls with its warlord
     this.active.delete(e.campId);
     const g = this.game;
     if (a.camp.lair) {

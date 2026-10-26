@@ -481,51 +481,117 @@ function drawOre(g) {
 // --------------------------------------------------------- POI LANDMARKS
 function drawCaveMouth(g, rock) {
     shadow(g, 70, 16, 0.35);
-    g.beginFill(shade(rock, 0.6)); g.drawPolygon([-68, 0, -72, -36, -54, -76, -20, -98, 22, -100, 56, -78, 72, -40, 68, 0]); g.endFill();
-    g.beginFill(rock); g.drawPolygon([-72, -36, -54, -76, -20, -98, 22, -100, 0, -60, -40, -34]); g.endFill();
-    g.beginFill(shade(rock, 1.25), 0.7); g.drawPolygon([-54, -76, -20, -98, 22, -100, 10, -88, -30, -82]); g.endFill();
-    // dark mouth
-    g.beginFill(0x07060a); g.drawPolygon([-30, 0, -32, -28, -18, -54, 0, -62, 18, -54, 32, -28, 30, 0]); g.endFill();
-    g.beginFill(0x1a1410); g.drawPolygon([-24, 0, -25, -24, -12, -46, 0, -52, 12, -46, 25, -24, 24, 0]); g.endFill();
-    g.beginFill(0xffb04a, 0.18); g.drawEllipse(0, -22, 18, 22); g.endFill();
-    // jagged teeth
-    g.beginFill(shade(rock, 0.8));
-    g.drawPolygon([-18, -54, -14, -44, -10, -56]); g.drawPolygon([6, -60, 10, -48, 14, -58]); g.endFill();
+    // the hillside around the mouth: an inked outline, a lit left face and a shadowed right face
+    opoly(g, [-68, 0, -72, -36, -54, -76, -20, -98, 22, -100, 56, -78, 72, -40, 68, 0], shade(rock, 0.62), 2);
+    fpoly(g, [-70, -34, -54, -76, -20, -98, 22, -100, 2, -62, -40, -34], rock);
+    fpoly(g, [-54, -76, -20, -98, 22, -100, 12, -88, -30, -82], shade(rock, 1.22));
+    fpoly(g, [40, -82, 56, -78, 72, -40, 68, 0, 46, 0, 52, -40], shade(rock, 0.5));
+    g.lineStyle(1.1, shade(rock, 0.38), 0.75);
+    g.moveTo(-50, -60); g.lineTo(-38, -48); g.moveTo(30, -84); g.lineTo(40, -66); g.lineTo(36, -52); g.moveTo(-60, -20); g.lineTo(-48, -14);
+    noLine(g);
+    g.lineStyle(1.4, shade(rock, 1.5), 0.8); g.moveTo(-52, -78); g.lineTo(-22, -97); noLine(g);
+    // moss and a few stones at the foot
+    ink(g, 1.1); g.beginFill(0x4a8e36); g.drawEllipse(-34, -86, 9, 3); g.drawEllipse(10, -97, 7, 2.4); g.endFill(); noLine(g);
+    // the dark mouth with a warm glow deep inside
+    opoly(g, [-30, 0, -32, -28, -18, -54, 0, -62, 18, -54, 32, -28, 30, 0], 0x07060a, 1.8);
+    fpoly(g, [-24, 0, -25, -24, -12, -46, 0, -52, 12, -46, 25, -24, 24, 0], 0x1a1410);
+    // a warm light deep inside: a soft pool on the floor and a faint haze, no hard disc
+    g.beginFill(0xffb04a, 0.1); g.drawEllipse(0, -6, 18, 6); g.endFill();
+    g.beginFill(0xffc870, 0.14); g.drawEllipse(0, -5, 10, 3.4); g.endFill();
+    g.beginFill(0xffb04a, 0.06); g.drawEllipse(0, -22, 12, 16); g.endFill();
+    // jagged teeth of rock
+    opoly(g, [-18, -54, -14, -42, -10, -56], shade(rock, 0.8), 1.2);
+    opoly(g, [6, -60, 10, -47, 14, -58], shade(rock, 0.8), 1.2);
+    opoly(g, [-34, 0, -30, -12, -22, 0], shade(rock, 0.7), 1.2);
+    opoly(g, [24, 0, 30, -10, 36, 0], shade(rock, 0.7), 1.2);
 }
 
 function drawRuinArch(g) {
     shadow(g, 64, 14, 0.35);
     const stone = 0x8a8478, dark = 0x5e594f;
-    // stairs down
-    g.beginFill(0x15120e); g.drawRect(-26, -34, 52, 34); g.endFill();
-    for (let i = 0; i < 4; i++) { g.beginFill(shade(stone, 0.6 - i * 0.1)); g.drawRect(-24 + i * 3, -4 - i * 7, 48 - i * 6, 5); g.endFill(); }
-    // pillars
+    // stairs going down into the dark
+    opoly(g, [-26, 0, -26, -34, 26, -34, 26, 0], 0x15120e, 1.6);
+    for (let i = 0; i < 4; i++) {
+        const w = 48 - i * 6, x = -24 + i * 3, y = -4 - i * 7;
+        fpoly(g, [x, y, x + w, y, x + w, y + 5, x, y + 5], shade(stone, 0.62 - i * 0.1));
+        g.lineStyle(1, shade(stone, 0.95 - i * 0.1), 0.6); g.moveTo(x, y); g.lineTo(x + w, y); noLine(g);
+    }
+    // two weathered pillars, one broken short
     [[-44, 70], [44, 54]].forEach(([x, h]) => {
-        g.beginFill(dark); g.drawRect(x - 12, -h, 24, h); g.endFill();
-        g.beginFill(stone); g.drawRect(x - 12, -h, 15, h); g.endFill();
-        g.beginFill(shade(stone, 1.2)); g.drawRect(x - 15, -h - 5, 30, 7); g.drawRect(x - 15, -4, 30, 5); g.endFill();
-        g.beginFill(0x4a8a3a, 0.8); g.drawEllipse(x + 4, -h * 0.5, 5, 10); g.endFill();
+        opoly(g, [x - 12, 0, x - 12, -h, x + 12, -h, x + 12, 0], dark, 1.8);
+        fpoly(g, [x - 12, 0, x - 12, -h, x + 3, -h, x + 3, 0], stone);
+        g.lineStyle(1, shade(stone, 0.55), 0.7);
+        for (let y = -14; y > -h; y -= 14) { g.moveTo(x - 12, y); g.lineTo(x + 12, y); }
+        noLine(g);
+        opoly(g, [x - 15, -h - 5, x - 15, -h + 2, x + 15, -h + 2, x + 15, -h - 5], shade(stone, 1.15), 1.4);
+        opoly(g, [x - 15, -5, x - 15, 0, x + 15, 0, x + 15, -5], shade(stone, 1.05), 1.4);
+        ink(g, 1); g.beginFill(0x4a8a3a, 0.9); g.drawEllipse(x + 4, -h * 0.5, 4.5, 9); g.endFill(); noLine(g);
     });
-    // broken lintel
-    g.beginFill(dark); g.drawPolygon([-56, -72, -8, -80, -2, -64, -56, -62]); g.endFill();
-    g.beginFill(stone); g.drawPolygon([-56, -72, -8, -80, -10, -74, -56, -68]); g.endFill();
-    g.beginFill(0x4cc8ff, 0.5); g.drawCircle(0, -44, 5); g.endFill();
-    glow(g, 0, -40, 20, 0x4cc8ff, 0.12);
+    // the broken lintel, with a rune that still glows
+    opoly(g, [-56, -72, -8, -80, -2, -64, -56, -62], dark, 1.8);
+    fpoly(g, [-56, -72, -8, -80, -10, -74, -56, -68], stone);
+    opoly(g, [6, -66, 14, -70, 16, -64, 8, -62], dark, 1.2);           // a fallen chip
+    glow(g, 0, -42, 20, 0x4cc8ff, 0.12);
+    ink(g, 1.2); g.beginFill(0x4cc8ff, 0.8); g.drawCircle(0, -44, 4.5); g.endFill(); noLine(g);
+    g.beginFill(0xd8f4ff, 0.9); g.drawCircle(-1, -45, 1.5); g.endFill();
 }
 
-function house(g, wall, roof, trim = 0x4a3826) {
+function house(g, wall, roof, trim = 0x4a3826, seed = 1) {
+    const R = rng(seed);
     shadow(g, 52, 10, 0.3);
-    g.beginFill(shade(wall, 0.75)); g.drawRect(-38, -58, 76, 58); g.endFill();
-    g.beginFill(wall); g.drawRect(-38, -58, 50, 58); g.endFill();
-    g.beginFill(shade(roof, 0.7)); g.drawPolygon([-46, -56, -30, -92, 30, -92, 46, -56]); g.endFill();
-    g.beginFill(roof); g.drawPolygon([-46, -56, -30, -92, 0, -92, 0, -56]); g.endFill();
-    g.beginFill(shade(roof, 1.25), 0.6); g.drawRect(-30, -90, 60, 3); g.endFill();
-    g.beginFill(trim); g.drawRoundedRect(-9, -34, 18, 34, 4); g.endFill();
-    g.beginFill(0xffd070); g.drawCircle(5, -17, 1.4); g.endFill();
-    [[-27, -42], [20, -42]].forEach(([x, y]) => {
-        g.beginFill(trim); g.drawRect(x - 1, y - 1, 14, 16); g.endFill();
-        g.beginFill(0x9ad4ff); g.drawRect(x + 1, y + 1, 10, 12); g.endFill();
-        g.beginFill(0xffffff, 0.4); g.drawRect(x + 1, y + 1, 4, 12); g.endFill();
+    const beam = 0x5a3a20;
+    // stone footing
+    opoly(g, [-39, 0, -39, -10, 39, -10, 39, 0], 0x8f8a7e, 1.6);
+    g.lineStyle(1, 0x5f5a50, 0.7);
+    for (let x = -30; x < 39; x += 14) { g.moveTo(x, -10); g.lineTo(x, -5); g.moveTo(x + 7, -5); g.lineTo(x + 7, 0); }
+    g.moveTo(-39, -5); g.lineTo(39, -5);
+    noLine(g);
+    // plastered walls, lit from the left
+    opoly(g, [-38, -10, -38, -58, 38, -58, 38, -10], shade(wall, 0.84), 1.8);
+    fpoly(g, [-38, -10, -38, -58, 8, -58, 8, -10], wall);
+    // timber frame with braces
+    g.lineStyle(3, beam, 1);
+    for (const x of [-36, -13, 13, 36]) { g.moveTo(x, -10); g.lineTo(x, -57); }
+    g.moveTo(-38, -36); g.lineTo(38, -36);
+    g.moveTo(-36, -36); g.lineTo(-24, -57); g.moveTo(36, -36); g.lineTo(24, -57);
+    noLine(g);
+    // the eaves' shadow on the wall
+    fpoly(g, [-38, -58, 38, -58, 38, -53, -38, -53], 0x000000, 0.22);
+    // roof: lit and shaded halves, rows of tiles, a ridge cap
+    opoly(g, [-46, -56, -32, -92, 32, -92, 46, -56], shade(roof, 0.72), 1.8);
+    fpoly(g, [-46, -56, -32, -92, 0, -92, 0, -56], roof);
+    g.lineStyle(1.1, shade(roof, 0.5), 0.75);
+    for (let y = -64; y > -92; y -= 8) { const k = (y + 56) / -36; g.moveTo(-46 + k * 14, y); g.lineTo(46 - k * 14, y); }
+    noLine(g);
+    opoly(g, [-33, -94, -33, -89, 33, -89, 33, -94], shade(roof, 0.6), 1.4);
+    g.lineStyle(1.4, shade(roof, 1.45), 0.8); g.moveTo(-44, -58); g.lineTo(-31, -90); noLine(g);
+    // a brick chimney on some houses
+    if (R() < 0.7) {
+        opoly(g, [18, -78, 18, -102, 28, -102, 28, -82], 0x9a4a32, 1.4);
+        opoly(g, [16, -105, 16, -101, 30, -101, 30, -105], 0x5a5a62, 1.2);
+        g.lineStyle(0.8, 0x5a2a1a, 0.7); g.moveTo(18, -90); g.lineTo(28, -90); g.moveTo(23, -96); g.lineTo(23, -90); noLine(g);
+    }
+    // arched plank door with a step and a lantern
+    opoly(g, [-9, 0, -9, -26, -6, -32, 0, -34, 6, -32, 9, -26, 9, 0], trim, 1.6);
+    g.lineStyle(1, shade(trim, 0.55), 0.8); g.moveTo(-3, -32); g.lineTo(-3, 0); g.moveTo(3, -32); g.lineTo(3, 0); noLine(g);
+    g.beginFill(0xffd070); g.drawCircle(5, -15, 1.4); g.endFill();
+    opoly(g, [-12, 0, -12, 3, 12, 3, 12, 0], 0x9a9488, 1.2);
+    glow(g, -16, -27, 9, 0xffc060, 0.22);
+    opoly(g, [-18, -24, -18, -31, -14, -31, -14, -24], 0x2a2a32, 1.1);
+    g.beginFill(0xffe08a); g.drawRect(-17, -30, 2, 5); g.endFill();
+    // windows with mullions and shutters, a flower box under one
+    [[-30, -50], [18, -50]].forEach(([x, y], i) => {
+        opoly(g, [x - 4, y, x - 4, y + 15, x, y + 15, x, y], shade(roof, 0.85), 1);
+        opoly(g, [x + 12, y, x + 12, y + 15, x + 16, y + 15, x + 16, y], shade(roof, 0.85), 1);
+        opoly(g, [x, y, x, y + 15, x + 12, y + 15, x + 12, y], 0x9ad4ff, 1.4);
+        fpoly(g, [x + 1, y + 1, x + 5, y + 1, x + 1, y + 9], 0xffffff, 0.5);
+        g.lineStyle(1.2, trim, 1); g.moveTo(x + 6, y); g.lineTo(x + 6, y + 15); g.moveTo(x, y + 7.5); g.lineTo(x + 12, y + 7.5); noLine(g);
+        if (i === (seed % 2)) {
+            opoly(g, [x - 2, y + 15, x - 2, y + 19, x + 14, y + 19, x + 14, y + 15], 0x6a4222, 1);
+            const fl = [0xff5a6a, 0xffd84a, 0xd88aff, 0xffffff][seed % 4];
+            g.beginFill(0x3a8a3a); g.drawEllipse(x + 6, y + 14.5, 8, 2.4); g.endFill();
+            g.beginFill(fl); for (let k = 0; k < 4; k++) g.drawCircle(x + k * 4, y + 13.5 - (k % 2), 1.5); g.endFill();
+        }
     });
 }
 
@@ -541,16 +607,44 @@ function drawTower(g, wall, roof) {
 
 function drawGate(g, wall, roof) {
     shadow(g, 80, 12, 0.35);
+    const stoneLines = (x0, x1, y0, y1) => {
+        g.lineStyle(1, shade(wall, 0.55), 0.6);
+        for (let y = y0 + 10, row = 0; y < y1; y += 10, row++) {
+            g.moveTo(x0, y); g.lineTo(x1, y);
+            for (let x = x0 + (row % 2 ? 6 : 12); x < x1; x += 12) { g.moveTo(x, y - 10); g.lineTo(x, y); }
+        }
+        noLine(g);
+    };
+    // the wall walk between the towers, crenellated
+    opoly(g, [-34, -60, -34, -88, 34, -88, 34, -60], shade(wall, 0.86), 1.8);
+    for (let x = -30; x < 30; x += 12) opoly(g, [x, -88, x, -95, x + 7, -95, x + 7, -88], shade(wall, 0.95), 1.2);
+    // the two towers
     [-52, 52].forEach((x) => {
-        g.beginFill(shade(wall, 0.72)); g.drawRect(x - 20, -96, 40, 96); g.endFill();
-        g.beginFill(wall); g.drawRect(x - 20, -96, 26, 96); g.endFill();
-        g.beginFill(shade(roof, 0.7)); g.drawPolygon([x - 26, -94, x, -132, x + 26, -94]); g.endFill();
-        g.beginFill(roof); g.drawPolygon([x - 26, -94, x, -132, x, -94]); g.endFill();
+        opoly(g, [x - 20, 0, x - 20, -96, x + 20, -96, x + 20, 0], shade(wall, 0.72), 1.8);
+        fpoly(g, [x - 20, 0, x - 20, -96, x + 6, -96, x + 6, 0], wall);
+        stoneLines(x - 20, x + 20, -96, 0);
+        opoly(g, [x - 4, -70, x - 4, -58, x + 4, -58, x + 4, -70], 0x15120e, 1.2);           // arrow slit
+        opoly(g, [x - 26, -94, x, -134, x + 26, -94], shade(roof, 0.7), 1.8);
+        fpoly(g, [x - 26, -94, x, -134, x, -94], roof);
+        g.lineStyle(1.3, shade(roof, 1.4), 0.8); g.moveTo(x - 24, -96); g.lineTo(x - 1, -132); noLine(g);
+        // a pennant on each spire
+        g.lineStyle(1.4, INK, 0.9); g.moveTo(x, -134); g.lineTo(x, -146); noLine(g);
+        opoly(g, [x, -146, x + 12, -143, x, -139], 0xc83a3a, 1);
     });
-    g.beginFill(shade(wall, 0.85)); g.drawRect(-32, -86, 64, 22); g.endFill();
-    g.beginFill(0x15120e); g.drawPolygon([-32, 0, -32, -44, -20, -60, 20, -60, 32, -44, 32, 0]); g.endFill();
-    g.beginFill(0xffd070, 0.25); g.drawEllipse(0, -26, 22, 28); g.endFill();
-    g.beginFill(0xc83a3a); g.drawPolygon([-6, -86, 6, -86, 6, -70, 0, -76, -6, -70]); g.endFill();
+    // the gate arch, a raised portcullis and a warm glow beyond
+    opoly(g, [-32, 0, -32, -44, -20, -60, 20, -60, 32, -44, 32, 0], 0x15120e, 2);
+    // lamplight from the town beyond, spilling on the road through the arch
+    g.beginFill(0xffd070, 0.2); g.drawEllipse(0, -6, 26, 7); g.endFill();
+    g.beginFill(0xffe0a0, 0.18); g.drawEllipse(0, -4, 14, 3.6); g.endFill();
+    g.beginFill(0xffd070, 0.07); g.drawEllipse(0, -22, 20, 18); g.endFill();
+    g.lineStyle(1.6, 0x3a3a42, 0.95);
+    for (let x = -24; x <= 24; x += 8) { g.moveTo(x, -56); g.lineTo(x, -40); }
+    g.moveTo(-28, -48); g.lineTo(28, -48); g.moveTo(-30, -40); g.lineTo(30, -40);
+    noLine(g);
+    opoly(g, [-36, -60, -32, -66, 32, -66, 36, -60], shade(wall, 1.12), 1.4);              // keystone course
+    // the town's banner over the arch
+    opoly(g, [-7, -86, 7, -86, 7, -70, 0, -75, -7, -70], 0xc83a3a, 1.2);
+    g.beginFill(0xf1c24a); g.drawCircle(0, -80, 2.6); g.endFill();
 }
 
 // ---------------------------------------------------------- INTERIOR PROPS
@@ -623,24 +717,48 @@ function drawFountain(g) {
 
 function drawAltar(g) {
     shadow(g, 32, 9, 0.3);
-    g.beginFill(0x5a5a66); g.drawRect(-28, -14, 56, 14); g.endFill();
-    g.beginFill(0x7a7a88); g.drawRect(-24, -34, 48, 22); g.endFill();
-    g.beginFill(0x9a9aaa); g.drawRect(-28, -38, 56, 6); g.endFill();
-    glow(g, 0, -52, 22, 0xb8a0ff, 0.25);
-    g.beginFill(0xe0d0ff); g.drawPolygon([0, -68, 8, -52, 0, -38, -8, -52]); g.endFill();
-    g.beginFill(0xffffff, 0.7); g.drawPolygon([0, -68, 0, -38, -8, -52]); g.endFill();
+    // a little shrine: stepped plinth, carved runes, a crystal that floats and glows
+    opoly(g, [-30, 0, -30, -8, 30, -8, 30, 0], 0x5a5a66, 1.6);
+    opoly(g, [-26, -8, -26, -16, 26, -16, 26, -8], 0x6a6a78, 1.6);
+    opoly(g, [-22, -16, -22, -36, 22, -36, 22, -16], 0x7a7a88, 1.8);
+    fpoly(g, [-22, -16, -22, -36, 2, -36, 2, -16], 0x8e8e9c);
+    opoly(g, [-26, -36, -26, -41, 26, -41, 26, -36], 0x9a9aaa, 1.6);
+    g.lineStyle(1.2, 0xb8a0ff, 0.85);
+    g.moveTo(-14, -30); g.lineTo(-10, -22); g.lineTo(-6, -30);
+    g.moveTo(4, -22); g.lineTo(8, -30); g.lineTo(12, -22); g.moveTo(6, -26); g.lineTo(10, -26);
+    noLine(g);
+    glow(g, 0, -56, 20, 0xb8a0ff, 0.1);
+    glow(g, 0, -56, 13, 0xc8b0ff, 0.12);
+    glow(g, 0, -56, 7, 0xe0d0ff, 0.16);
+    opoly(g, [0, -72, 8, -56, 0, -44, -8, -56], 0xd8c8ff, 1.4);
+    fpoly(g, [0, -72, 0, -44, -8, -56], 0xffffff, 0.6);
 }
 
 function drawStall(g, awning) {
     shadow(g, 40, 9, 0.3);
-    g.beginFill(0x6a4a2a); g.drawRect(-30, -22, 60, 22); g.endFill();
-    g.beginFill(0x9a6e3c); g.drawRect(-30, -22, 60, 8); g.endFill();
-    g.beginFill(0x5a3a1e); g.drawRect(-30, -62, 4, 42); g.drawRect(26, -62, 4, 42); g.endFill();
+    // posts, the counter and a crate beside it
+    opoly(g, [-30, 0, -30, -62, -26, -62, -26, 0], 0x5a3a1e, 1.3);
+    opoly(g, [26, 0, 26, -62, 30, -62, 30, 0], 0x5a3a1e, 1.3);
+    opoly(g, [-32, 0, -32, -22, 32, -22, 32, 0], 0x6a4a2a, 1.6);
+    fpoly(g, [-32, -22, 32, -22, 32, -15, -32, -15], 0x9a6e3c);
+    g.lineStyle(1, 0x3a2410, 0.7); g.moveTo(-32, -8); g.lineTo(32, -8); g.moveTo(-10, -15); g.lineTo(-10, 0); g.moveTo(12, -15); g.lineTo(12, 0); noLine(g);
+    opoly(g, [33, 0, 33, -14, 44, -14, 44, 0], 0x8a5a2a, 1.2);
+    g.lineStyle(1, 0x4a2a10, 0.8); g.moveTo(33, 0); g.lineTo(44, -14); noLine(g);
+    // goods: fruit, a jug, bread
+    ink(g, 1); g.beginFill(0xd8503a); g.drawCircle(-20, -26, 3.6); g.drawCircle(-14, -26, 3.6); g.drawCircle(-17, -30, 3.4); g.endFill(); noLine(g);
+    ink(g, 1); g.beginFill(0xe8c63a); g.drawCircle(-4, -26, 3.4); g.drawCircle(2, -26, 3.4); g.endFill(); noLine(g);
+    opoly(g, [10, -22, 9, -30, 12, -34, 16, -34, 19, -30, 18, -22], 0x5a7ab8, 1.1);
+    ink(g, 1); g.beginFill(0xc8904a); g.drawEllipse(25, -25, 5, 3); g.endFill(); noLine(g);
+    // striped awning with a scalloped edge
+    opoly(g, [-38, -56, -30, -66, 30, -66, 38, -56], awning, 1.6);
     for (let i = 0; i < 6; i++) {
-        g.beginFill(i % 2 ? awning : 0xf4f0e0); g.drawPolygon([-36 + i * 12, -56, -24 + i * 12, -56, -22 + i * 12, -46, -38 + i * 12, -46]); g.endFill();
+        const x0 = -38 + i * 12.7;
+        if (i % 2 === 0) fpoly(g, [x0, -56, x0 + 12.7, -56, x0 + 11.3, -66 + 0, x0 + 1.4, -66], 0xf4f0e0);
     }
-    g.beginFill(0xd8503a); g.drawCircle(-14, -26, 4); g.drawCircle(-6, -26, 4); g.endFill();
-    g.beginFill(0xe8c63a); g.drawCircle(6, -26, 4); g.drawCircle(14, -26, 4); g.endFill();
+    for (let i = 0; i < 6; i++) {
+        const x = -38 + i * 12.7 + 6.35;
+        ink(g, 1.2); g.beginFill(i % 2 ? awning : 0xf4f0e0); g.arc(x, -56, 6.35, 0, Math.PI); g.endFill(); noLine(g);
+    }
 }
 
 function drawLamp(g) {
@@ -668,10 +786,24 @@ function drawPlanter(g) {
 
 function drawWell(g) {
     shadow(g, 24, 7, 0.3);
-    g.beginFill(0x6a6a74); g.drawEllipse(0, -10, 20, 8); g.endFill();
-    g.beginFill(0x8a8a96); g.drawRect(-20, -18, 40, 10); g.drawEllipse(0, -18, 20, 7); g.endFill();
-    g.beginFill(0x0a1a2a); g.drawEllipse(0, -18, 15, 5); g.endFill();
-    g.beginFill(0x5a3a1e); g.drawRect(-20, -48, 4, 30); g.drawRect(16, -48, 4, 30); g.drawRect(-22, -50, 44, 4); g.endFill();
+    // stone ring with blocks, dark water, a little roof on two posts, a crank and a bucket
+    opoly(g, [-20, -6, -20, -20, 20, -20, 20, -6], 0x8a8a96, 1.6);
+    ink(g, 1.6); g.beginFill(0x8a8a96); g.drawEllipse(0, -6, 20, 6); g.endFill(); noLine(g);
+    fpoly(g, [-20, -20, -20, -6, -2, -6, -2, -20], 0x9e9eaa);
+    g.lineStyle(1, 0x5a5a66, 0.7);
+    for (let x = -14; x < 20; x += 10) { g.moveTo(x, -20); g.lineTo(x, -13); g.moveTo(x + 5, -13); g.lineTo(x + 5, -6); }
+    g.moveTo(-20, -13); g.lineTo(20, -13);
+    noLine(g);
+    ink(g, 1.6); g.beginFill(0xa8a8b4); g.drawEllipse(0, -20, 20, 6.5); g.endFill(); noLine(g);
+    g.beginFill(0x0a1a2a); g.drawEllipse(0, -20, 15, 4.5); g.endFill();
+    g.beginFill(0x3a6a9a, 0.6); g.drawEllipse(-3, -20.5, 6, 1.4); g.endFill();
+    opoly(g, [-19, -20, -19, -50, -16, -50, -16, -20], 0x5a3a1e, 1.2);
+    opoly(g, [16, -20, 16, -50, 19, -50, 19, -20], 0x5a3a1e, 1.2);
+    opoly(g, [-24, -48, -12, -60, 12, -60, 24, -48], 0x8a3a2a, 1.6);
+    fpoly(g, [-24, -48, -12, -60, 0, -60, 0, -48], 0xa84a34);
+    g.lineStyle(1.6, 0x3a2a1a, 1); g.moveTo(-16, -42); g.lineTo(16, -42); g.moveTo(16, -42); g.lineTo(22, -38); noLine(g);
+    g.lineStyle(1, 0xd8c8a0, 0.9); g.moveTo(0, -42); g.lineTo(0, -32); noLine(g);
+    opoly(g, [-4, -32, -3, -26, 3, -26, 4, -32], 0x7a5a32, 1);
 }
 
 function drawPortal(g) {
@@ -681,6 +813,23 @@ function drawPortal(g) {
     g.beginFill(0x4cc8ff, 0.35); g.drawRect(-18, -66, 36, 66); g.endFill();
     g.beginFill(0xb8ecff, 0.35); g.drawEllipse(0, -34, 12, 28); g.endFill();
     glow(g, 0, -34, 36, 0x4cc8ff, 0.12);
+}
+
+/** A warlord's lair marker: a crooked pole with a horned skull, a torn banner and bones at its foot. */
+function drawLairTotem(g) {
+    shadow(g, 20, 6, 0.32);
+    ink(g, 1.1); g.beginFill(0xe8e0c8); g.drawEllipse(-10, -3, 6, 2.4); g.drawEllipse(9, -2, 5, 2); g.endFill(); noLine(g);
+    ostroke(g, 4, 0x5a3a22, () => { g.moveTo(-1, 0); g.lineTo(1, -40); g.lineTo(-1, -70); });
+    opoly(g, [1, -58, 18, -56, 15, -44, 19, -32, 3, -36], 0x7a1a1a, 1.4);
+    g.lineStyle(1, 0x3a0a0a, 0.7); g.moveTo(4, -50); g.lineTo(14, -48); noLine(g);
+    // horned skull
+    opoly(g, [-7, -72, -14, -86, -18, -80, -10, -70], 0xd8ccb0, 1.2);
+    opoly(g, [7, -72, 14, -86, 18, -80, 10, -70], 0xd8ccb0, 1.2);
+    ink(g, 1.4); g.beginFill(0xeee6d0); g.drawEllipse(0, -72, 9, 8); g.endFill(); noLine(g);
+    opoly(g, [-5, -66, -5, -61, 5, -61, 5, -66], 0xd8ccb0, 1.1);
+    g.beginFill(0x1a0a0a); g.drawEllipse(-3.4, -73, 2.4, 2.8); g.drawEllipse(3.4, -73, 2.4, 2.8); g.endFill();
+    glow(g, 0, -73, 10, 0xff4a3a, 0.16);
+    g.beginFill(0xff6a4a); g.drawCircle(-3.4, -73, 1); g.drawCircle(3.4, -73, 1); g.endFill();
 }
 
 /** A wooden signpost with two arrow boards, for road junctions by the towns. */
@@ -748,11 +897,11 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     // landmarks
     cavemouth: D(160, 112, 18, 40, true, [(g) => drawCaveMouth(g, 0x6a6a76), (g) => drawCaveMouth(g, 0x9a7a4a), (g) => drawCaveMouth(g, 0x8a98a8)]),
     ruinarch: D(140, 96, 16, 46, true, [drawRuinArch]),
-    house: D(116, 104, 14, 40, true, [
-        (g) => house(g, 0xe2cfa6, 0xb5473b), (g) => house(g, 0xd8d0c0, 0x3f6fa8), (g) => house(g, 0xe8c88a, 0x9a5a2a),
-        (g) => house(g, 0xdfd6bc, 0x3f8f7a), (g) => house(g, 0xd9b890, 0xc88a3a)]),
+    house: D(116, 112, 14, 40, true, [
+        (g) => house(g, 0xe2cfa6, 0xb5473b, 0x4a3826, 1), (g) => house(g, 0xd8d0c0, 0x3f6fa8, 0x3a3a46, 2), (g) => house(g, 0xe8c88a, 0x9a5a2a, 0x4a3826, 3),
+        (g) => house(g, 0xdfd6bc, 0x3f8f7a, 0x3a3020, 4), (g) => house(g, 0xd9b890, 0xc88a3a, 0x5a3a1e, 5)]),
     tower: D(70, 140, 12, 22, true, [(g) => drawTower(g, 0xb8b0a0, 0x8a3a3a), (g) => drawTower(g, 0xc8a878, 0x4a6a9a)]),
-    gate: D(190, 150, 16, 26, true, [(g) => drawGate(g, 0xb8b0a0, 0x8a3a3a), (g) => drawGate(g, 0xd8b888, 0x4a6a9a), (g) => drawGate(g, 0xe8e4d8, 0x3f6fa8)]),
+    gate: D(190, 152, 16, 26, true, [(g) => drawGate(g, 0xb8b0a0, 0x8a3a3a), (g) => drawGate(g, 0xd8b888, 0x4a6a9a), (g) => drawGate(g, 0xe8e4d8, 0x3f6fa8)]),
     // interior props
     torch: D(30, 58, 8, 0, false, [drawTorch]),
     pillar: D(36, 76, 8, 11, true, [(g) => drawPillar(g, 0x8a8478), (g) => drawPillar(g, 0x9a9aa4)]),
@@ -768,5 +917,6 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     planter: D(36, 40, 8, 10, true, [drawPlanter]),
     well: D(56, 60, 10, 22, true, [drawWell]),
     portal: D(72, 90, 12, 0, false, [drawPortal]),
-    signpost: D(52, 58, 8, 0, false, [drawSignpost])
+    signpost: D(52, 58, 8, 0, false, [drawSignpost]),
+    lairtotem: D(48, 92, 8, 8, true, [drawLairTotem])
 };

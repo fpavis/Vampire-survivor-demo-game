@@ -262,7 +262,8 @@ export class InputSystem {
 
         if (g.ui.mapOverlay) { if (has('map') || has('cancel') || has('interact') || has('menu')) g.ui.toggleMap(g); return; }
         if (has('menu')) { g.ui.toggleSettings(); return; }
-        if (uiBridge.pauseOpen.value) {
+        // the pause menu, and the ending (which pauses the game), take the d-pad and the face buttons
+        if (uiBridge.pauseOpen.value || uiBridge.ending.value) {
             const dir = f.stick || DIRS.find((d) => has(d));
             if (dir) navMove(dir);
             if (has('interact')) navConfirm();

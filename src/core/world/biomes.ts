@@ -87,27 +87,37 @@ export const ROSTERS: Record<string, RosterEntry[]> = {
     field: [
         { type: 'SLIME', level: 1, weight: 6 },
         { type: 'BEE', level: 2, weight: 3, group: [4, 7] },
-        { type: 'BOAR', level: 3, weight: 3 }
+        { type: 'BOAR', level: 3, weight: 3 },
+        { type: 'THORNBACK', level: 25, weight: 3 },
+        { type: 'WIGHT', level: 37, weight: 3 }
     ],
     forest: [
         { type: 'WOLF', level: 1, weight: 5, group: [2, 4] },
         { type: 'SPIDER', level: 2, weight: 4 },
-        { type: 'TREANT', level: 4, weight: 2 }
+        { type: 'TREANT', level: 4, weight: 2 },
+        { type: 'MANTIS', level: 25, weight: 3 },
+        { type: 'THORNWITCH', level: 37, weight: 3 }
     ],
     desert: [
         { type: 'SCORPION', level: 1, weight: 5 },
         { type: 'VULTURE', level: 2, weight: 3 },
-        { type: 'MUMMY', level: 4, weight: 3 }
+        { type: 'MUMMY', level: 4, weight: 3 },
+        { type: 'SANDWORM', level: 25, weight: 3 },
+        { type: 'DJINN', level: 37, weight: 3 }
     ],
     shore: [
         { type: 'CRAB', level: 1, weight: 5 },
         { type: 'GULL', level: 2, weight: 4, group: [3, 5] },
-        { type: 'JELLY', level: 3, weight: 3 }
+        { type: 'JELLY', level: 3, weight: 3 },
+        { type: 'SIREN', level: 25, weight: 3 },
+        { type: 'LURKER', level: 37, weight: 3 }
     ],
     mountain: [
         { type: 'BAT', level: 1, weight: 5, group: [3, 6] },
         { type: 'GOLEM', level: 3, weight: 3 },
-        { type: 'TROLL', level: 4, weight: 3 }
+        { type: 'TROLL', level: 4, weight: 3 },
+        { type: 'HARPY', level: 25, weight: 3 },
+        { type: 'YETI', level: 37, weight: 3 }
     ]
 };
 

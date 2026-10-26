@@ -121,10 +121,18 @@ export function createBoard() {
     rrect(g, -30, -64, 6, 64, 2, 0x6a4422); rrect(g, 24, -64, 6, 64, 2, 0x6a4422);      // posts
     rrect(g, -32, -62, 64, 42, 3, 0x9a6a38);                                              // board
     g.lineStyle(1, 0x5a3a1a, 0.7); for (let y = -50; y < -22; y += 10) { g.moveTo(-30, y); g.lineTo(30, y); } g.lineStyle(0);
+    g.beginFill(0xb88448, 0.55); g.drawRect(-30, -60, 30, 38); g.endFill();                // light on the left planks
+    g.lineStyle(1, 0x4a2a10, 0.45); g.moveTo(-27, -12); g.lineTo(-27, -2); g.moveTo(27, -40); g.lineTo(27, -28); g.lineStyle(0);   // grain on the posts
     poly(g, [-38, -62, 38, -62, 30, -74, -30, -74], 0x7a3a2a);                            // little roof
+    g.lineStyle(1, 0x4a1a12, 0.7); g.moveTo(-34, -66); g.lineTo(34, -66); g.moveTo(-31, -70); g.lineTo(31, -70); g.lineStyle(0);   // shingles
+    g.lineStyle(1.3, 0xc06a4a, 0.8); g.moveTo(-36, -63); g.lineTo(-29, -73); g.lineStyle(0);
     // notices
     const note = (x, y, w, h, c0, rot) => { const n = new PIXI.Graphics(); O(n, 1); n.beginFill(c0); n.drawRect(-w / 2, -h / 2, w, h); n.endFill(); n.lineStyle(0); n.beginFill(0x7a2a2a); n.drawCircle(0, -h / 2 + 2, 1.5); n.endFill(); n.lineStyle(1, 0x6a5a40, 0.7); for (let i = 1; i < 4; i++) { n.moveTo(-w / 2 + 3, -h / 2 + 3 + i * 4); n.lineTo(w / 2 - 3, -h / 2 + 3 + i * 4); } n.position.set(x, y); n.rotation = rot; return n; };
     const notes = [note(-18, -44, 16, 20, 0xf2e8c8, -0.08), note(2, -40, 14, 18, 0xe8dcb8, 0.06), note(20, -45, 15, 21, 0xf0c8c0, 0.1), note(-4, -53, 10, 10, 0xd8e8f2, -0.04)];
+    // a wanted poster with a monster's skull sketched on it
+    const wanted = notes[2];
+    wanted.beginFill(0x3a2a1a, 0.85); wanted.drawEllipse(0, -2, 3.6, 3.2); wanted.drawRect(-2, 0.5, 4, 2.4); wanted.endFill();
+    wanted.beginFill(0xf0c8c0); wanted.drawCircle(-1.3, -2.4, 0.9); wanted.drawCircle(1.3, -2.4, 0.9); wanted.endFill();
     // lantern
     const lamp = new PIXI.Graphics();
     O(lamp, 1.2); lamp.beginFill(0x2a2a30); lamp.drawRect(-3, -6, 6, 10); lamp.endFill(); lamp.lineStyle(0);

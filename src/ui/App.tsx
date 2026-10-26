@@ -8,6 +8,7 @@ import { SlotsPanel } from './Slots';
 import { CreditsPanel, TitleExtras } from './Front';
 import { RebindPanel } from './Rebind';
 import { TipCard } from './Tips';
+import { DeathScreen, Ending, StoryCard } from './Story';
 import { Icon } from './Icon';
 import { setSettings } from '../app/settings';
 import { BoardPanel, Journal, Tracker } from './Quests';
@@ -189,6 +190,9 @@ export function App() {
       <SailingHint />
       <PauseMenu />
       <ActiveBar />
+      <StoryCard />
+      <DeathScreen />
+      <Ending />
       {front}
     </>
   );

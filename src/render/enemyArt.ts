@@ -788,7 +788,364 @@ function dummy(body, t, r) {
     };
 }
 
+// -------------------------------------------------------------------- tier 2 and 3 species (found from level 25 and 37)
+/** four legs for a walker, each its own part so it can gallop */
+const legSet = (xs, y, len, col, w = 4.4) => xs.map(([x, c]) => {
+    const g = new PIXI.Graphics();
+    rect(g, -w / 2, 0, w, len, c ?? col); ell(g, 0.8, len, w * 0.78, 1.8, shade(c ?? col, 0.7));
+    g.position.set(x, y);
+    return g;
+});
+
+/** Field, tier 2: a ram whose back has grown a hedge of thorns. Charges. */
+function thornback(body, t, r) {
+    const c = t.color, dark = shade(c, 0.55), light = shade(c, 1.3);
+    const legs = legSet([[-14, dark], [8, dark], [-8], [14]], -12, 12, shade(c, 0.75), 5);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -20, 22, 12, shade(c, 0.8));
+    ell(g, -2, -22, 20, 10, c);
+    ell(g, 0, -14, 13, 4, light, 0.7);
+    // thorns along the back
+    for (let i = 0; i < 6; i++) { const x = -16 + i * 6; poly(g, [x - 3, -29 + Math.abs(i - 2.5), x, -40 + Math.abs(i - 2.5) * 1.5, x + 3, -29 + Math.abs(i - 2.5)], i % 2 ? 0x4a6a2a : 0x3a5a22); }
+    // head with curled horns
+    const head = new PIXI.Graphics();
+    ell(head, 0, 0, 9, 8, shade(c, 1.05));
+    poly(head, [4, -3, 15, 1, 14, 5, 5, 5], shade(c, 1.15));
+    circ(head, 4, -2, 2.1, 0xff6a3a); circ(head, 4.5, -2, 1, 0x1a1a1a);
+    io(head, 1.6); head.beginFill(0xd8c8a0); head.arc(-3, -2, 8, Math.PI * 0.9, Math.PI * 2.1); head.endFill(); head.lineStyle(0);
+    head.beginFill(0xb8a880); head.drawCircle(-3, -2, 3.2); head.endFill();
+    head.position.set(21, -22);
+    legs.slice(0, 2).forEach((l) => body.addChild(l));
+    body.addChild(g, head);
+    legs.slice(2).forEach((l) => body.addChild(l));
+    return {
+        height: 44,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            const run = Math.sin(e.phase * (s === 'dash' ? 3.4 : 1.8));
+            legs[0].rotation = run * 0.55; legs[1].rotation = -run * 0.55; legs[2].rotation = -run * 0.45; legs[3].rotation = run * 0.45;
+            head.rotation = s === 'windup' ? 0.35 : s === 'dash' ? 0.25 : 0;
+            body.rotation = s === 'dash' ? 0.08 : 0;
+            body.y = s === 'dash' ? 0 : Math.abs(run) * -1.6;
+            windupShake(e, body);
+        }
+    };
+}
+
+/** Field, tier 3: a scarecrow that walked off its pole, carrying a lantern of witch-fire. Keeps away and throws fire. */
+function wight(body, t, r) {
+    const c = t.color;
+    const legs = legSet([[-5, 0x4a3a2a], [5, 0x3a2a1a]], -16, 16, 0x4a3a2a, 3.6);
+    const g = new PIXI.Graphics();
+    poly(g, [-12, -18, -14, -40, -6, -46, 6, -46, 14, -40, 12, -18, 8, -14, 3, -19, -2, -14, -7, -19], 0x5a4a6a);   // tattered coat
+    poly(g, [-6, -46, 0, -36, 6, -46], 0x3a2e48);
+    rect(g, -3, -30, 6, 3, 0x8a6a3a);
+    for (const [x, y] of [[-12, -18], [12, -18], [0, -15]]) poly(g, [x - 3, y, x, y + 7, x + 3, y], 0xe8c860);   // straw poking out
+    const head = new PIXI.Graphics();
+    ell(head, 0, 0, 10, 9, c);
+    poly(head, [-13, -5, 13, -5, 6, -16, -6, -16], 0x3a2e28);                   // a battered hat
+    poly(head, [-16, -4, 16, -4, 13, -7, -13, -7], 0x2a201c);
+    circ(head, -3.5, 0, 2.4, 0x1a0a00); circ(head, 3.5, 0, 2.4, 0x1a0a00);
+    circ(head, -3.5, 0, 1.1, 0xffa040); circ(head, 3.5, 0, 1.1, 0xffa040);
+    io(head, 1); head.moveTo(-5, 5); head.lineTo(-2, 3.5); head.lineTo(1, 5.5); head.lineTo(4, 3.5); head.lineStyle(0);
+    head.position.set(0, -54);
+    // the arm is a container so the lantern's glow (a sprite) rides along without being baked into the arm
+    const armG = new PIXI.Graphics();
+    ostrokeA(armG, 3, 0x5a4a6a, () => { armG.moveTo(0, 0); armG.lineTo(10, 8); });
+    rect(armG, 8, 8, 2, 6, 0x2a2a30);
+    icirc(armG, 9, 17, 3.6, 0xffc060, 1.2);
+    const flame = glowCircle(9, 0xffa040, 0.3); flame.position.set(9, 18);
+    const arm = new PIXI.Container();
+    arm.addChild(flame, armG);
+    arm.position.set(10, -42);
+    body.addChild(legs[0], g, head, arm, legs[1]);
+    return {
+        height: 66,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            const step = Math.sin(e.phase * 1.6);
+            legs[0].rotation = step * 0.4; legs[1].rotation = -step * 0.4;
+            head.rotation = Math.sin(e.phase * 0.7) * 0.12;
+            arm.rotation = s === 'windup' ? -1.4 : Math.sin(e.phase * 1.2) * 0.15;
+            flame.alpha = 0.6 + Math.sin(e.phase * 4) * 0.3;
+            body.y = Math.abs(step) * -2;
+            windupShake(e, body);
+        }
+    };
+}
+/** an inked stroke for a limb (local copy of the decor helper, kept here to stay self-contained) */
+function ostrokeA(g, w, color, path) {
+    g.lineStyle({ width: w + 2.4, color: INK, alpha: 0.92, cap: 'round', join: 'round' }); path();
+    g.lineStyle({ width: w, color, alpha: 1, cap: 'round', join: 'round' }); path();
+    g.lineStyle(0);
+}
+
+/** Forest, tier 2: a mantis as tall as a man. Circles, then strikes from the side. */
+function mantis(body, t, r) {
+    const c = t.color, dark = shade(c, 0.6), light = shade(c, 1.3);
+    const legs = [[-10, -10], [-2, -10], [6, -10]].map(([x, y], i) => { const g = new PIXI.Graphics(); ostrokeA(g, 2, i % 2 ? dark : c, () => { g.moveTo(0, 0); g.lineTo(-4, 6); g.lineTo(-2, 11); }); g.position.set(x, y); return g; });
+    const g = new PIXI.Graphics();
+    ell(g, -10, -14, 14, 5.5, dark);                                          // abdomen
+    poly(g, [-22, -16, -2, -20, 0, -12, -20, -10], shade(c, 1.1), 0.75);       // folded wings
+    poly(g, [0, -16, 6, -36, 11, -35, 6, -14], c);                             // thorax
+    const head = new PIXI.Graphics();
+    poly(head, [-7, -2, 7, -2, 0, 9], light);
+    circ(head, -5, -1, 3.2, 0xffe060); circ(head, 5, -1, 3.2, 0xffe060);
+    circ(head, -5, -1, 1.2, 0x1a1a1a); circ(head, 5, -1, 1.2, 0x1a1a1a);
+    io(head, 1); head.moveTo(-3, -3); head.lineTo(-6, -10); head.moveTo(3, -3); head.lineTo(6, -10); head.lineStyle(0);
+    head.position.set(9, -40);
+    const blade = new PIXI.Graphics();
+    ostrokeA(blade, 3, c, () => { blade.moveTo(0, 0); blade.lineTo(8, 6); });
+    poly(blade, [7, 4, 18, -6, 20, -4, 10, 8], light);
+    for (let k = 0; k < 3; k++) poly(blade, [10 + k * 3, 3 - k * 3, 12 + k * 3, 4 - k * 3, 11 + k * 3, 6 - k * 3], 0xf0f0d0);
+    blade.position.set(8, -30);
+    legs.forEach((l) => body.addChild(l));
+    body.addChild(g, head, blade);
+    return {
+        height: 52,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            const step = Math.sin(e.phase * 2.4);
+            legs.forEach((l, i) => { l.rotation = (i % 2 ? step : -step) * 0.35; });
+            blade.rotation = s === 'lunge' ? 0.9 : s === 'windup' ? -0.8 : Math.sin(e.phase * 0.8) * 0.1;
+            head.rotation = Math.sin(e.phase * 0.5) * 0.15;
+            windupShake(e, body);
+        }
+    };
+}
+
+/** Forest, tier 3: a witch in a cloak of leaves who drifts above the moss and looses rings of thorns. */
+function thornwitch(body, t, r) {
+    const c = t.color, dark = shade(c, 0.55), light = shade(c, 1.35);
+    const g = new PIXI.Graphics();
+    poly(g, [-14, -12, -10, -40, 0, -50, 10, -40, 14, -12, 8, -16, 4, -8, 0, -14, -4, -8, -8, -16], c);         // leaf cloak
+    poly(g, [-10, -40, 0, -50, 10, -40, 0, -32], dark);
+    for (const [x, y] of [[-8, -24], [6, -28], [-2, -18], [9, -18]]) ell(g, x, y, 3, 1.6, light, 0.9);
+    ell(g, 0, -40, 6, 6.5, 0xd8e8c0);                                         // face
+    circ(g, -2.2, -40, 1.2, 0x2a4a1a); circ(g, 2.2, -40, 1.2, 0x2a4a1a);
+    poly(g, [-10, -44, 0, -64, 10, -44], dark);                               // pointed hood
+    poly(g, [-2, -60, 4, -66, 6, -58], 0x8a3a5a);                             // a flower on the hood
+    const orbG = new PIXI.Graphics();
+    const halo = glowCircle(14, 0x8aff6a, 0.3);
+    icirc(orbG, 0, 0, 5, 0x9aff7a, 1.2); circ(orbG, -1.5, -1.5, 1.6, 0xeaffd8);
+    const orb = new PIXI.Container();
+    orb.addChild(halo, orbG);
+    orb.position.set(16, -34);
+    body.addChild(g, orb);
+    return {
+        height: 66,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            body.y = -8 + Math.sin(e.phase * 0.9) * 3;
+            const k = s === 'windup' ? 1.5 + Math.sin(e.phase * 6) * 0.15 : 1;
+            orb.scale.set(k);
+            halo.alpha = s === 'windup' ? 0.9 : 0.5 + Math.sin(e.phase * 2) * 0.2;
+        }
+    };
+}
+
+/** Desert, tier 2: a great segmented worm that swims under the sand and bursts out to bite. */
+function sandworm(body, t, r) {
+    const c = t.color, dark = shade(c, 0.55);
+    const g = new PIXI.Graphics();
+    for (let i = 0; i < 4; i++) {
+        const y = -6 - i * 10, rr = 14 - i * 1.4;
+        ell(g, -i * 2, y, rr, rr * 0.75, i % 2 ? c : shade(c, 0.85));
+        g.lineStyle(1.2, dark, 0.8); g.moveTo(-i * 2 - rr * 0.8, y + 2); g.lineTo(-i * 2 + rr * 0.8, y + 2); g.lineStyle(0);
+    }
+    const mouth = new PIXI.Graphics();
+    ell(mouth, 0, 0, 13, 9, shade(c, 1.1));
+    ell(mouth, 0, 1, 9, 6, 0x3a0a0a);
+    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; poly(mouth, [Math.cos(a) * 9, 1 + Math.sin(a) * 6, Math.cos(a + 0.2) * 5, 1 + Math.sin(a + 0.2) * 3.4, Math.cos(a + 0.4) * 9, 1 + Math.sin(a + 0.4) * 6], 0xf0e8d0); }
+    mouth.position.set(-6, -48);
+    const dust = new PIXI.Graphics(); ell(dust, 0, -2, 24, 9, 0xc8a060, 0.85); dust.visible = false;
+    body.addChild(dust, g, mouth);
+    return {
+        height: 58,
+        anim: (e) => {
+            body.scale.x = e.facing;
+            const hidden = e.untargetable;
+            dust.visible = hidden; g.alpha = mouth.alpha = hidden ? 0.12 : 1;
+            e.shadow.alpha = hidden ? 0.1 : 1;
+            g.rotation = Math.sin(e.phase * 1.2) * 0.06;
+            mouth.scale.set(e.ai && e.ai.state === 'fight' ? 1 + Math.abs(Math.sin(e.phase * 3)) * 0.15 : 1);
+            windupShake(e, body);
+        }
+    };
+}
+
+/** Desert, tier 3: a djinn of blue smoke and gold. Floats, keeps its distance and throws bolts of wind. */
+function djinn(body, t, r) {
+    const c = t.color, dark = shade(c, 0.6), light = shade(c, 1.35);
+    const g = new PIXI.Graphics();
+    poly(g, [-10, -26, 10, -26, 6, -14, 0, -2, -4, -8, -2, -14], dark);       // a tail of smoke
+    ell(g, 0, -34, 11, 10, c);                                                 // torso
+    rect(g, -11, -30, 22, 3, 0xe8b83a);                                        // gold sash
+    ell(g, 0, -50, 7, 7, light);                                               // head
+    circ(g, -2.4, -50, 1.3, 0xfff6b0); circ(g, 2.4, -50, 1.3, 0xfff6b0);
+    poly(g, [-9, -53, 9, -53, 6, -60, 0, -63, -6, -60], 0xf4f0e0);             // turban
+    circ(g, 0, -56, 1.8, 0xd8503a);
+    const armL = new PIXI.Graphics(); ostrokeA(armL, 3.2, c, () => { armL.moveTo(0, 0); armL.lineTo(-10, 6); }); icirc(armL, -10, 6, 2.6, 0xe8b83a, 1); armL.position.set(-9, -38);
+    const armR = new PIXI.Graphics(); ostrokeA(armR, 3.2, c, () => { armR.moveTo(0, 0); armR.lineTo(10, 6); }); icirc(armR, 10, 6, 2.6, 0xe8b83a, 1); armR.position.set(9, -38);
+    const aura = glowCircle(20, 0x7ae8ff, 0.18); aura.position.set(0, -36);
+    body.addChild(aura, g, armL, armR);
+    return {
+        height: 68,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            body.y = -10 + Math.sin(e.phase * 0.8) * 3;
+            armR.rotation = s === 'windup' ? -1.2 : Math.sin(e.phase * 1.1) * 0.2;
+            armL.rotation = -Math.sin(e.phase * 1.1) * 0.2;
+            aura.alpha = s === 'windup' ? 0.9 : 0.5;
+        }
+    };
+}
+
+/** Shore, tier 2: a siren on the rocks. Her song slows you; she keeps her distance. */
+function siren(body, t, r) {
+    const c = t.color, dark = shade(c, 0.6), light = shade(c, 1.3);
+    const tail = new PIXI.Graphics();
+    poly(tail, [-8, -18, 8, -18, 10, -8, 18, 0, 10, 2, 4, -4, -2, 0, -10, -2], c);
+    for (let k = 0; k < 3; k++) ell(tail, -2 + k * 4, -12 + k * 3, 2.4, 1.4, light, 0.8);
+    poly(tail, [14, -2, 24, -8, 22, 2, 24, 8], dark);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -26, 8, 10, 0xf0d0b8);                                         // torso
+    ell(g, -3, -28, 3, 2.2, 0xd8a0c8); ell(g, 3, -28, 3, 2.2, 0xd8a0c8);     // shells
+    ell(g, 0, -42, 7, 7.5, 0xf6dcc8);                                         // face
+    poly(g, [-9, -44, -6, -52, 6, -52, 9, -44, 10, -26, 6, -36, -6, -36, -10, -26], 0x2a8a7a);   // long sea-green hair
+    circ(g, -2.4, -42, 1.2, 0x1a5a6a); circ(g, 2.4, -42, 1.2, 0x1a5a6a);
+    const mouth = new PIXI.Graphics(); ell(mouth, 0, 0, 1.6, 1, 0xb84a5a); mouth.position.set(0, -38);
+    const song = new PIXI.Graphics(); song.lineStyle(1.6, 0xa0fff0, 0.8); song.arc(10, -40, 6, -0.7, 0.7); song.arc(10, -40, 11, -0.7, 0.7); song.lineStyle(0); song.visible = false;
+    body.addChild(tail, g, mouth, song);
+    return {
+        height: 56,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            tail.rotation = Math.sin(e.phase * 1.4) * 0.08;
+            song.visible = s === 'windup';
+            mouth.scale.set(s === 'windup' ? 2 : 1);
+            body.y = Math.sin(e.phase * 0.9) * 1.2;
+        }
+    };
+}
+
+/** Shore, tier 3: a hunched thing from the deep with a lure that glows. Slams the ground. */
+function lurker(body, t, r) {
+    const c = t.color, dark = shade(c, 0.55), light = shade(c, 1.35);
+    const legs = legSet([[-14, dark], [12, dark]], -14, 14, dark, 7);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -32, 26, 20, shade(c, 0.85));
+    ell(g, -3, -35, 23, 17, c);
+    for (let k = 0; k < 5; k++) ell(g, -14 + k * 7, -22, 3, 1.6, light, 0.6);
+    poly(g, [-10, -50, -4, -60, 2, -50], dark); poly(g, [2, -50, 8, -58, 12, -48], dark);   // fins
+    // wide mouth and eyes
+    poly(g, [8, -30, 26, -32, 24, -22, 10, -22], 0x1a0a14);
+    for (let k = 0; k < 4; k++) poly(g, [11 + k * 3.6, -30, 12.8 + k * 3.6, -26, 14.6 + k * 3.6, -30], 0xf0f0e0);
+    circ(g, 14, -40, 3.2, 0xfff0a0); circ(g, 14.4, -40, 1.4, 0x1a1a1a);
+    const lureG = new PIXI.Graphics();
+    io(lureG, 1.4); lureG.moveTo(0, 0); lureG.quadraticCurveTo(14, -18, 24, -8); lureG.lineStyle(0);
+    icirc(lureG, 24, -6, 3.4, 0xd8fff0, 1.2);
+    const bulb = glowCircle(12, 0x9affd8, 0.35); bulb.position.set(24, -6);
+    const lure = new PIXI.Container();
+    lure.addChild(bulb, lureG);
+    lure.position.set(4, -52);
+    const claw = new PIXI.Graphics();
+    ostrokeA(claw, 6, c, () => { claw.moveTo(0, 0); claw.lineTo(12, 14); });
+    poly(claw, [8, 10, 22, 12, 18, 20, 10, 18], light);
+    claw.position.set(16, -30);
+    body.addChild(legs[0], g, lure, claw, legs[1]);
+    return {
+        height: 64,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            const step = Math.sin(e.phase * 1.1);
+            legs[0].rotation = step * 0.3; legs[1].rotation = -step * 0.3;
+            lure.rotation = Math.sin(e.phase * 0.9) * 0.15;
+            bulb.alpha = 0.6 + Math.sin(e.phase * 2.5) * 0.3;
+            claw.rotation = s === 'windup' ? -1.3 : s === 'slam' ? 0.5 : 0;
+            body.scale.y = s === 'windup' ? 1.06 : s === 'slam' ? 0.9 : 1;
+            windupShake(e, body);
+        }
+    };
+}
+
+/** Mountain, tier 2: a harpy on brown wings. Circles high, then dives with her talons. */
+function harpy(body, t, r) {
+    const c = t.color, dark = shade(c, 0.6), light = shade(c, 1.3);
+    const wingL = new PIXI.Graphics(), wingR = new PIXI.Graphics();
+    for (const [w, sx] of [[wingL, -1], [wingR, 1]]) {
+        poly(w, [0, 0, sx * 26, -10, sx * 30, 2, sx * 22, 4, sx * 26, 10, sx * 14, 8], sx < 0 ? dark : c);
+        for (let k = 0; k < 3; k++) poly(w, [sx * (12 + k * 6), 6, sx * (16 + k * 6), 12, sx * (18 + k * 6), 6], light);
+    }
+    wingL.position.set(-4, -30); wingR.position.set(4, -30);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -26, 8, 11, c);
+    ell(g, 0, -42, 6.5, 7, 0xf0c8a8);                                          // face
+    poly(g, [-8, -44, -4, -52, 4, -52, 8, -44, 9, -34, 4, -40, -4, -40, -9, -34], 0x5a3a2a);   // wild hair
+    circ(g, -2.2, -42, 1.3, 0xffd040); circ(g, 2.2, -42, 1.3, 0xffd040);
+    poly(g, [-2, -38, 2, -38, 0, -35], 0xc8783a);
+    const talons = new PIXI.Graphics();
+    ostrokeA(talons, 2.2, 0xd8b040, () => { talons.moveTo(-3, 0); talons.lineTo(-4, 8); talons.moveTo(3, 0); talons.lineTo(4, 8); });
+    talons.position.set(0, -16);
+    body.addChild(wingL, g, talons, wingR);
+    return {
+        height: 56,
+        anim: (e) => {
+            const s = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            const flap = Math.sin(e.phase * (s === 'dive' ? 1 : 3.2));
+            wingL.rotation = flap * 0.5; wingR.rotation = -flap * 0.5;
+            if (s === 'dive') { wingL.rotation = -0.6; wingR.rotation = 0.6; body.rotation = 0.35; }
+            else body.rotation = 0;
+            body.y = -14 + Math.sin(e.phase * 1.2) * 3;
+            talons.rotation = s === 'dive' ? -0.4 : 0;
+            windupShake(e, body);
+        }
+    };
+}
+
+/** Mountain, tier 3: a yeti. Keeps its distance and hurls blocks of packed snow. */
+function yeti(body, t, r) {
+    const c = t.color, dark = shade(c, 0.72), face = 0x6a8ab8;
+    const legs = legSet([[-10, dark], [10, dark]], -16, 16, dark, 9);
+    const g = new PIXI.Graphics();
+    ell(g, 0, -40, 24, 24, dark);
+    ell(g, -3, -42, 21, 21, c);
+    for (let k = 0; k < 7; k++) { const a = Math.PI * (0.15 + k * 0.12); poly(g, [Math.cos(a) * 22 - 3, -42 + Math.sin(a) * 22, Math.cos(a + 0.06) * 27 - 3, -42 + Math.sin(a + 0.06) * 27, Math.cos(a + 0.12) * 22 - 3, -42 + Math.sin(a + 0.12) * 22], c); }
+    ell(g, 6, -48, 9, 8, face);                                                // blue face
+    circ(g, 3, -50, 1.8, 0x0a1a2a); circ(g, 9.5, -50, 1.8, 0x0a1a2a);
+    poly(g, [2, -44, 11, -44, 9, -41, 4, -41], 0x1a2a3a);
+    poly(g, [3, -44, 4, -42, 5, -44], 0xffffff); poly(g, [8, -44, 9, -42, 10, -44], 0xffffff);
+    const armL = new PIXI.Graphics(); ostrokeA(armL, 8, c, () => { armL.moveTo(0, 0); armL.lineTo(-6, -16); }); armL.position.set(-16, -50);
+    const armR = new PIXI.Graphics(); ostrokeA(armR, 8, c, () => { armR.moveTo(0, 0); armR.lineTo(6, -16); }); armR.position.set(14, -50);
+    const snow = new PIXI.Graphics();
+    icirc(snow, 0, 0, 10, 0xf4f8ff, 1.6); ell(snow, -3, -3, 4, 2.6, 0xffffff, 0.9); ell(snow, 3, 4, 4, 2, 0xc8d8f0, 0.8);
+    snow.position.set(0, -74);
+    body.addChild(legs[0], g, armL, armR, snow, legs[1]);
+    return {
+        height: 86,
+        anim: (e) => {
+            const st = e.ai && e.ai.state;
+            body.scale.x = e.facing;
+            const step = Math.sin(e.phase * 1.1);
+            legs[0].rotation = step * 0.3; legs[1].rotation = -step * 0.3;
+            snow.visible = st !== 'recover';
+            snow.y = -74 + (st === 'windup' ? -8 * Math.abs(Math.sin(e.phase * 3)) : 0);
+            body.y = Math.abs(step) * -2;
+            windupShake(e, body);
+        }
+    };
+}
+
 export const ENEMY_ART = {
+    thornback, wight, mantis, thornwitch, sandworm, djinn, siren, lurker, harpy, yeti,
     dummy,
     slime, bee, boar,
     boarking: (b, t, r) => boar(b, t, r, { crown: true, tusk: 0xffe8a0, eye: 0xff3a3a }),

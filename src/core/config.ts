@@ -96,6 +96,28 @@ export const ENEMY_TYPES: Record<string, EnemyTypeDef> = {
     GHOST: { name: 'Ghost', art: 'ghost', color: 0xcfe8ff, radius: 13, speed: 1.5, health: 40, damage: 9, experience: 16, flying: true, phase: true,
         ai: { kind: 'diver', orbit: 160, circleTime: [70, 150], windup: 26, dive: 5.4, diveTime: 40, retreat: 0, burst: 1.2 } },
 
+    // ---- tier 2 and 3 species: each region gains one from level 25 and one from level 37
+    THORNBACK: { name: 'Thornback', art: 'thornback', color: 0x7a6a4a, radius: 21, speed: 1.6, health: 110, damage: 12, experience: 22, flying: false, armor: 0.15,
+        ai: { kind: 'charger', range: 340, windup: 40, dash: 36, dashSpeed: 8, recover: 50, cooldown: [70, 140], burst: 1.5 } },
+    WIGHT: { name: 'Scarecrow Wight', art: 'wight', color: 0xc8a060, radius: 15, speed: 1.4, health: 70, damage: 10, experience: 24, flying: false,
+        ai: { kind: 'kiter', min: 200, max: 320, shotCooldown: [70, 120], windup: 16, shots: 3, shotSpeed: 5.6, shotDamage: 9, shotColor: 0xffa040 } },
+    MANTIS: { name: 'Stalker Mantis', art: 'mantis', color: 0x5aa040, radius: 15, speed: 2.2, health: 60, damage: 11, experience: 18, flying: false,
+        ai: { kind: 'strafer', orbit: 120, strafeSpeed: 1.8, lunge: 7.6, lungeTime: 18, windup: 12, recover: 34, cooldown: [70, 130] } },
+    THORNWITCH: { name: 'Thorn Witch', art: 'thornwitch', color: 0x6a8a3a, radius: 15, speed: 1.1, health: 90, damage: 9, experience: 30, flying: true,
+        ai: { kind: 'floater', range: 300, burstCooldown: [150, 230], windup: 30, shots: 9, shotSpeed: 3.4, shotDamage: 9, shotColor: 0x8aff6a } },
+    SANDWORM: { name: 'Sandworm', art: 'sandworm', color: 0xc89a5a, radius: 20, speed: 1.5, health: 120, damage: 14, experience: 24, flying: false, armor: 0.1,
+        ai: { kind: 'burrower', burrowSpeed: 4.2, surfaceDist: 95, surfaceWindup: 24, fightTime: [120, 200], burrowTime: 20 } },
+    DJINN: { name: 'Djinn', art: 'djinn', color: 0x4ab8e8, radius: 16, speed: 1.6, health: 80, damage: 10, experience: 30, flying: true,
+        ai: { kind: 'kiter', min: 210, max: 330, shotCooldown: [60, 110], windup: 14, shots: 2, shotSpeed: 6.6, shotDamage: 10, shotColor: 0x7ae8ff } },
+    SIREN: { name: 'Siren', art: 'siren', color: 0x5ac8b0, radius: 14, speed: 1.5, health: 60, damage: 8, experience: 20, flying: false,
+        ai: { kind: 'kiter', min: 190, max: 300, shotCooldown: [80, 130], windup: 18, shots: 1, shotSpeed: 5, shotDamage: 8, effect: 'web', shotColor: 0xa0fff0 } },
+    LURKER: { name: 'Deep Lurker', art: 'lurker', color: 0x2a6a8a, radius: 27, speed: 0.95, health: 220, damage: 18, experience: 40, flying: false, armor: 0.2,
+        ai: { kind: 'slammer', reach: 72, radius: 115, windup: 50, recover: 44, cooldown: [60, 110], slamDamage: 28 } },
+    HARPY: { name: 'Harpy', art: 'harpy', color: 0xb07a5a, radius: 13, speed: 2.7, health: 50, damage: 11, experience: 18, flying: true,
+        ai: { kind: 'diver', orbit: 220, circleTime: [80, 170], windup: 22, dive: 9.2, diveTime: 40, retreat: 80, burst: 1.4 } },
+    YETI: { name: 'Yeti', art: 'yeti', color: 0xe8f0f8, radius: 25, speed: 1.2, health: 200, damage: 16, experience: 40, flying: false,
+        ai: { kind: 'lobber', min: 240, max: 380, cooldown: [130, 200], windup: 30, flight: 58, radius: 80, lobDamage: 26 } },
+
     // ---- warlords: one per region
     BOAR_KING: { name: 'Boar King', art: 'boarking', color: 0xa86a3a, radius: 46, speed: 1.6, health: 900, damage: 26, experience: 160, flying: false, boss: true, armor: 0.1,
         ai: { kind: 'boss', abilities: ['dash', 'dash', 'slam', 'summon'], dash: { windup: 40, speed: 8.4, time: 36, recover: 45 }, slam: { radius: 130, windup: 50, damage: 28 }, summon: { type: 'SLIME', count: 4 } } },
@@ -178,6 +200,9 @@ const PERCEPTION_OVERRIDES: Record<string, Partial<Perception>> = {
   CRAB: { sight: 300 }, GULL: { sight: 480, leash: 650 }, JELLY: { sight: 360 },
   BAT: { sight: 520, leash: 650 }, GOLEM: { sight: 260, leash: 420 }, TROLL: { sight: 380 },
   SKELETON: { sight: 360 }, GHOST: { sight: 400 },
+  THORNBACK: { sight: 360 }, WIGHT: { sight: 420 }, MANTIS: { sight: 440, alert: 300 }, THORNWITCH: { sight: 400 },
+  SANDWORM: { sight: 320 }, DJINN: { sight: 460, leash: 620 }, SIREN: { sight: 420 }, LURKER: { sight: 320, leash: 460 },
+  HARPY: { sight: 560, leash: 700 }, YETI: { sight: 400 },
   BOAR_KING: { sight: 650, leash: 900, memory: 480 }, ANCIENT_TREANT: { sight: 650, leash: 900, memory: 480 },
   SAND_PHARAOH: { sight: 650, leash: 900, memory: 480 }, CRAB_KING: { sight: 650, leash: 900, memory: 480 },
   STONE_TITAN: { sight: 650, leash: 900, memory: 480 }

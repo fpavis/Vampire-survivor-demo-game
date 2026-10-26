@@ -6,6 +6,7 @@ import { addSpellXp, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES }
 import { spendMana, regenMana } from '../core/hero/stats';
 import { buildHero } from '../render/heroArt';
 import { settings } from './settings';
+import { ui as uiBridge } from '../ui/bridge';
 
 /** Triggers may set off one more trigger (a spark that splinters, shards that spark), never more. */
 const MAX_TRIGGER_DEPTH = 2;
@@ -132,7 +133,8 @@ export class SpellSystem {
         };
     }
 
-    touch() { this.version++; this.cache.clear(); }
+    // a change to spells or loadouts refreshes the panels at once, not at the next UI sync of the game loop
+    touch() { this.version++; this.cache.clear(); uiBridge.version.value++; }
     item(uid) { return this.spells.find((s) => s.uid === uid); }
     level(tplId) { const s = this.spells.find((x) => x.tpl === tplId); return s ? s.level : 0; }
     resolved(item) {
