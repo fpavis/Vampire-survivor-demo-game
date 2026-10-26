@@ -93,7 +93,8 @@ export const ui = {
   optionsOpen: signal(false),                 // the settings panel opened from the title
   creditsOpen: signal(false),
   newGameSeed: signal(''),                    // seed for the next new game ('' = random)
-  log: signal<LogEntry[]>([]),                // recent toasts and banners, newest last
+  log: signal<LogEntry[]>([]),
+  dummy: signal<{ dps: number; total: number; peak: number } | null>(null),   // the training dummy's damage meter                // recent toasts and banners, newest last
   game: null as any
 };
 

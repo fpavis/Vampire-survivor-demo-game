@@ -1,3 +1,4 @@
+import * as PIXI from 'pixi.js';
 import { GENERATOR_VERSION, SAVE_VERSION, type SaveData } from '../core/save/schema';
 
 /** Collects everything worth persisting from a running game (the world itself is regenerated from the seed). */
@@ -49,19 +50,21 @@ export function buildSave(game: any): SaveData {
  * The canvas is read right after a render, so it works without preserveDrawingBuffer.
  */
 export function captureThumb(game: any): string | undefined {
+  const w = 192, h = 108;
+  let rt: PIXI.RenderTexture | null = null;
+  const hud = game.ui?.container;
+  const was = hud ? hud.visible : false;
   try {
-    const app = game.app;
-    const hud = game.ui?.container;
-    const was = hud ? hud.visible : false;
+    // the scene is drawn straight into a small texture, so only 192 x 108 pixels are read back
+    const app = game.app, sw = app.screen.width, sh = app.screen.height;
+    const k = Math.max(w / sw, h / sh);
+    rt = PIXI.RenderTexture.create({ width: w, height: h, resolution: 1 });
     if (hud) hud.visible = false;
-    app.renderer.render(app.stage);
-    if (hud) hud.visible = was;
-    const src = app.view as HTMLCanvasElement;
-    const w = 192, h = 108;
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const k = Math.max(w / src.width, h / src.height);
-    c.getContext('2d')!.drawImage(src, (w - src.width * k) / 2, (h - src.height * k) / 2, src.width * k, src.height * k);
-    return c.toDataURL('image/jpeg', 0.72);
+    app.renderer.render(app.stage, { renderTexture: rt, clear: true, transform: new PIXI.Matrix(k, 0, 0, k, (w - sw * k) / 2, (h - sh * k) / 2) });
+    return app.renderer.extract.canvas(rt).toDataURL('image/jpeg', 0.72);
   } catch { return undefined; }
+  finally {
+    if (hud) hud.visible = was;
+    rt?.destroy(true);
+  }
 }

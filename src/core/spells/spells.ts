@@ -30,7 +30,7 @@ export interface Params {
 }
 
 export type TriggerOn = 'hit' | 'kill';
-export type TriggerPayload = 'spark' | 'burst' | 'shards';
+export type TriggerPayload = 'spark' | 'burst' | 'shards' | 'cast';
 export interface Trigger { on: TriggerOn; payload: TriggerPayload; chance: number; power: number }
 
 export interface SpellTemplate {
@@ -200,7 +200,9 @@ export const RUNES: Record<string, RuneDef> = {
     mods: [], trigger: { on: 'kill', payload: 'shards', chance: 1, power: 0.4 } },
   overcharge: { id: 'overcharge', name: 'Overcharge', icon: 'rune-overcharge', rarity: 2, desc: '+60% power, +30% mana cost.', mode: 'active',
     mods: [{ p: 'damage', mul: 1.6 }, { p: 'heal', mul: 1.6 }, { p: 'range', mul: 1.25 }, { p: 'mana', mul: 1.3 }] },
-  aftershock: { id: 'aftershock', name: 'Aftershock', icon: 'rune-aftershock', rarity: 3, desc: 'A second pulse follows at 60% damage.', exprs: ['nova', 'slam', 'meteor'], mods: [{ p: 'echo', add: 1 }] }
+  aftershock: { id: 'aftershock', name: 'Aftershock', icon: 'rune-aftershock', rarity: 3, desc: 'A second pulse follows at 60% damage.', exprs: ['nova', 'slam', 'meteor'], mods: [{ p: 'echo', add: 1 }] },
+  resonance: { id: 'resonance', name: 'Resonance', icon: 'rune-resonance', rarity: 3, desc: 'Kills cast your next auto spell at 50% power (at most twice a second).', exprs: ALL_DMG, mode: 'auto',
+    mods: [], trigger: { on: 'kill', payload: 'cast', chance: 1, power: 0.5 } }
 };
 
 export interface ResolvedSpell {
@@ -335,6 +337,9 @@ const PARAM_LABELS: Partial<Record<keyof Params, [string, (v: number) => string]
   heal: ['Heal/s', (v) => `${Math.round(v)}`]
 };
 
+const triggerText = (t: Trigger) =>
+  t.on === 'hit' ? `On hit: ${Math.round(t.chance * 100)}% spark` : t.payload === 'shards' ? 'On kill: 3 shards' : t.payload === 'cast' ? 'On kill: casts your next spell' : 'On kill: explosion';
+
 /** What changes if `runeId` were socketed into `slot` (compare tooltip). Empty when it cannot be socketed. */
 export function previewRune(item: SpellItem, runeId: string, slot: number): string[] {
   if (!canSocket(item, runeId, slot).ok) return [];
@@ -347,6 +352,6 @@ export function previewRune(item: SpellItem, runeId: string, slot: number): stri
     if (Math.abs(a - b) > 1e-9) { const [label, f] = PARAM_LABELS[k]!; out.push(`${label}: ${f(a)} → ${f(b)}`); }
   }
   const t = RUNES[runeId].trigger;
-  if (t) out.push(t.on === 'hit' ? `On hit: ${Math.round(t.chance * 100)}% spark` : t.payload === 'shards' ? 'On kill: 3 shards' : 'On kill: explosion');
+  if (t) out.push(triggerText(t));
   return out;
 }

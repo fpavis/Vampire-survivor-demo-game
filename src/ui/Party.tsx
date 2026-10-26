@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'preact/hooks';
 import { ui } from './bridge';
 import { onPad } from './hints';
 import { Icon } from './Icon';
+import { healerLine } from '../core/party/party';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -28,9 +30,15 @@ export function PartyBar() {
   );
 }
 
+/** Counts visits so the healer does not repeat the same line every time. */
+let visits = 0;
+
 export function Healer() {
   ui.version.value;
-  if (!ui.healerOpen.value || !ui.game) return null;
+  const open = ui.healerOpen.value;
+  const [visit, setVisit] = useState(0);
+  useEffect(() => { if (open) setVisit(visits++); }, [open]);
+  if (!open || !ui.game) return null;
   const game = ui.game;
   const quotes = game.party.quotes() as { id: string; dead: boolean; missing: number; cost: number }[];
   const gold = ui.wallet.value.gold;
@@ -40,7 +48,8 @@ export function Healer() {
     <div class="vs-panel vs-heal hit">
       <button class="vs-btn vs-x" onClick={() => (ui.healerOpen.value = false)} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="healer" /> Healer</h2>
-      <div class="sub">“Rest your weary heroes.” Healing and reviving cost gold. <Icon name="res-gold" /> You have {gold}.</div>
+      <div class="sub vs-says">“{healerLine(quotes, gold, visit)}”</div>
+      <div class="sub">Healing and reviving cost gold. <Icon name="res-gold" /> You have {gold}.</div>
       {quotes.map((q, i) => {
         const h = ui.party.value.heroes[i];
         if (!h) return null;

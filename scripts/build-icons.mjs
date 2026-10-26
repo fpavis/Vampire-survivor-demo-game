@@ -22,7 +22,8 @@ const MANIFEST = {
   'arrow-right': ['mdi:arrow-right', null], 'arrow-up': ['mdi:arrow-up-bold', null], 'stairs-up': ['mdi:stairs-up', null],
   'stairs-down': ['mdi:stairs-down', null], alert: ['mdi:alert', null], 'quest-marker': ['mdi:exclamation-thick', null],
   timer: ['mdi:timer-outline', null], star: ['mdi:star', null], gamepad: ['mdi:gamepad-variant', null], flask: ['mdi:flask-outline', null],
-  'x-mark': ['mdi:close-thick', null],
+  'x-mark': ['mdi:close-thick', null], 'star-outline': ['mdi:star-outline', null], eye: ['mdi:eye-outline', null],
+  swap: ['mdi:account-switch', null], 'hand-heart': ['mdi:hand-heart', null],
 
   // schools of magic
   'school-arcane': ['gi:star-swirl', 0xffd84a], 'school-frost': ['gi:snowflake-2', 0x9be7ff], 'school-fire': ['gi:flame', 0xff8a3a],
@@ -44,6 +45,7 @@ const MANIFEST = {
   'rune-keen': ['gi:on-target', 0xff6a6a], 'rune-colossal': ['gi:giant', 0xc8b090], 'rune-ricochet': ['gi:ricochet', 0xffd84a],
   'rune-seeking': ['gi:magnet', 0xff6a6a], 'rune-siphon': ['gi:extraction-orb', 0x6ab8ff], 'rune-splinter': ['gi:crystal-cluster', 0x9be7ff],
   'rune-overcharge': ['gi:battery-pack', 0xffd84a], 'rune-aftershock': ['gi:earth-spit', 0xc8a070],
+  'rune-resonance': ['gi:resonance', 0xb9a5ff],
 
   // stat paths and cards
   'path-arcane': ['gi:crystal-ball', 0xc08bff], 'path-vigor': ['gi:hearts', 0xff7a7a], 'path-wayfarer': ['gi:boots', 0x7be0d0],
@@ -62,7 +64,8 @@ const MANIFEST = {
   // things and places
   heart: ['mdi:heart', 0xff4a5a], gem: ['gi:cut-diamond', 0x7be0ff], upgrade: ['gi:upgrade', 0xffd84a], hand: ['gi:hand', 0xf0d0a0],
   backpack: ['gi:knapsack', 0xd8a868], door: ['gi:door', 0xc8915a], road: ['gi:horizon-road', 0xc8a070], torch: ['gi:torch', 0xffaa4a],
-  hammer: ['gi:hammer-nails', 0xd0b080], journal: ['gi:open-book', 0x9be7ff], map: ['gi:treasure-map', 0xe8d090], scroll: ['gi:scroll-unfurled', 0xe8d090],
+  hammer: ['gi:hammer-nails', 0xd0b080], journal: ['gi:open-book', 0x9be7ff], codex: ['gi:spell-book', 0xc8a0ff],
+  dummy: ['gi:scarecrow', 0xd8b070], map: ['gi:treasure-map', 0xe8d090], scroll: ['gi:scroll-unfurled', 0xe8d090],
   chest: ['gi:open-treasure-chest', 0xffc84a], swords: ['gi:crossed-swords', 0xe0e6f0], fleur: ['gi:fleur-de-lys', 0xf3d08a],
   warning: ['gi:hazard-sign', 0xff5a5a], sail: ['gi:sailboat', 0x9bd0ff], flag: ['gi:flying-flag', 0xff6a5a], key: ['gi:key', 0xffd84a],
   'biome-field': ['gi:wheat', 0xe8c860], 'biome-forest': ['gi:pine-tree', 0x5ac46a], 'biome-desert': ['gi:cactus', 0x9ad06a],

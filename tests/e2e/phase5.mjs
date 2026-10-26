@@ -216,7 +216,12 @@ const gemTest = await page.evaluate((p) => {
   g.enterPlace(p);
   return { n: window.__gemsBefore, lvl: g.state.level };
 }, poi);
-await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
+await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 }).catch(async (e) => {
+  console.log('stuck entering the town', JSON.stringify(await page.evaluate(() => { const g = window.game; return { mode: g.mode, busy: g.busy, paused: g.state.paused, pause: !!document.querySelector('.vs-pause'), focus: document.hasFocus(), hidden: document.hidden, fade: [g.ui.fadeAlpha, g.ui.fadeTarget, !!g.ui.fadeCb], frame: g.frame, ticker: [g.app.ticker.started, g.app.ticker.maxFPS, g.app.ticker.FPS], over: g.state.gameOver }; })), errors.slice(0, 3));
+  await page.waitForTimeout(1000);
+  console.log('a second later', JSON.stringify(await page.evaluate(() => { const g = window.game; return { busy: g.busy, fade: [g.ui.fadeAlpha, g.ui.fadeTarget, !!g.ui.fadeCb], frame: g.frame, fps: g.app.ticker.FPS }; })));
+  throw e;
+});
 const inside = await page.evaluate(() => ({ lvl: window.game.state.level, pending: window.game.state.pending, xp: Math.round(window.game.state.experience), lvl0: window.__lvl0 }));
 check('entering a town does not level the hero up', inside.lvl === inside.lvl0 && inside.pending === 0 && inside.xp === 0, JSON.stringify({ gemTest, inside }));
 await page.evaluate(() => window.game.exitPlace());

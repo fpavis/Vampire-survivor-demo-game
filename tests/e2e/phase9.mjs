@@ -25,6 +25,8 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const loop = (n) => ev((n) => { for (let i = 0; i < n; i++) window.game.gameLoop(1); }, n);
+// the panels refresh from the game loop, which runs slowly on a software GPU: wait for the state, not a fixed time
+const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 4000 }).then(() => true, () => false);
 
 await page.goto(`http://localhost:${PORT}/`);
 await page.waitForFunction(() => !!window.game);
@@ -222,6 +224,163 @@ if (want('journal')) {
   check('the journal shows statistics', /Monsters defeated/.test(stats) && /Slime/i.test(stats), stats.slice(0, 160));
   const saved = await ev(async () => { const g = window.game; await g.requestSave('test', true); const d = await g.store.load('autosave'); return d.stats; });
   check('statistics are saved', saved.byType.SLIME >= 3 && saved.distance > 50 && saved.goldEarned >= 25, JSON.stringify(saved));
+}
+
+// ---- party and loadout: another hero's loadout, sets, assist, favourites, New badges, sort memory, DPS
+if (want('loadout')) {
+  const prep = await ev(() => {
+    const g = window.game, sp = g.spells;
+    g.party.cdUntil = 0;
+    const nova = sp.addSpell('nova', 2), cloud = sp.addSpell('cloud', 1);
+    return { nova: nova.uid, cloud: cloud.uid, active: g.party.active, heroes: g.party.heroes.length };
+  });
+  await page.keyboard.press('i');
+  await page.waitForSelector('.vs-load');
+  const badge = await ev((uid) => !!document.querySelector(`[data-spell="${uid}"] .vs-new`), prep.nova);
+  check('a newly found spell carries a New badge', badge);
+  const other = (prep.active + 1) % prep.heroes;
+  await ev((i) => document.querySelector(`.vs-load [data-hero="${i}"]`).click(), other);
+  await until(() => !!document.querySelector('.vs-viewing'));
+  const view = await ev(() => ({ title: document.querySelector('.vs-load h2').innerText.split('\n')[0], banner: !!document.querySelector('.vs-viewing'), view: window.game.spells.viewIndex(), active: window.game.party.active }));
+  check('a hero tab shows that hero\'s loadout without switching', /\(resting\)/.test(view.title) && view.banner && view.view === other && view.active === prep.active, JSON.stringify(view));
+  // equip with the keyboard: it lands on the resting hero, not on the active one
+  await ev((uid) => document.querySelector(`[data-spell="${uid}"]`).focus(), prep.nova);
+  await page.keyboard.press('f');
+  await until((uid) => !!document.querySelector(`[data-zone="auto"] [data-spell="${uid}"], [data-drop="equip"] [data-spell="${uid}"]`), prep.nova);
+  const eq = await ev(({ uid, other }) => { const g = window.game; g.party.commit(); return { rest: g.party.heroes[other].auto.includes(uid), live: g.spells.auto.includes(uid) }; }, { uid: prep.nova, other });
+  check('equipping while viewing a resting hero changes that hero\'s loadout', eq.rest && !eq.live, JSON.stringify(eq));
+  // loadout sets: keep, change, load back
+  await ev(() => document.querySelector('[data-keep="0"]').click());
+  const setOn = await until(() => !document.querySelector('[data-set="0"]').disabled);
+  await ev((uid) => window.game.spells.unequip(uid), prep.nova);
+  await ev(() => document.querySelector('[data-set="0"]').click());
+  const back = await ev(({ uid, other }) => window.game.party.heroes[other].auto.includes(uid), { uid: prep.nova, other });
+  check('a kept loadout set equips again in one press', setOn && back);
+  // assist: select the spell, lend it to the party
+  await ev((uid) => document.querySelector(`[data-spell="${uid}"]`).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })), prep.nova);
+  await until(() => !!document.querySelector('[data-act="assist"]'));
+  await ev(() => document.querySelector('[data-act="assist"]').click());
+  await until(() => /assists with/.test(document.querySelector('.vs-viewing')?.innerText || ''));
+  const assist = await ev(({ uid, other }) => window.game.party.heroes[other].assist === uid && /assist/.test(document.querySelector('.vs-viewing').innerText), { uid: prep.nova, other });
+  check('a resting hero can assist with one of their auto spells', assist);
+  // favourites go first in the bag
+  const bag0 = await ev(() => [...document.querySelectorAll('[data-drop="unequip"] [data-spell]')].map((e) => e.dataset.spell));
+  const last = bag0[bag0.length - 1];
+  await ev((uid) => document.querySelector(`[data-drop="unequip"] [data-spell="${uid}"] .vs-favb`).click(), last);
+  await until((uid) => document.querySelector('[data-drop="unequip"] [data-spell]')?.dataset.spell === uid, last);
+  const bag1 = await ev(() => [...document.querySelectorAll('[data-drop="unequip"] [data-spell]')].map((e) => e.dataset.spell));
+  check('a favourite spell is listed first', bag0.length > 1 && bag1[0] === last && await ev((uid) => window.game.spells.item(uid).fav === true, last), JSON.stringify({ bag0, bag1 }));
+  // a damage estimate is shown for the selected spell
+  const dps = await ev(() => document.querySelector('.vs-load .vs-dps')?.innerText || '');
+  check('the selected spell shows a damage estimate', /\d+\s*\/s on one monster/.test(dps) && /group of five/.test(dps), dps);
+  // sort order is remembered
+  await ev(() => { const s = document.querySelectorAll('.vs-tools select')[0]; s.value = 'name'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(150);
+  // Tab shows the next hero, still without switching
+  const v0 = await ev(() => window.game.spells.viewIndex());
+  await page.keyboard.press('Tab');
+  await until((v0) => window.game.spells.viewIndex() !== v0, v0);
+  const v1 = await ev(() => ({ view: window.game.spells.viewIndex(), active: window.game.party.active }));
+  check('Tab shows the next hero in the spell panel', v1.view !== v0 && v1.active === prep.active, JSON.stringify({ v0, v1 }));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/loadout-view.png` });
+  // Make active
+  await ev((i) => window.game.spells.setView(i), other);
+  await until(() => !!document.querySelector('[data-act="make-active"]'));
+  await ev(() => { window.game.party.cdUntil = 0; document.querySelector('[data-act="make-active"]').click(); });
+  await until(() => !document.querySelector('.vs-viewing'));
+  const made = await ev((uid) => ({ active: window.game.party.active, title: document.querySelector('.vs-load h2').innerText.split('\n')[0], live: window.game.spells.auto.includes(uid) }), prep.nova);
+  check('Make active switches to the hero being viewed', made.active === other && !/\(resting\)/.test(made.title) && made.live, JSON.stringify(made));
+  await page.keyboard.press('i');
+  await until(() => !document.querySelector('.vs-load'));
+  const after = await ev(() => ({ isNew: window.game.spells.spells.some((s) => s.isNew), view: window.game.spells.viewHero ?? null }));
+  check('closing the panel clears the New badges and the view', !after.isNew && after.view === null, JSON.stringify(after));
+  await page.keyboard.press('i');
+  await page.waitForSelector('.vs-load');
+  const sortKept = await ev(() => document.querySelectorAll('.vs-tools select')[0].value);
+  await page.keyboard.press('i');
+  check('the spell sort order is remembered', sortKept === 'name', sortKept);
+  // the assisting hero (now resting again after switching back) fires their spell from the party
+  const fired = await ev(({ uid, back }) => {
+    const g = window.game, sp = g.spells, p = g.state.player;
+    g.party.cdUntil = 0; g.party.switchTo(back);
+    const h = g.party.heroes.find((x) => x.assist === uid);
+    for (let i = 0; i < 6; i++) g.makeEnemy('SLIME', p.wx + 80 + i * 10, p.wy + 20, { level: 1 });
+    let n = 0; const orig = sp.fireAuto.bind(sp);
+    sp.fireAuto = (r) => { const ok = orig(r); if (ok && r.item.uid === uid) n++; return ok; };
+    for (let i = 0; i < 400; i++) g.gameLoop(1);
+    sp.fireAuto = orig;
+    return { n, resting: !!h && g.party.heroes.indexOf(h) !== g.party.active };
+  }, { uid: prep.nova, back: prep.active });
+  check('an assisting resting hero casts their spell, at a slower pace', fired.resting && fired.n >= 1 && fired.n <= 4, JSON.stringify(fired));
+  const saved = await ev(async () => { const g = window.game; await g.requestSave('test', true); const d = await g.store.load('autosave'); return { presets: d.party.heroes.map((h) => h.presets.filter(Boolean).length), assist: d.party.heroes.map((h) => h.assist), fav: d.inventory.spells.some((s) => s.fav) }; });
+  check('sets, assist and favourites are saved', saved.presets.some((n) => n > 0) && saved.assist.includes(prep.nova) && saved.fav, JSON.stringify(saved));
+}
+
+// ---- towns: the training dummy, and the healer's own lines
+if (want('dummy')) {
+  const town = await ev(() => {
+    const g = window.game, src = g.overworld;
+    for (let r = 0; r < 60; r++) for (let cy = -r; cy <= r; cy++) for (let cx = -r; cx <= r; cx++) {
+      if (Math.max(Math.abs(cx), Math.abs(cy)) !== r) continue;
+      const q = src.poiForCell(cx, cy);
+      if (q && q.type === 'city') { g.enterPlace(q); return q.id; }
+    }
+    return null;
+  });
+  await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 });
+  const d0 = await ev(() => {
+    const g = window.game, e = g.state.enemies.find((x) => x.dummy);
+    if (!e) return null;
+    let kills = 0; const off = g.events.on('EnemyKilled', () => kills++);
+    const p = g.state.player; p.wx = e.wx - 120; p.wy = e.wy;
+    for (let i = 0; i < 300; i++) g.gameLoop(1);
+    g.damageEnemy(e, 1e9, { noCrit: true });
+    for (let i = 0; i < 20; i++) g.gameLoop(1);
+    if (typeof off === 'function') off();
+    return { alive: !e.dead && g.state.enemies.includes(e), hp: e.health === e.maxHealth, kills, safe: g.safeFor > 100, total: Math.round(g.dummy.meter.total), x: e.wx, y: e.wy, marker: g.map.markers.some((m) => m.icon === 'dummy') };
+  });
+  check('every town has a training dummy that takes hits and never dies', !!d0 && d0.alive && d0.hp && d0.kills === 0 && d0.total > 1000, JSON.stringify(d0));
+  check('the dummy is no threat: the town stays safe for editing spells', !!d0 && d0.safe, JSON.stringify(d0));
+  await page.waitForTimeout(200);
+  const meter = await ev(() => document.querySelector('.vs-meter')?.innerText || '');
+  check('the damage meter shows while hitting the dummy', /Training dummy/.test(meter) && /damage\/s/.test(meter), meter.replace(/\n/g, ' '));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/dummy.png` });
+  await ev(() => {
+    const g = window.game, it = g.interactables.find((i) => i.kind === 'healer'), p = g.state.player;
+    for (const c of g.critters.list) { c.wx = c.tx = it.x + 700; c.wy = c.ty = it.y + 700; c.home = { x: c.wx, y: c.wy, r: 5 }; c.wait = 9999; }
+    p.wx = it.x - 30; p.wy = it.y; g.gameLoop(1); g.updateInteraction();
+  });
+  await page.keyboard.press('e');
+  await page.waitForSelector('.vs-heal', { timeout: 3000 }).catch(() => {});
+  const says = await ev(() => document.querySelector('.vs-heal .vs-says')?.innerText || '');
+  check('the healer speaks their own lines', says.length > 10 && /“.+”/.test(says), says);
+  await ev(() => window.game.closeNpcPanels?.());
+  await ev(() => window.game.exitPlace());
+  await page.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 8000 });
+  check('leaving town clears the dummy and its meter', await ev(() => !window.game.state.enemies.some((e) => e.dummy) && !document.querySelector('.vs-meter')));
+}
+
+// ---- codex: bestiary with portraits, spells, runes and places
+if (want('codex')) {
+  await ev(() => { const g = window.game, p = g.state.player; const e = g.makeEnemy('BOAR', p.wx + 60, p.wy, { level: 1 }); g.damageEnemy(e, 1e6, { noCrit: true }); g.gameLoop(1); });
+  await page.keyboard.press('j');
+  await page.waitForTimeout(200);
+  await ev(() => document.querySelector('[data-jtab="codex"]').click());
+  await page.waitForTimeout(200);
+  const best = await ev(() => { const el = document.querySelector('[data-monster="BOAR"]'); return { shown: !!el, img: !!el?.querySelector('img[src^="data:image/png"]'), text: el?.innerText || '', unknown: document.querySelectorAll('.vs-cx.unknown').length, count: document.querySelector('[data-ctab="monsters"] small')?.innerText }; });
+  check('the bestiary lists a monster met, with a portrait and its habits', best.shown && best.img && /Boar/.test(best.text) && /defeated [1-9]/.test(best.text) && best.unknown > 0, JSON.stringify(best));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/codex-bestiary.png` });
+  await ev(() => document.querySelector('[data-ctab="spells"]').click());
+  await page.waitForTimeout(100);
+  const spells = await ev(() => ({ known: document.querySelectorAll('.vs-codex .vs-cx:not(.unknown)').length, text: document.querySelector('.vs-codex').innerText }));
+  check('the spell compendium lists the spells found', spells.known >= 3 && /Nova|Spore Cloud/i.test(spells.text), String(spells.known));
+  await ev(() => document.querySelector('[data-ctab="places"]').click());
+  await page.waitForTimeout(100);
+  const places = await ev(() => ({ n: document.querySelectorAll('[data-place]').length, text: document.querySelector('.vs-codex').innerText }));
+  check('the places list shows the places discovered', places.n >= 1 && /visited|cleared|seen/.test(places.text), JSON.stringify({ n: places.n }));
+  await page.keyboard.press('j');
+  const saved = await ev(async () => { const g = window.game; await g.requestSave('test', true); const d = await g.store.load('autosave'); return d.codex; });
+  check('the codex is saved', saved.monsters.includes('BOAR') && saved.spells.includes('nova') && saved.spells.length >= 3, JSON.stringify(saved));
 }
 
 // ---- title screen: Load, Options and Credits; quit to the title and continue

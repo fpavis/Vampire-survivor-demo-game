@@ -102,9 +102,9 @@ await page.evaluate(() => { const g = window.game; g.godMode = true; g.spells.ad
 await page.keyboard.press('i');
 await page.waitForSelector('.vs-load');
 await page.locator('.vs-item', { hasText: 'Frost Nova' }).first().click();
-const runeState = await page.evaluate(() => [...document.querySelectorAll('.vs-rune')].map((r) => [r.textContent.trim(), r.classList.contains('bad')]));
-const bad = {}; for (const [t, b] of runeState) bad[t.replace(/^\P{L}+/u, '').replace(/[CUREL]$/, '')] = b;   // drop the icon and the rarity letter
-check('incompatible runes are greyed out', bad['Piercing'] === true && bad['Ignite'] === true && bad['Wide'] === false, JSON.stringify(runeState));
+const runeState = await page.evaluate(() => [...document.querySelectorAll('.vs-rune[data-rune]')].map((r) => [r.dataset.rune, r.classList.contains('bad')]));
+const bad = Object.fromEntries(runeState);
+check('incompatible runes are greyed out', bad.piercing === true && bad.ignite === true && bad.wide === false, JSON.stringify(runeState));
 await page.locator('.vs-rune', { hasText: 'Wide' }).click();
 await page.locator('.vs-sock').first().click();
 const socketed = await page.evaluate(() => window.game.spells.spells.find((s) => s.tpl === 'nova').runes);

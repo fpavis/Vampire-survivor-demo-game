@@ -115,6 +115,20 @@ function Pill() {
   );
 }
 
+/** The training dummy's meter, while the player is near it and hitting it. */
+function DummyMeter() {
+  const m = ui.dummy.value;
+  if (!m) return null;
+  return (
+    <div class="vs-meter" role="status" aria-live="off">
+      <Icon name="dummy" />
+      <span><b>Training dummy</b>
+        <span class="n"><b>{m.dps}</b> damage/s</span>
+        <small>best {m.peak}/s · total {m.total}</small></span>
+    </div>
+  );
+}
+
 export function App() {
   const modal = panelOpen();
   useEffect(() => { document.documentElement.classList.toggle('vs-modal', modal); }, [modal]);
@@ -129,9 +143,11 @@ export function App() {
       else if (act === 'spells') game.input.openPanel('spells');
       else if (act === 'journal') game.input.openPanel('journal');
       else if (ui.cardsOpen.value && ui.pending.value && PICK_KEYS.includes(k)) game.pickCard(Number(k) - 1);
+      else if (PICK_KEYS.includes(k) && ui.loadoutOpen.value) game.spells.setView(Number(k) - 1);
       else if (PICK_KEYS.includes(k)) game.party.switchTo(Number(k) - 1);
       else if (act === 'build') game.input.openPanel('build');
       else if (k === 'enter' && game.towers.build) { e.preventDefault(); game.towers.confirmBuild(); }
+      else if (act === 'nextHero' && ui.loadoutOpen.value) { e.preventDefault(); game.spells.cycleView(e.shiftKey ? -1 : 1); }
       else if (act === 'nextHero') { e.preventDefault(); game.party.cycle(e.shiftKey ? -1 : 1); }
     };
     window.addEventListener('keydown', onKey);
@@ -155,6 +171,7 @@ export function App() {
         <Pill />
         <Tracker />
         <PartyBar />
+        <DummyMeter />
         <TipCard />
       </div>
       <CardsPanel />

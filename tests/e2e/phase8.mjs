@@ -112,13 +112,15 @@ await ev((uid) => document.querySelector(`[data-spell="${uid}"]`)?.focus(), f0.s
 await tap(B.X);
 check('X again equips it', await ev((uid) => window.game.spells.equipped(uid), f0.spell));
 
-// Y locks and unlocks
+// Y locks and unlocks (the panel re-renders the row in its new list from the game loop: focus it once it is there)
+await page.waitForFunction((uid) => !!document.querySelector(`[data-drop="equip"] [data-spell="${uid}"]`), f0.spell, { timeout: 4000 }).catch(() => {});
 await ev((uid) => document.querySelector(`[data-spell="${uid}"]`)?.focus(), f0.spell);
 await tap(B.Y);
-const locked = await ev((uid) => window.game.spells.item(uid).locked, f0.spell);
+const locked = await page.waitForFunction((uid) => window.game.spells.item(uid).locked === true, f0.spell, { timeout: 3000 }).then(() => true, () => false);
+await ev((uid) => document.querySelector(`[data-spell="${uid}"]`)?.focus(), f0.spell);
 await tap(B.Y);
-const unlocked = await ev((uid) => window.game.spells.item(uid).locked, f0.spell);
-check('Y locks and unlocks the focused spell', locked === true && unlocked === false);
+const unlocked = await page.waitForFunction((uid) => !window.game.spells.item(uid).locked, f0.spell, { timeout: 3000 }).then(() => false, () => true);
+check('Y locks and unlocks the focused spell', locked === true && unlocked === false, JSON.stringify({ locked, unlocked }));
 
 // A on the spell selects it; then walk to an empty socket and open the picker
 await ev((uid) => document.querySelector(`[data-spell="${uid}"]`)?.focus(), f0.spell);

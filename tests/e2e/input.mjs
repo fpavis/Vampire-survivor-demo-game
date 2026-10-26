@@ -288,7 +288,11 @@ const ghost = await ev(() => { const b = window.game.towers.build; return b && {
 check('with a pad the ghost sits ahead of the hero', ghost && ghost.valid && ghost.tx === spot.tx && ghost.ty === spot.ty, JSON.stringify(ghost));
 await tap(B.B);
 check('B cancels placing', (await ev(() => window.game.towers.build)) === null);
-await tap(B.LEFT); await page.waitForTimeout(120); await tap(B.A);
+await tap(B.LEFT);
+await page.waitForSelector('.vs-build', { timeout: 3000 });
+await focusSettled();
+await tap(B.A);
+await page.waitForFunction(() => !!window.game.towers.build, null, { timeout: 3000 }).catch(() => {});
 await ev((s) => { window.goTo((s.tx - 2.9) * 48, (s.ty + 0.5) * 48); window.game.lastMove = { x: 1, y: 0 }; for (let i = 0; i < 4; i++) window.game.gameLoop(1); }, spot);
 await tap(B.A);
 const laid = await ev(() => ({ n: window.game.towers.recs.length, built: window.game.towers.recs[0] && window.game.towers.recs[0].built }));

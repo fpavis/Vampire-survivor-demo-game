@@ -53,6 +53,7 @@ import { InputSystem } from './input';
 import { DungeonSystem } from './dungeons';
 import { QuestSystem } from './quests';
 import { TipSystem } from './tips';
+import { TrainingDummy } from './dummy';
 import { isTyping } from '../ui/nav';
 import { normKey } from '../core/input/bindings';
 import { applyAccess, loadAccess } from './access';
@@ -146,6 +147,7 @@ class Game {
         this.lastBackupAt = {};
         this.quests = new QuestSystem(this);
         this.tips = new TipSystem(this);
+        this.dummy = new TrainingDummy(this);
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
         this.gemStash = null;
         this.fog = new FogOfWar();
@@ -294,8 +296,17 @@ class Game {
         label.anchor.set(0.5);
         button.addChild(bg, label);
         const base = () => button.baseScale || 1;
-        button.on('pointerover', () => { draw(true); button.scale.set(base() * 1.05); if (button.onHover) button.onHover(); });
-        button.on('pointerout', () => { draw(!!button.selected); button.scale.set(base() * (button.selected ? 1.05 : 1)); });
+        // a pointer resting over a button when the menu appears must not steal the keyboard highlight:
+        // hovering counts once the pointer has really moved
+        const hoverOn = () => {
+            if (button.hovered || !this.input?.pointerLive) return;
+            button.hovered = true;
+            draw(true); button.scale.set(base() * 1.05);
+            if (button.onHover) button.onHover();
+        };
+        button.on('pointerover', hoverOn);
+        button.on('pointermove', hoverOn);
+        button.on('pointerout', () => { button.hovered = false; draw(!!button.selected); button.scale.set(base() * (button.selected ? 1.05 : 1)); });
         // the keyboard and controller highlight a button the same way the mouse does
         button.setSelected = (v) => { button.selected = v; draw(v); button.scale.set(base() * (v ? 1.05 : 1)); };
         button.label = label;
@@ -514,6 +525,7 @@ class Game {
         s.enemies.forEach((e) => EntityManager.cleanup(e));
         s.gems.forEach((g) => EntityManager.cleanup(g));
         s.enemies = [];
+        this.dummy.clear();
         s.gems = [];
         this.interactables.forEach((i) => { if (i.sprite) { this.objectLayer.removeChild(i.sprite); i.sprite.destroy(); } });
         this.interactables = [];
@@ -628,6 +640,9 @@ class Game {
         gameState.maxHealth = 100;
         this.stats = computeStats({});
         this.party.init(save);
+        // the codex knows every spell and rune the party carries (starting spells, and saves made before the codex)
+        for (const sp of this.spells.spells) { discover(this.codex.spells, sp.tpl); for (const r of sp.runes) if (r) discover(this.codex.runes, r); }
+        for (const r of this.spells.runes) discover(this.codex.runes, r);
         if (save) {
             gameState.kills = save.stats.kills;
             gameState.score = save.stats.score;
@@ -702,8 +717,9 @@ class Game {
         this.lastSaveAt = now;
         const quiet = reason === 'auto' || reason === 'hidden' || reason === 'new';
         try {
-            // a fresh picture for the slot list: on every manual save, otherwise every few minutes
-            if (!quiet || !this.lastThumb || now - (this.lastThumbAt || 0) > 300000) { this.lastThumb = captureThumb(this) || this.lastThumb; this.lastThumbAt = now; }
+            // a fresh picture for the slot list: on every manual save, otherwise every few minutes; never in the
+            // middle of a scene change, when the screen is dark and half built
+            if (!this.busy && (!quiet || !this.lastThumb || now - (this.lastThumbAt || 0) > 300000)) { this.lastThumb = captureThumb(this) || this.lastThumb; this.lastThumbAt = now; }
             const wall = Date.now();
             const rotate = shouldRotate(this.lastBackupAt[slot] ?? null, wall, !quiet);
             await writeSlot(this.store, slot, buildSave(this), rotate);
@@ -1019,7 +1035,7 @@ class Game {
         let engaged = 0;
         for (let i = 0; i < list.length; i++) {
             const e = list[i];
-            if (e.dead) continue;
+            if (e.dead || e.dummy) continue;
             updateEnemy(this, e, delta);
             // a warning sound when a big hitter starts to wind up (charges, slams, dives, boss abilities)
             const st = e.ai && e.ai.state;
@@ -1030,6 +1046,7 @@ class Game {
             if (!e.dormant && (!e.home || e.shell === 'engaged') && Math.abs(e.wx - p.wx) < 520 && Math.abs(e.wy - p.wy) < 420) engaged++;
         }
         this.engagedNear = engaged;
+        this.dummy.update();
 
         // clearing every monster of a place pays out once
         if (this.mode === 'interior' && this.interiorState && !this.interiorState.cleared && this.interiorHostiles > 0) {
@@ -1134,6 +1151,8 @@ class Game {
             if (showDamageNumber(settings.damageNumbers, crit)) this.fx.popup(e.wx, e.wy, Math.round(dmg), crit ? 0xffd84a : (opts.color || 0xffffff), crit ? 24 : 16, e.baseHeight + 8);
             this.audio.play(crit ? 'crit' : 'hit', { x: e.wx, y: e.wy });
         }
+        // the training dummy only counts the damage: no knock-back, no waking, no death
+        if (e.dummy) { this.dummy.hit(dmg); e.hitFlash = 6; e.health = e.maxHealth; return; }
 
         const k = opts.knock;
         if (k) {
@@ -1487,6 +1506,7 @@ class Game {
             if (src.altar) this.spawnNpc('innkeeper', src.altar.x + 150, src.altar.y + 70);
             this.spawnNpc('elder', src.fountain.x - 230, src.fountain.y - 150);
             this.spawnBoard(src.fountain.x + 240, src.fountain.y - 140);
+            this.dummy.spawn(src.fountain.x + 260, src.fountain.y + 150);
         }
         this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: src.floor > 0 ? 'stairs-up' : 'door' });
         if (src.stairsDown) this.map.markers.push({ tx: src.stairsDown.x / T, ty: src.stairsDown.y / T, icon: 'stairs-down' });
@@ -1933,7 +1953,7 @@ class Game {
         const p = s.player;
         let threat = false;
         for (const e of s.enemies) {
-            if (e.dead || e.dormant || e.shell === 'idle') continue;
+            if (e.dead || e.dummy || e.dormant || e.shell === 'idle') continue;
             if ((e.wx - p.wx) ** 2 + (e.wy - p.wy) ** 2 < 600 * 600) { threat = true; break; }
         }
         this.safeFor = threat ? 0 : this.safeFor + delta;

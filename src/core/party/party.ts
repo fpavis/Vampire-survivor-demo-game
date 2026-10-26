@@ -88,6 +88,22 @@ export function healerQuote(h: HeroState): HealQuote {
   return { id: h.id, dead: false, missing, cost: missing > 0 ? healCost(missing, h.level) : 0 };
 }
 
+const HEALER_LINES = {
+  fallen: ['Bring the fallen one here. There is still warmth in them.', 'Lay them down gently. I have brought back worse.', 'Not gone, only far away. I can call them back.'],
+  poor: ['My herbs are not free, friend. Come back with more gold.', 'I would help if I could, but the shrine needs its tithe.', 'Gather a little more coin from the wilds, then return.'],
+  hurt: ['Sit. Let me see those wounds.', 'You carry the road on your skin. Hold still.', 'Rest your weary heroes. The light will do the rest.'],
+  well: ['You are all whole. Go on, before the dark gets bold.', 'Nothing for me to mend today. Walk safely.', 'Strong and hale, every one. The shrine keeps watch for you.']
+};
+
+/** What the healer says, from the party's state: someone fallen, not enough gold, wounds, or all well. */
+export function healerLine(quotes: HealQuote[], gold: number, n: number): string {
+  const cost = quotes.reduce((a, q) => a + q.cost, 0);
+  const cheapest = Math.min(...quotes.filter((q) => q.cost > 0).map((q) => q.cost));
+  const kind = cost === 0 ? 'well' : cheapest > gold ? 'poor' : quotes.some((q) => q.dead) ? 'fallen' : 'hurt';
+  const lines = HEALER_LINES[kind];
+  return lines[((n % lines.length) + lines.length) % lines.length];
+}
+
 /** Pays for and applies the service. Returns gold spent, or -1 when the wallet cannot cover it. */
 export function applyHealer(h: HeroState, gold: number): number {
   const q = healerQuote(h);

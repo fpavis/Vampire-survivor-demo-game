@@ -755,7 +755,41 @@ function ghost(body, t) {
     };
 }
 
+// -------------------------------------------------------------------- town
+/** The training dummy: a straw-stuffed sack on a post with a painted target. It sways when hit. */
+function dummy(body, t, r) {
+    const g = new PIXI.Graphics();
+    iell(g, 0, 0, 12, 4.5, 0x6a4a2a);                              // dirt mound
+    io(g); g.beginFill(0x8a5a32); g.drawRect(-3, -62, 6, 62); g.endFill();
+    io(g); g.beginFill(0x7a4c2a); g.drawRect(-24, -46, 48, 6); g.endFill();
+    // straw tufts at the ends of the arms
+    for (const sx of [-1, 1]) {
+        io(g, 1.2); g.beginFill(0xe8c860);
+        g.drawPolygon([sx * 22, -47, sx * 31, -50, sx * 28, -43, sx * 32, -38, sx * 22, -39]); g.endFill();
+    }
+    iell(g, 0, -33, 13, 16, 0xc8a070);                            // sack body
+    g.lineStyle(1, shade(0xc8a070, 0.55), 0.8);
+    g.moveTo(-9, -24); g.lineTo(9, -24);                           // rope belt
+    g.moveTo(-6, -47); g.lineTo(-4, -44); g.moveTo(6, -47); g.lineTo(4, -44);
+    g.lineStyle(0);
+    icirc(g, 0, -34, 7.5, 0xd04030, 1.2);                          // painted target
+    circ(g, 0, -34, 4.6, 0xf2e6c8);
+    circ(g, 0, -34, 2, 0xd04030);
+    icirc(g, 0, -56, 8.5, 0xd4b080);                               // sack head
+    g.lineStyle(1.4, INK, 0.85);
+    g.moveTo(-4, -58); g.lineTo(-2, -56); g.moveTo(-2, -58); g.lineTo(-4, -56);
+    g.moveTo(2, -58); g.lineTo(4, -56); g.moveTo(4, -58); g.lineTo(2, -56);
+    g.lineStyle(0);
+    io(g, 1.2); g.beginFill(0xe8c860); g.drawPolygon([-5, -63, -2, -68, 0, -64, 3, -69, 5, -63]); g.endFill();
+    body.addChild(g);
+    return {
+        height: 68,
+        anim(e) { body.rotation = e.hitFlash > 0 ? Math.sin(e.phase * 4) * 0.09 : body.rotation * 0.85; }
+    };
+}
+
 export const ENEMY_ART = {
+    dummy,
     slime, bee, boar,
     boarking: (b, t, r) => boar(b, t, r, { crown: true, tusk: 0xffe8a0, eye: 0xff3a3a }),
     wolf, spider, treant,

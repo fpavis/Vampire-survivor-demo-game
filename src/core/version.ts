@@ -9,7 +9,10 @@ export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
     'Three save slots with backups, plus export and import',
     'Settings in tabs: quality, render scale, frame limit, camera zoom, HUD size and more',
     'A message log and a statistics page in the journal',
-    'Load, Options and Credits on the title screen'
+    'Load, Options and Credits on the title screen',
+    'Edit any hero\'s spells, keep three loadout sets, and let a resting hero assist',
+    'A codex of the monsters, spells, runes and places you have found',
+    'A training dummy with a damage meter in every town'
   ]
 };
 

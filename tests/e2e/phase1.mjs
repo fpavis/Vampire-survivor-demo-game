@@ -31,9 +31,10 @@ await page.waitForFunction(() => window.game.state.player);
 await page.evaluate(() => { window.game.state.nextLevel = 1e12; });
 
 // ---- 1. camps near a spot a few chunks from the start exist and are idle until the hero comes into sight
+// (a camp beyond the spawn range of the start: a nearer one may already have seen the hero before the test began)
 const camp = await page.evaluate(() => {
   const g = window.game, pop = g.popRuntime.population;
-  for (let r = 2; r < 12; r++) for (let cy = -r; cy <= r; cy++) for (let cx = -r; cx <= r; cx++) {
+  for (let r = 4; r < 12; r++) for (let cy = -r; cy <= r; cy++) for (let cx = -r; cx <= r; cx++) {
     if (Math.max(Math.abs(cx), Math.abs(cy)) !== r) continue;
     for (const c of pop.campsForChunk(cx, cy)) if (!c.lair && c.members.length >= 2) return c;
   }

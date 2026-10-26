@@ -3,6 +3,10 @@ import { glyph, quickGlyph } from './hints';
 import { Icon } from './Icon';
 import { useState } from 'preact/hooks';
 import { formatPlayTime } from '../core/save/slots';
+import { BESTIARY_ORDER, bestiaryEntry } from '../core/codex/codex';
+import { CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES } from '../core/spells/spells';
+import { GROUP_INFO, POI_INFO } from '../core/world/biomes';
+import { portrait } from '../app/portraits';
 
 function Objectives({ q }: { q: QuestView }) {
   return (
@@ -30,7 +34,72 @@ function QuestCard({ q, children }: { q: QuestView; children?: any }) {
   );
 }
 
-type JTab = 'quests' | 'log' | 'stats';
+type JTab = 'quests' | 'log' | 'stats' | 'codex';
+type CTab = 'monsters' | 'spells' | 'runes' | 'places';
+
+/** Monsters met, spells and runes found, places and regions discovered. */
+function Codex() {
+  const g = ui.game;
+  ui.version.value;
+  const [tab, setTab] = useState<CTab>('monsters');
+  const cx = g.codex as { monsters: string[]; spells: string[]; runes: string[] };
+  const kills = g.state.byType as Record<string, number>;
+  const tpls = Object.values(TEMPLATES), runes = Object.values(RUNES).sort((a, b) => a.rarity - b.rarity || a.name.localeCompare(b.name));
+  const pois = (g.map?.discoveredPois?.() ?? []) as any[];
+  const counts: Record<CTab, string> = {
+    monsters: `${cx.monsters.length}/${BESTIARY_ORDER.length}`, spells: `${cx.spells.length}/${tpls.length}`,
+    runes: `${cx.runes.length}/${runes.length}`, places: String(pois.length)
+  };
+  return (
+    <div class="vs-codex">
+      <div class="vs-subtabs">
+        {([['monsters', 'Bestiary'], ['spells', 'Spells'], ['runes', 'Runes'], ['places', 'Places']] as const).map(([id, label]) => (
+          <button key={id} class={`vs-btn${tab === id ? ' on' : ''}`} data-ctab={id} onClick={() => setTab(id)}>{label} <small>{counts[id]}</small></button>
+        ))}
+      </div>
+      {tab === 'monsters' && BESTIARY_ORDER.map((type) => {
+        if (!cx.monsters.includes(type)) return <div key={type} class="vs-cx unknown"><span class="pic">?</span><span><b>Not yet met</b></span></div>;
+        const b = bestiaryEntry(type)!;
+        const pic = portrait(g, type);
+        return (
+          <div key={type} class="vs-cx" data-monster={type}>
+            <span class="pic">{pic ? <img src={pic} alt="" /> : <Icon name="skull" />}</span>
+            <span class="tx">
+              <b>{b.name}</b>{b.boss && <span class="vs-tag">warlord</span>}{b.flying && <span class="vs-tag">flies</span>}
+              <small>{b.behaviour}</small>
+              <small class="num">Health {b.health} · damage {b.damage} at level 1 · {b.speed}{b.armor ? ` · armour ${Math.round(b.armor * 100)}%` : ''} · defeated {kills[type] || 0}</small>
+            </span>
+          </div>
+        );
+      })}
+      {tab === 'spells' && tpls.map((t) => (cx.spells.includes(t.id)
+        ? <div key={t.id} class="vs-cx"><span class="pic"><Icon name={t.icon} /></span><span class="tx"><b>{t.name}</b> <span class="vs-tag">{CORE_INFO[t.core].name}</span><span class="vs-tag">{t.mode === 'auto' ? 'auto-cast' : 'active'}</span><small>{t.desc}</small></span></div>
+        : <div key={t.id} class="vs-cx unknown"><span class="pic">?</span><span><b>Undiscovered spell</b></span></div>))}
+      {tab === 'runes' && runes.map((r) => (cx.runes.includes(r.id)
+        ? <div key={r.id} class="vs-cx"><span class="pic"><Icon name={r.icon} /></span><span class="tx"><b>{r.name}</b> <span class="vs-tag">{RARITY_NAMES[r.rarity]}</span><small>{r.desc}</small></span></div>
+        : <div key={r.id} class="vs-cx unknown"><span class="pic">?</span><span><b>Undiscovered rune</b> <span class="vs-tag">{RARITY_NAMES[r.rarity]}</span></span></div>))}
+      {tab === 'places' && (
+        <>
+          <div class="vs-sec">REGIONS</div>
+          {!g.regionsSeen?.size && <div class="vs-empty">None yet.</div>}
+          <div class="vs-kinds">{[...(g.regionsSeen ?? [])].map((id: string) => { const r = g.overworld.region(id); return <span key={id}><b>{r.name}</b> {r.title}</span>; })}</div>
+          <div class="vs-sec">PLACES</div>
+          {!pois.length && <div class="vs-empty">None yet. Places appear on the map as you explore.</div>}
+          {pois.map((p) => {
+            const v = g.visited[p.id];
+            const state = v?.cleared || v?.bossDead ? 'cleared' : v ? 'visited' : 'seen from afar';
+            return (
+              <div key={p.id} class="vs-cx" data-place={p.id}>
+                <span class="pic"><Icon name={p.dungeon ? 'lair' : POI_INFO[p.type as keyof typeof POI_INFO]?.icon ?? 'map'} /></span>
+                <span class="tx"><b>{p.name}</b><small>{(POI_INFO[p.type as keyof typeof POI_INFO]?.label ?? p.type)}{p.dungeon ? ' (dungeon)' : ''} · {GROUP_INFO[p.group as keyof typeof GROUP_INFO]?.name ?? ''} · {state}</small></span>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
 
 /** Kills, distance, gold and the rest, read from the running game. */
 function Stats() {
@@ -85,7 +154,7 @@ export function Journal() {
       <button class="vs-btn vs-x" onClick={() => (ui.journalOpen.value = false)}><Icon name="close" /> ({quickGlyph('journal')})</button>
       <h2><Icon name="journal" /> Journal</h2>
       <div class="vs-tabs" role="tablist">
-        {([['quests', 'Quests', 'scroll'], ['log', 'Log', 'journal'], ['stats', 'Statistics', 'gauge']] as const).map(([id, label, icon]) => (
+        {([['quests', 'Quests', 'scroll'], ['log', 'Log', 'journal'], ['stats', 'Statistics', 'gauge'], ['codex', 'Codex', 'codex']] as const).map(([id, label, icon]) => (
           <button key={id} class={`vs-btn vs-tab${tab === id ? ' on' : ''}`} role="tab" aria-selected={tab === id} data-jtab={id} onClick={() => setTab(id)}>
             <Icon name={icon} /><span class="tl">{label}</span>
           </button>
@@ -93,6 +162,7 @@ export function Journal() {
       </div>
       {tab === 'log' && <Log />}
       {tab === 'stats' && <Stats />}
+      {tab === 'codex' && <Codex />}
       {tab === 'quests' && (
         <>
       {!v.begun && <div class="sub">Find the Elder in a town: the old stories say someone should speak with you. Nothing here is required, ever.</div>}

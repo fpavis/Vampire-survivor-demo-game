@@ -17,6 +17,7 @@ export class InputSystem {
         this.frame = emptyFrame();
         this.device = 'mouse';
         this.menus = [];                 // Pixi menus (title, game over) that take the directions and confirm
+        this.pointerLive = false;        // the pointer has moved or pressed since the page loaded (hover may take the highlight)
         this.padId = '';
         this.keys = new KeyMap();
         this.captureKeyCb = null;        // rebinding: the next key press goes here
@@ -113,7 +114,7 @@ export class InputSystem {
             const dir = ARROW_DIR[e.key];
             if (dir && navWantsArrows()) { e.preventDefault(); e.stopImmediatePropagation(); navMove(dir); }
         }, true);
-        const pointer = (e) => { if (e.isTrusted) this.setDevice(e.pointerType === 'touch' ? 'touch' : 'mouse'); };
+        const pointer = (e) => { if (e.isTrusted) { this.pointerLive = true; this.setDevice(e.pointerType === 'touch' ? 'touch' : 'mouse'); } };
         window.addEventListener('pointerdown', (e) => { if (e.isTrusted) g.audio?.unlock(); }, true);
         window.addEventListener('pointerdown', pointer, true);
         window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && (Math.abs(e.movementX) + Math.abs(e.movementY) > 1)) pointer(e); }, true);
@@ -279,8 +280,10 @@ export class InputSystem {
             if (navActive() && (navAction(face) || navModal())) continue;
             g.spells.cast(slot);
         }
-        if (has('prevHero')) g.party.cycle(-1);
-        if (has('nextHero')) g.party.cycle(1);
+        // with the spell panel open the shoulder buttons show another hero's loadout instead of switching
+        const heroes = uiBridge.loadoutOpen.value ? (d) => g.spells.cycleView(d) : (d) => g.party.cycle(d);
+        if (has('prevHero')) heroes(-1);
+        if (has('nextHero')) heroes(1);
         if (has('map')) g.toggleMap();
         if (has('cancel')) this.back() || g.tips.dismiss();
         if (has('interact')) {

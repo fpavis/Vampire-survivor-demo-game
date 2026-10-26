@@ -114,8 +114,7 @@ export class EntityManager {
     }
 
     // ------------------------------------------------------------ enemies
-    static createEnemy(typeKey, x, y) {
-        const type = ENEMY_TYPES[typeKey];
+    static createEnemy(typeKey, x, y, type = ENEMY_TYPES[typeKey]) {
         const container = new PIXI.Container();
         const r = type.radius;
         const body = new PIXI.Container();
