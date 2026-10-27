@@ -60,7 +60,9 @@ export function captureThumb(game: any): string | undefined {
     const k = Math.max(w / sw, h / sh);
     rt = PIXI.RenderTexture.create({ width: w, height: h, resolution: 1 });
     if (hud) hud.visible = false;
-    app.renderer.render(app.stage, { renderTexture: rt, clear: true, transform: new PIXI.Matrix(k, 0, 0, k, (w - sw * k) / 2, (h - sh * k) / 2) });
+    // screen filters work in screen space: the scaled-down thumbnail is drawn without them
+    const draw = () => app.renderer.render(app.stage, { renderTexture: rt!, clear: true, transform: new PIXI.Matrix(k, 0, 0, k, (w - sw * k) / 2, (h - sh * k) / 2) });
+    if (game.look) game.look.without(draw); else draw();
     return app.renderer.extract.canvas(rt).toDataURL('image/jpeg', 0.72);
   } catch { return undefined; }
   finally {

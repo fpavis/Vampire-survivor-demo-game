@@ -140,6 +140,10 @@ function SettingsTabs({ title }: { title: boolean }) {
             <Slider label="Render scale" min={0.5} max={1} step={0.05} value={s.renderScale} fmt={pct} onInput={(v) => set({ renderScale: v })} />
             <Choice label="Frame rate limit" value={s.fpsCap} options={[[0, 'None'], [60, '60 fps'], [30, '30 fps (saves battery)']]} set={(v) => set({ fpsCap: v })} />
             <Choice label="Camera" value={s.zoom} options={[[0, 'Far'], [1, 'Normal'], [2, 'Close']]} set={(v) => set({ zoom: v })} />
+            <Choice label="Art style" value={s.artStyle} options={[['pixel', 'Pixel art (everything at the ground\'s grain)'], ['smooth', 'Smooth']]} set={(v) => set({ artStyle: v })} />
+            {s.artStyle === 'pixel' && <Choice label="Pixel size" value={s.pixelSize} options={[[2, 'Fine'], [3, 'Medium'], [4, 'Chunky']]} set={(v) => set({ pixelSize: v })} />}
+            <Choice label="Screen filter" value={s.postFx} options={[['none', 'None'], ['pixelate', 'Pixelate'], ['crt', 'CRT screen'], ['grain', 'Film grain']]} set={(v) => set({ postFx: v })} />
+            <Choice label="Colour grade" value={s.colorGrade} options={[['none', 'None'], ['warm', 'Warm'], ['cool', 'Cool'], ['noir', 'Noir'], ['sepia', 'Sepia']]} set={(v) => set({ colorGrade: v })} />
             <Slider label="Screen shake" min={0} max={1} step={0.1} value={s.shake} fmt={pct} onInput={(v) => set({ shake: v })} />
             <Slider label="Damage flash" min={0} max={1} step={0.1} value={s.flash} fmt={pct} onInput={(v) => set({ flash: v })} />
             <Choice label="Damage numbers" value={s.damageNumbers} options={[['all', 'All'], ['crits', 'Critical hits only'], ['off', 'Off']]} set={(v) => set({ damageNumbers: v })} />

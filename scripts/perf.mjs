@@ -1,6 +1,7 @@
 // Performance benchmark: 150 monsters closing in on a hero with a full, rune-boosted loadout (about 200 spell
 // objects in flight), measured with the game ticker stopped so every frame is timed the same way.
 // Usage: npm run build && node scripts/perf.mjs [frames]
+// PERF_SETTINGS='{"artStyle":"smooth"}' applies settings first (to compare looks and screen filters).
 // Prints average and 95th-percentile time of the simulation step (gameLoop) and of the render, draw calls per frame
 // and object counts.
 // Rendering runs on a software GPU here, so its numbers are only useful relative to each other.
@@ -20,6 +21,7 @@ await p.addInitScript(() => { window.__forceSeed = 2024; });
 await p.goto('http://localhost:4199/'); await p.waitForFunction(() => !!window.game);
 await p.keyboard.press('Enter');
 await p.waitForFunction(() => window.game.state.player);
+if (process.env.PERF_SETTINGS) await p.evaluate((patch) => window.__dev.setSettings(patch), JSON.parse(process.env.PERF_SETTINGS));
 const res = await p.evaluate((FRAMES) => {
   const g = window.game, s = g.state, sp = g.spells;
   g.godMode = true; s.nextLevel = 1e12;

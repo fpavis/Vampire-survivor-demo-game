@@ -100,6 +100,7 @@ export const CSS = `
 .vs-hold .b>i{display:block;height:100%;background:linear-gradient(#ffe27a,#e8a317)}
 .vs-surface{max-width:260px;font-size:12px;padding:3px 9px;border-radius:8px;background:rgba(8,12,24,.78);border-left:4px solid var(--sc);text-align:right;text-shadow:0 1px 2px #000}
 .vs-surface.bad{background:rgba(60,14,10,.82)}
+.vs-surface .vs-icon{width:13px;height:13px;vertical-align:-2px;color:var(--sc)}
 .vs-party{display:flex;flex-direction:column;gap:6px;width:178px}
 .vs-hero{position:relative;display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:center;padding:5px 7px;border-radius:10px;background:rgba(10,14,26,.8);border:2px solid #34426c;color:inherit;font:inherit;cursor:pointer;text-align:left;overflow:hidden}
 .vs-hero.act{border-color:var(--hc);box-shadow:0 0 12px var(--hc)}

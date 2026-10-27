@@ -40,7 +40,7 @@ function ActiveBar() {
       </div>
       {ui.surface.value && (
         <div class={`vs-surface${ui.surface.value.bad ? ' bad' : ''}`} style={{ '--sc': `#${ui.surface.value.color.toString(16).padStart(6, '0')}` }}>
-          <b>{ui.surface.value.name}</b> · {ui.surface.value.desc}
+          <Icon name={ui.surface.value.bad ? 'warning' : 'star'} /> <b>{ui.surface.value.name}</b> · {ui.surface.value.desc}
         </div>
       )}
       <div class="vs-mana" title="Mana: spent by active skills only. Auto-cast spells are free.">

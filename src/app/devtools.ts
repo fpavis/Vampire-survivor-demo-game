@@ -9,6 +9,7 @@ import { ENEMY_TYPES } from '../core/config';
 import * as towersApi from '../core/world/towers';
 import { ui as uiBridge } from '../ui/bridge';
 import { setSettings } from './settings';
+import { setAccess } from './access';
 import { engage } from '../core/ai/ai';
 import { BIOME } from '../core/world/biomes';
 import { iconDef } from '../core/icons/icons';
@@ -165,6 +166,7 @@ export function installDevTools(game: any): void {
   };
   (window as any).__dev.tools = tools;
   (window as any).__dev.setSettings = (patch: any) => setSettings(game, patch);
+  (window as any).__dev.setAccess = (patch: any) => setAccess(game, patch);
   (window as any).__dev.ui = uiBridge;
 
   const eco = section('Economy & building');

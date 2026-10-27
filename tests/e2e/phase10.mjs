@@ -574,6 +574,62 @@ if (want('travel')) {
   check('attuned teleporters and waypoints are still in the network after a reload', kept.a && kept.b && kept.w, JSON.stringify(kept));
 }
 
+// ---- 10f: one pixel grain for everything, screen filters, and the ground felt on screen
+if (want('look')) {
+  const frames = (n) => ev((n) => new Promise((r) => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
+  const state = () => ev(() => {
+    const g = window.game, wf = g.worldContainer.filters || [], sf = g.sceneRoot.filters || [], c = g.look.cell;
+    return {
+      world: wf.length, scene: sf.length, cell: +c.toFixed(3),
+      snapped: c > 0 ? Math.abs(g.worldContainer.x / c - Math.round(g.worldContainer.x / c)) < 1e-6 && Math.abs(g.worldContainer.y / c - Math.round(g.worldContainer.y / c)) < 1e-6 : null,
+      hud: g.ui.container.parent === g.app.stage, names: g.occlusion.layer.parent === g.app.stage, inScene: g.worldContainer.parent === g.sceneRoot && g.lighting.sprite.parent === g.sceneRoot
+    };
+  });
+  await goTo(0, 0);
+  await frames(10);
+  const pixel = await state();
+  check('the pixel style is the default: the world is drawn at one grain, the camera snaps to it', pixel.world === 1 && pixel.cell >= 2 && pixel.snapped === true, JSON.stringify(pixel));
+  check('the HUD and the names stay outside the filtered scene', pixel.hud && pixel.names && pixel.inScene, JSON.stringify(pixel));
+  await ev(() => window.__dev.setSettings({ artStyle: 'smooth' }));
+  await frames(10);
+  const smooth = await state();
+  check('the smooth style takes the world filter off entirely', smooth.world === 0 && smooth.scene === 0 && smooth.cell === 0, JSON.stringify(smooth));
+  const fx = [];
+  for (const [postFx, colorGrade] of [['pixelate', 'none'], ['crt', 'none'], ['grain', 'warm'], ['none', 'noir'], ['none', 'none']]) {
+    await ev((p) => window.__dev.setSettings(p), { postFx, colorGrade });
+    const f0 = await ev(() => window.game.app.ticker.lastTime);
+    await frames(8);
+    const st = await state();
+    fx.push({ postFx, colorGrade, scene: st.scene, ticking: (await ev(() => window.game.app.ticker.lastTime)) > f0 });
+  }
+  check('each screen filter and colour grade switches on and the game keeps drawing', fx.slice(0, 4).every((f) => f.scene === 1 && f.ticking) && fx[4].scene === 0, JSON.stringify(fx));
+  // a click on the curved CRT glass lands where the picture shows it
+  const warp = await ev(() => { const g = window.game; window.__dev.setSettings({ postFx: 'crt' }); const a = g.screenToWorld(20, 20); window.__dev.setSettings({ postFx: 'none' }); const b = g.screenToWorld(20, 20); return { dx: Math.round(a.x - b.x), dy: Math.round(a.y - b.y) }; });
+  check('clicks follow the CRT curve', warp.dx < 0 && warp.dy < 0, JSON.stringify(warp));
+  // the ground under the hero: lava glows and shimmers, leaving it clears the look
+  await ev(() => window.__dev.setSettings({ artStyle: 'pixel' }));
+  const onLava = await ev(() => {
+    const g = window.game, src = g.overworld;
+    for (let r = 40; r < 900; r += 6) for (let a = 0; a < 64; a++) {
+      const tx = Math.round(Math.cos(a / 64 * 6.283) * r), ty = Math.round(Math.sin(a / 64 * 6.283) * r);
+      if (src.surfaceNumAt(tx, ty, src.biomeAt(tx, ty)) !== 1) continue;
+      let w = 0; while (w < 30 && src.surfaceNumAt(tx + w, ty, src.biomeAt(tx + w, ty)) === 1) w++;
+      if (w >= 3) return { x: (tx + 1.5) * 48, y: (ty + 0.5) * 48 };
+    }
+    return null;
+  });
+  const lookAt = async (x, y, n) => { await goTo(x, y); await ev(([x, y, n]) => { const g = window.game, p = g.state.player; for (let i = 0; i < n; i++) { p.wx = x; p.wy = y; g.gameLoop(1); } }, [x, y, n]); return ev(() => { const g = window.game, u = g.look.worldFx.uniforms; return { surf: g.surfaces.current && g.surfaces.current.id, tint: +u.uTintA.toFixed(3), shimmer: +u.uShimmer.toFixed(3), edge: +g.look.edge.alpha.toFixed(3), chip: window.__dev.ui.surface.value && window.__dev.ui.surface.value.name }; }); };
+  const hot = onLava ? await lookAt(onLava.x, onLava.y, 60) : null;
+  check('standing on lava tints the scene red, shimmers and glows at the edges', hot && hot.surf === 'lava' && hot.tint > 0.1 && hot.shimmer > 0.5 && hot.edge > 0.2 && hot.chip === 'Lava', JSON.stringify(hot));
+  const off = onLava ? await lookAt(onLava.x - 30 * 48, onLava.y - 30 * 48, 90) : null;
+  check('stepping off it clears the look', off && off.surf !== 'lava' && off.tint < 0.02 && off.edge < 0.02, JSON.stringify(off));
+  await ev(() => window.__dev.setAccess({ reducedMotion: true }));
+  const calm = onLava ? await lookAt(onLava.x, onLava.y, 60) : null;
+  await ev(() => window.__dev.setAccess({ reducedMotion: false }));
+  check('with reduced motion the lava still glows but does not shimmer', calm && calm.tint > 0.1 && calm.shimmer === 0, JSON.stringify(calm));
+  await goTo(0, 0);
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 process.kill(-preview.pid);

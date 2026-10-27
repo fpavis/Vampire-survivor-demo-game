@@ -53,6 +53,8 @@ import { installDevTools } from './devtools';
 import { InputSystem } from './input';
 import { DungeonSystem } from './dungeons';
 import { TravelSystem } from './travel';
+import { LookSystem } from './look';
+import { snapToCell } from '../core/render/look';
 import { townNodeId } from '../core/world/travel';
 import { QuestSystem } from './quests';
 import { TipSystem } from './tips';
@@ -100,9 +102,16 @@ class Game {
         this.glowLayer = new PIXI.Container();
         this.worldContainer.addChild(this.groundLayer, this.objectLayer, this.glowLayer);
         EntityManager.atlas = new PartAtlas(this.app.renderer);
-        this.app.stage.addChild(this.worldContainer);
+        // the scene under the names and the HUD: the world, its light map, ambience, haze and vignette. Screen
+        // filters (art style, CRT, colour grades) go on this, so the HUD and names always stay crisp
+        this.sceneRoot = new PIXI.Container();
+        this.sceneRoot.sortableChildren = true;
+        this.sceneRoot.addChild(this.worldContainer);
+        this.app.stage.addChild(this.sceneRoot);
 
         this.createAtmosphere();
+        this.look = new LookSystem(this);
+        this.look.attach();
 
         this.world = new World(this.app, this.groundLayer, this.objectLayer);
         this.occlusion = new Occlusion(this);
@@ -219,14 +228,14 @@ class Game {
             ctx.fillStyle = g;
             ctx.fillRect(0, 0, w, h);
         });
-        this.lighting = new Lighting(this.app, this.app.stage);
-        this.ambience = new Ambience(this.app, this.app.stage);
+        this.lighting = new Lighting(this.app, this.sceneRoot);
+        this.ambience = new Ambience(this.app, this.sceneRoot);
         this.vignetteSprite = new PIXI.Sprite(vig);
         this.hazeSprite = new PIXI.Sprite(haze);
         [this.hazeSprite, this.vignetteSprite].forEach((s) => {
             s.eventMode = 'none';
             s.zIndex = 10;
-            this.app.stage.addChild(s);
+            this.sceneRoot.addChild(s);
         });
         this.layoutAtmosphere();
     }
@@ -238,6 +247,7 @@ class Game {
         this.hazeSprite.width = width;
         this.hazeSprite.height = height * 0.7;
         this.lighting.resize();
+        if (this.look) this.look.layout();
     }
 
     handleResize() {
@@ -252,13 +262,16 @@ class Game {
         const sx = s ? (Math.random() - 0.5) * s : 0;
         const sy = s ? (Math.random() - 0.5) * s : 0;
         const z = this.zoom || 1;
+        // in the pixel style the camera moves in whole art pixels, so the picture does not shimmer as it scrolls
+        const cell = this.look ? this.look.cell : 0;
         this.worldContainer.scale.set(z);
-        this.worldContainer.x = Math.round(width / 2 - this.cam.x * z + sx);
-        this.worldContainer.y = Math.round(height / 2 - this.cam.y * TILT * z + sy);
+        this.worldContainer.x = snapToCell(width / 2 - this.cam.x * z + sx, cell);
+        this.worldContainer.y = snapToCell(height / 2 - this.cam.y * TILT * z + sy, cell);
     }
 
     /** World position (ground plane) under a screen point. */
     screenToWorld(px, py) {
+        ({ x: px, y: py } = this.look ? this.look.unwarp(px, py) : { x: px, y: py });
         const z = this.zoom || 1;
         return { x: (px - this.worldContainer.x) / z, y: (py - this.worldContainer.y) / z / TILT };
     }
@@ -273,6 +286,7 @@ class Game {
         this.frame += delta;
         this.cam.x += 0.7 * delta;
         this.cam.y += Math.sin(this.frame * 0.004) * 0.5 * delta;
+        this.look.update(Math.min(delta, 2.5));
         this.applyCamera();
         this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH);
         this.world.animate(delta);
@@ -883,6 +897,7 @@ class Game {
         }
         if (this.state.player && !this.state.paused) this.ambience.update(Math.min(rawDelta, 2.5), this.cam, this.worldContainer);
         this.occlusion.update(Math.min(rawDelta, 2.5));
+        this.look.update(Math.min(rawDelta, 2.5));
         this.renderLights();
         if (t0) this.perf.frame(performance.now() - t0);
     }

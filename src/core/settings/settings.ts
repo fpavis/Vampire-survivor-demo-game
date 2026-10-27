@@ -5,6 +5,9 @@ export type Quality = 'low' | 'medium' | 'high';
 export type DamageNumbers = 'all' | 'crits' | 'off';
 export type HealthBars = 'hurt' | 'always' | 'off';
 export type MinimapSize = 'small' | 'medium' | 'large';
+export type ArtStyle = 'pixel' | 'smooth';
+export type PostFx = 'none' | 'pixelate' | 'crt' | 'grain';
+export type ColorGrade = 'none' | 'warm' | 'cool' | 'noir' | 'sepia';
 
 export interface Settings {
   // game
@@ -19,6 +22,10 @@ export interface Settings {
   shake: number;                // 0 .. 1
   flash: number;                // 0 .. 1
   damageNumbers: DamageNumbers;
+  artStyle: ArtStyle;           // pixel: every asset drawn at the terrain's grain; smooth: as drawn
+  pixelSize: 2 | 3 | 4;         // world pixels per art pixel in the pixel style
+  postFx: PostFx;               // a screen filter over the scene (never over the HUD)
+  colorGrade: ColorGrade;
   // HUD
   hudScale: number;             // 0.8 .. 1.3
   minimap: MinimapSize;
@@ -36,6 +43,7 @@ export const ZOOMS = [0.8, 1, 1.2];
 export const DEFAULT_SETTINGS: Settings = {
   autoPick: false, confirmSalvage: false, pauseOnBlur: true,
   quality: 'high', renderScale: 1, fpsCap: 0, zoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
+  artStyle: 'pixel', pixelSize: 2, postFx: 'none', colorGrade: 'none',
   hudScale: 1, minimap: 'medium', minimapOpacity: 1, healthBars: 'hurt', tracker: true,
   clickToMove: false, aimAtCursor: false, mouseInteract: false
 };
@@ -60,6 +68,10 @@ export function sanitizeSettings(raw: unknown): Settings {
     shake: num(r.shake, d.shake, 0, 1),
     flash: num(r.flash, d.flash, 0, 1),
     damageNumbers: pick(r.damageNumbers, ['all', 'crits', 'off'] as const, d.damageNumbers),
+    artStyle: pick(r.artStyle, ['pixel', 'smooth'] as const, d.artStyle),
+    pixelSize: pick(r.pixelSize, [2, 3, 4] as const, d.pixelSize),
+    postFx: pick(r.postFx, ['none', 'pixelate', 'crt', 'grain'] as const, d.postFx),
+    colorGrade: pick(r.colorGrade, ['none', 'warm', 'cool', 'noir', 'sepia'] as const, d.colorGrade),
     hudScale: num(r.hudScale, d.hudScale, 0.8, 1.3),
     minimap: pick(r.minimap, ['small', 'medium', 'large'] as const, d.minimap),
     minimapOpacity: num(r.minimapOpacity, d.minimapOpacity, 0.4, 1),
