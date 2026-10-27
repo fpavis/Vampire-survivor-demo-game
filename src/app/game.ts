@@ -617,6 +617,9 @@ class Game {
         this.bossCount = 0;
         this.pendingBoss = false;
         this.frame = 0;
+        // every timer counted in frames starts again with the count (a long session before a load left them far ahead)
+        this.invulnUntil = 0; this.gatherCd = 0; this.lastHurt = -99;
+        this.spells.barrierUntil = 0; this.spells.healUntil = 0; this.spells.linkedAt = 0;
         this.accum = 0;
         this.mode = 'overworld';
         this.busy = false;
@@ -984,8 +987,21 @@ class Game {
     }
 
     // -------------------------------------------------------------- player
+    /** Move the hero out of anything solid they stand in (a site or tower that appeared on them, a gate). */
+    unstickPlayer() {
+        const p = this.state.player;
+        if (!p || this.boat || !this.world.blocked(p.wx, p.wy, p.radius)) return false;
+        const f = this.world.findFree(p.wx, p.wy, p.radius + 2);
+        p.wx = f.x; p.wy = f.y;
+        this.stuckFor = 0;
+        return true;
+    }
+
     movePlayer(delta) {
         const { keys, player } = this.state;
+        // a hero left inside something solid (it was built on them, a gate shut) is moved out after a moment
+        if (!this.boat && this.world.blocked(player.wx, player.wy, player.radius)) { this.stuckFor = (this.stuckFor || 0) + delta; if (this.stuckFor > 20) this.unstickPlayer(); }
+        else this.stuckFor = 0;
         let dx = 0, dy = 0;
         const km = this.input.keys;
         const held = (a) => km.keysFor(a).some((k) => keys[k]);

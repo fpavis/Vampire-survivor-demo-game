@@ -4,7 +4,7 @@ export const BIOME = {
     DEEP: 0, SHALLOW: 1, SAND: 2, DRY: 3, GRASS: 4, FOREST: 5, HILL: 6, MOUNTAIN: 7, PEAK: 8,
     CAVE_FLOOR: 9, CAVE_WALL: 10, RUIN_FLOOR: 11, RUIN_WALL: 12, CITY_FLOOR: 13, CITY_WALL: 14,
     CITY_STONE: 15, VOID: 16,
-    PLATEAU: 17,      // carved mountain top reached by a climbing tower
+    PLATEAU: 17,      // carved mountain top reached by an expedition mine
     BRIDGE: 18        // planks over water (bridge towers and docks)
 };
 

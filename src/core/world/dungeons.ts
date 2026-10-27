@@ -1,5 +1,5 @@
 // Dungeons: caves and ruins that run several floors deep, end in a boss and a guaranteed chest. Land dungeons are a
-// seeded share of the ordinary places; plateau dungeons hide on the plateau a climbing tower opens; sea dungeons
+// seeded share of the ordinary places; plateau dungeons hide on the plateau an expedition mine opens; sea dungeons
 // sit on remote islands only a boat reaches. Pure and deterministic, like the rest of the world.
 import { WORLD_CONFIG } from '../config';
 import { BIOME, GROUP, WARLORDS, isWaterBiome } from './biomes';
@@ -49,7 +49,7 @@ export function dungeonForLand(seed: number, cx: number, cy: number, type: PoiTy
 }
 
 // --------------------------------------------------------------- plateau
-/** The "Skyvault" on the plateau a built climbing tower opens (the ore that used to sit at its heart makes room). */
+/** The "Skyvault" on the plateau a built expedition mine opens (the ore that used to sit at its heart makes room). */
 export function plateauPoi(rec: Pick<TowerRec, 'id' | 'tx' | 'ty' | 'dir' | 'len' | 'kind'>, seed: number): Poi | null {
   const c = plateauCentre(rec as TowerRec);
   if (!c) return null;

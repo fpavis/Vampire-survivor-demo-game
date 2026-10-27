@@ -30,7 +30,7 @@ const css = `
 
 export function installDevTools(game: any): void {
   // handles for scripted visual checks (scripts/artsheet.mjs)
-  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game, towersApi, engage, BIOME, createInterior };
+  (window as any).__dev = { PIXI, EntityManager, ENEMY_TYPES, game, towersApi, engage, BIOME, createInterior, buildSave: () => buildSave(game) };
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);

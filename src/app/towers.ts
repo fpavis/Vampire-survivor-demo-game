@@ -74,10 +74,10 @@ export class TowerSystem {
             for (const [x, y] of towerEdits(rec)) { x0 = Math.min(x0, x - 2); x1 = Math.max(x1, x + 2); y0 = Math.min(y0, y - 2); y1 = Math.max(y1, y + 2); }
             w.invalidateTiles(x0, y0, x1, y1);
         } else w.invalidateTiles(-1e5, -1e5, 1e5, 1e5);
-        const g = this.game, p = g.state.player;
+        const g = this.game;
         w.update(g.cam.x, g.cam.y, g.viewW, g.viewH, true);
         g.flow.centerTx = NaN;
-        void p;
+        g.unstickPlayer();          // a site, a stage or a finished tower never traps the hero
     }
 
     /** where the sprite stands; spans and piers pull it back so the first plank is never under the gatehouse */
@@ -225,18 +225,17 @@ export class TowerSystem {
         }
         if (r.kind === 'dock') return this.game.sea.canRecall(r) ? { kind: 'tower', act: 'recall', rec: r, text: '[E]  Recall your boat' } : null;
         if (UPGRADABLE.includes(r.kind)) return { kind: 'tower', rec: r, text: r.siege ? `[E]  ${def.name} · silenced by the siege` : `[E]  Tend the ${def.name} · Lv ${levelOf(r)}` };
-        const text = { waypoint: '[E]  Use the Waypoint', climb: '[E]  Read the plaque', bridge: '[E]  Read the plaque' }[r.kind];
-        return text ? { kind: 'tower', rec: r, text } : null;
+        // a mine and a bridge have nothing to use: no prompt
+        return r.kind === 'waypoint' ? { kind: 'tower', rec: r, text: '[E]  Use the Waypoint' } : null;
     }
 
     interact(t) {
         const g = this.game;
         if (t.kind === 'site') return this.deliver(t.rec);
-        const r = t.rec, def = TOWER_DEFS[r.kind];
+        const r = t.rec;
         if (t.act === 'recall') { g.sea.recall(r); return; }
         if (UPGRADABLE.includes(r.kind)) { uiBridge.towerPanel.value = r.id; g.audio.play('equip'); }
         else if (r.kind === 'waypoint') g.travel.open(r.id);
-        else uiBridge.dialog.value = { speaker: def.name, icon: def.icon, text: def.blurb };
     }
 
     deliver(rec) {

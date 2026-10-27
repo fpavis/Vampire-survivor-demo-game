@@ -47,7 +47,8 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
   const size = () => { const c = canvasRef.current; return c ? { w: c.width, h: c.height } : { w: 1, h: 1 }; };
   const view = (): MapCam => ({ cx: cam.current.cx, cy: cam.current.cy, ppt: zooms[cam.current.z] });
   const place = (c: MapCam) => {
-    const cl = clampCenter(c, boundsOfChunks(g.map.maps[g.map.mode].keys(), CT), 40);
+    // the land this map shows: travel from a town's teleporter looks over the overworld, not the town
+    const cl = clampCenter(c, boundsOfChunks(g.map.maps[where].keys(), CT), 40);
     cam.current.cx = cl.cx; cam.current.cy = cl.cy;
     dirty.current = true;
   };

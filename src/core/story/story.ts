@@ -64,7 +64,7 @@ export const MAIN_QUESTS: QuestDef[] = [
   },
   {
     id: 'm5_stone', kind: 'main', giver: 'elder', chapter: 'ch5', level: 28, title: 'The Stone Warlord',
-    summary: 'Raise a climbing tower into the peaks, then break Gorvak in the nearest dungeon of the Stonecrest Mountains.',
+    summary: 'Sink an expedition mine into the peaks, then break Gorvak in the nearest dungeon of the Stonecrest Mountains.',
     prerequisites: { quests: ['m4_tide'] },
     objectives: [{ type: 'build', kind: 'climb' }, { type: 'discover', target: t('dungeon', 'mountain') }, { type: 'clear', target: t('dungeon', 'mountain') }],
     rewards: { gold: 700, xp: 760, loot: 2, flags: ['lord.mountain', 'lords.all'] },
@@ -72,7 +72,7 @@ export const MAIN_QUESTS: QuestDef[] = [
   },
   {
     id: 'm6_sovereign', kind: 'main', giver: 'elder', chapter: 'ch6', level: 35, title: 'The Demon Sovereign',
-    summary: 'Azrathul waits in a Skyvault on the plateau a climbing tower opens. Go up, and end this.',
+    summary: 'Azrathul waits in a Skyvault on the plateau an expedition mine opens. Go up, and end this.',
     prerequisites: { quests: ['m5_stone'], flags: ['lords.all'] },
     objectives: [{ type: 'clear', target: t('dungeon', undefined, 'plateau'), text: 'Clear a Skyvault on a plateau' }],
     rewards: { gold: 1500, xp: 1500, loot: 3, flags: ['finale'] },
@@ -199,11 +199,11 @@ export const DIALOGUES: Record<string, DialogueScript> = {
   ]),
   'm4.turnin': turnIn('m4.turnin', 'm4_tide', ['The waves sound like waves again. One lord remains, and he is the hardest to reach.']),
   'm5.offer': offer('m5.offer', 'm5_stone', [
-    'Gorvak holds the peaks, and the peaks hold the way to the sovereign. Raise a climbing tower: a stair into the mountain, and a plateau at its heart. Then find his dungeon and break him.'
+    'Gorvak holds the peaks, and the peaks hold the way to the sovereign. Sink an expedition mine: a passage bored into the mountain, and a plateau at its heart. Then find his dungeon and break him.'
   ]),
   'm5.turnin': turnIn('m5.turnin', 'm5_stone', ['All five thrones are empty. The plateau your tower opened hides a vault in the sky, and Azrathul is the one thing left that cares to be found.']),
   'm6.offer': offer('m6.offer', 'm6_sovereign', [
-    'Azrathul waits in a Skyvault, on the plateau a climbing tower opens. Go up. Bring everything you have learned. End this.'
+    'Azrathul waits in a Skyvault, on the plateau an expedition mine opens. Go up. Bring everything you have learned. End this.'
   ]),
   'm6.turnin': turnIn('m6.turnin', 'm6_sovereign', ['It is over. The sky is only the sky again. Whatever you do now, you do as the ones who saved the world — and the world is still wide.'])
 };

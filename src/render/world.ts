@@ -14,6 +14,7 @@ import { boatBlocked } from '../core/world/towers';
 import { DECOR_LIGHTS } from './lighting';
 import { SURFACES, SURFACE_IDS, surfaceByNum, NAV_COST_BY_NUM } from '../core/world/surfaces';
 import { blightColor } from '../core/world/corruption';
+import { rayCast, RAY_BLOCKED } from '../core/world/nav';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -273,6 +274,20 @@ export class World {
     }
 
     isWaterAt(x, y) { return isWaterBiome(this.biomeAtPos(x, y)); }
+
+    // what stops a projectile: walls, mountains and peaks, the void, and gates (water, trees and rocks do not)
+    shotTile(tx, ty) {
+        if (this.dynTiles.size && this.dynTiles.has(World.dynKey(tx, ty))) return true;
+        const b = this.biomeAt(tx, ty);
+        return isWallBiome(b) || b === BIOME.VOID;
+    }
+
+    shotBlocked(x, y) { return this.shotTile(Math.floor(x / T), Math.floor(y / T)); }
+
+    /** Nothing that stops a projectile lies between the two points. */
+    clearShot(x0, y0, x1, y1) {
+        return rayCast(this.shotQuery || (this.shotQuery = { tileBlocked: (tx, ty) => this.shotTile(tx, ty) }), x0, y0, x1, y1, 64) !== RAY_BLOCKED;
+    }
 
     // hard tile obstacle (cheap, used by navigation and line of sight)
     tileBlocked(tx, ty) {

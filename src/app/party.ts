@@ -27,6 +27,7 @@ export class PartyRuntime {
     // ---------------------------------------------------------------- setup
     init(save) {
         const g = this.game;
+        this.cdUntil = 0;          // counted in frames, and the frame count starts again with every session
         if (save) {
             const inv = save.inventory;
             g.spells.setInventory(inv.spells, inv.runes);
@@ -62,9 +63,13 @@ export class PartyRuntime {
         s.level = h.level; s.experience = h.experience; s.nextLevel = h.nextLevel; s.pending = h.pending;
         s.picks = { ...h.picks };
         g.spells.setLoadout(h.auto, h.active);
+        // the working copy takes this hero's health and mana before refreshStats commits it back into the record
+        // (it used to commit the previous hero's), and with no "max went up" bonus from the previous hero's max
+        const hp = h.health, mp = h.mana;
+        s.health = hp; g.spells.mana.value = mp; s.maxHealth = 0;
         this.refreshStats();
-        s.health = Math.min(Math.max(1, h.health), s.maxHealth);
-        g.spells.mana.value = Math.min(h.mana, g.stats.maxMana);
+        s.health = Math.min(Math.max(1, hp), s.maxHealth);
+        g.spells.mana.value = Math.min(mp, g.stats.maxMana);
         const def = defOf(h.id);
         const p = s.player;
         if (p && p.heroId !== h.id) EntityManager.setHeroLook(p, h.id, def.color);
@@ -95,7 +100,7 @@ export class PartyRuntime {
     canSwitch(i) {
         if (i === this.active || i < 0 || i >= this.heroes.length) return { ok: false };
         if (this.heroes[i].dead) return { ok: false, reason: `${this.def(i).name} is down — a healer can revive them in town` };
-        if (this.game.frame < this.cdUntil) return { ok: false, reason: 'Switching is still recharging' };
+        if (this.game.frame < this.cdUntil) return { ok: false, reason: `Switching recharges in ${Math.max(1, Math.ceil((this.cdUntil - this.game.frame) / 60))}s` };
         return { ok: true };
     }
 

@@ -32,8 +32,8 @@ export const TOWER_DEFS: Record<TowerKind, TowerDef> = {
     blurb: 'Reveals the land around it for good and shines through the dark.' },
   waypoint: { kind: 'waypoint', name: 'Waypoint', icon: 'tower-waypoint', color: 0xb06af0, cost: { gold: 110, wood: 14, stone: 54, iron: 14 }, spacing: 9,
     blurb: 'A stone gate. Travel between waypoints for a little gold.' },
-  climb: { kind: 'climb', name: 'Climbing Tower', icon: 'tower-climb', color: 0xa8a090, cost: { gold: 320, wood: 130, stone: 170, iron: 64 }, spacing: 8,
-    blurb: 'Cuts a stair into a mountain and opens the plateau at its heart, with ore and crystals to mine.' },
+  climb: { kind: 'climb', name: 'Expedition Mine', icon: 'tower-climb', color: 0xa8a090, cost: { gold: 320, wood: 130, stone: 170, iron: 64 }, spacing: 8,
+    blurb: 'Bores a passage into a mountain and opens the plateau at its heart, with ore and crystals to mine and a Skyvault to find.' },
   bridge: { kind: 'bridge', name: 'Bridge Tower', icon: 'tower-bridge', color: 0xc8a060, cost: { gold: 90, wood: 110, stone: 80, iron: 24 }, spacing: 6,
     blurb: 'Spans the water in front of it with a bridge, joining the shores.' },
   dock: { kind: 'dock', name: 'Dock', icon: 'tower-dock', color: 0x6ab8d8, cost: { gold: 90, wood: 84, stone: 30, iron: 12 }, spacing: 4,
@@ -264,7 +264,7 @@ export function towerEdits(rec: TowerRec): TileEdit[] {
   return out;
 }
 
-/** Plateau centre (tile) of a climbing tower, or null for other towers. */
+/** Plateau centre (tile) of an expedition mine, or null for other towers. */
 export function plateauCentre(rec: TowerRec): { tx: number; ty: number } | null {
   if (rec.kind !== 'climb') return null;
   const [dx, dy] = DIRS[rec.dir];

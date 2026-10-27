@@ -123,7 +123,7 @@ function waypoint(g) {
     for (const [x, y] of [[-38, -96], [38, -96]]) glow(g, x, y, 5, 0xd8a0ff, 0.7);
 }
 
-// ---------------------------------------------------------------- Climbing tower
+// ---------------------------------------------------------------- Expedition mine
 function climb(g) {
     shadow(g, 52, 13);
     rrect(g, -40, -14, 80, 16, 3, 0x7a746a);
@@ -226,7 +226,8 @@ export const TOWER_DECOR = {
     tower_beacon: { w: 100, h: 168, pad: 14, r: 26, solid: true, variants: [beacon] },
     tower_waypoint: { w: 120, h: 134, pad: 14, r: 28, solid: true, variants: [waypoint] },
     tower_climb: { w: 120, h: 210, pad: 16, r: 30, solid: true, variants: [climb] },
-    tower_bridge: { w: 120, h: 130, pad: 14, r: 30, solid: true, variants: [bridgeTower] },
+    // the gatehouse spans the planks: its arch is walked through, so it holds nothing back
+    tower_bridge: { w: 120, h: 130, pad: 14, r: 30, solid: false, variants: [bridgeTower] },
     tower_dock: { w: 120, h: 92, pad: 12, r: 26, solid: true, variants: [dock] },
     scaffold: { w: 120, h: 170, pad: 14, r: 30, solid: true, variants: [scaffold(0), scaffold(1), scaffold(2), scaffold(3)] }
 };

@@ -247,7 +247,7 @@ export function describeObjective(o: ObjectiveDef, names: TextNames, resolved: s
     case 'gather': return `Collect ${o.count} ${o.resource}`;
     case 'deliver': return `Bring ${o.count} ${o.resource}`;
     case 'survive': return `Survive ${o.seconds} seconds${o.group ? ` in the ${GROUP_NAMES[o.group] ?? o.group}` : ' out in the world'}`;
-    case 'build': return `Build a ${o.kind === 'climb' ? 'climbing tower' : o.kind === 'spire' ? 'spire' : o.kind}`;
+    case 'build': return o.kind === 'climb' ? 'Build an expedition mine' : `Build a ${o.kind === 'spire' ? 'spire' : o.kind}`;
     case 'fetch': return `Recover ${o.item} from ${names.place(o.target, resolved)}`;
     case 'escort': return `Escort ${o.npc} to ${names.place(o.target, resolved)}`;
   }

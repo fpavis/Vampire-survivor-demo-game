@@ -20,6 +20,11 @@ const MAX_AUTO = 5;
 const MAX_ACTIVE = 3;
 // hard caps so a heavily modified loadout cannot flood the scene
 const CAP = { bullets: 120, rings: 24, meteors: 30, bolts: 16, decals: 40, zones: 40, later: 40 };
+/**
+ * How far auto-cast spells look for a target (world units): what is on screen near the hero, not across it.
+ * Spells that fly need a clear line to their target; those that fall from the sky (lightning, meteors) do not.
+ */
+export const REACH = { bolt: 440, wisps: 440, lightning: 420, meteor: 440, cloud: 400 };
 
 export class SpellSystem {
     constructor(game) {
@@ -478,10 +483,24 @@ export class SpellSystem {
         g.fx.shockwave(x, y, radius * 1.1, r.color, 22, 6);
     }
 
-    nearestEnemies(x, y, range, limit = 1) {
+    /** The nearest living enemies within `range`; with `los`, only those a projectile could reach (no wall between). */
+    nearestEnemies(x, y, range, limit = 1, los = false) {
         const r2 = range * range;
         // short searches use the spatial hash (rebuilt every frame); the nearest one needs no sort
         const pool = range <= 420 && this.game.hash ? this.game.hash.near(x, y, range, this.nearBuf || (this.nearBuf = [])) : this.game.state.enemies;
+        if (los) {
+            const near = [];
+            for (const e of pool) {
+                if (e.dead || e.untargetable) continue;
+                const dx = e.wx - x, dy = e.wy - y, d = dx * dx + dy * dy;
+                if (d <= r2) near.push({ e, d });
+            }
+            near.sort((a, b) => a.d - b.d);
+            const w = this.game.world, out = [];
+            // a few line checks at most: the nearest ones that can be seen
+            for (let i = 0; i < near.length && out.length < limit && i < limit * 3 + 4; i++) if (w.clearShot(x, y, near[i].e.wx, near[i].e.wy)) out.push(near[i].e);
+            return out;
+        }
         if (limit === 1) {
             let best = null, bd = r2;
             for (let i = 0; i < pool.length; i++) {
@@ -507,7 +526,7 @@ export class SpellSystem {
     fireBolt(r, src) {
         const s = r.p;
         const p = src || this.game.state.player;
-        const targets = this.nearestEnemies(p.wx, p.wy, 680, s.count);
+        const targets = this.nearestEnemies(p.wx, p.wy, REACH.bolt, s.count, true);
         if (!targets.length) return false;
         for (let i = 0; i < s.count && this.bullets.length < CAP.bullets; i++) {
             const t = targets[i] || targets[0];
@@ -560,6 +579,11 @@ export class SpellSystem {
             sp.wx += b.vx * delta;
             sp.wy += b.vy * delta;
             b.life -= delta;
+            // walls, mountains and gates stop them; a glaive turns back at one (and is gone if it meets one coming home)
+            if (this.game.world.shotBlocked(sp.wx, sp.wy)) {
+                if (b.glaive && b.glaive.out) { b.glaive.out = false; b.hits.clear(); sp.wx -= b.vx * delta; sp.wy -= b.vy * delta; }
+                else b.life = 0;
+            }
             if (Math.random() < (b.wisp ? 0.6 : 0.35)) this.game.fx.burst(sp.wx, sp.wy, b.wisp ? 18 : 22, b.r.color, 1, 0.25, { size: 0.55, life: 14, gravity: 0, up: 0.1, glow: true });
             EntityManager.place(sp);
             let remove = b.life <= 0;
@@ -576,7 +600,7 @@ export class SpellSystem {
                         if (b.pierce > 0) { b.pierce--; continue; }
                         // Ricochet: jump to the next enemy instead of fizzling
                         if (b.jumps > 0) {
-                            const next = this.nearestEnemies(sp.wx, sp.wy, 260, 6).find((n) => !b.hits.has(n));
+                            const next = this.nearestEnemies(sp.wx, sp.wy, 260, 6, true).find((n) => !b.hits.has(n));
                             if (next) {
                                 b.jumps--;
                                 const a = Math.atan2(next.wy - sp.wy, next.wx - sp.wx), v = Math.hypot(b.vx, b.vy);
@@ -655,7 +679,7 @@ export class SpellSystem {
     // -------------------------------------------------------- chain lightning
     fireLightning(r, src) {
         const p = src || this.game.state.player;
-        const candidates = this.nearestEnemies(p.wx, p.wy, 560, 40);
+        const candidates = this.nearestEnemies(p.wx, p.wy, REACH.lightning, 40);
         if (!candidates.length || this.bolts.length >= CAP.bolts) return false;
         for (let i = 0; i < r.p.count; i++) {
             this.chainStrike(candidates[Math.floor(Math.random() * candidates.length)], r);
@@ -677,7 +701,7 @@ export class SpellSystem {
                 if (e.dead || e.untargetable || hit.has(e)) continue;
                 const dx = e.wx - cur.wx, dy = e.wy - cur.wy;
                 const d = dx * dx + dy * dy;
-                if (d < bd) { bd = d; best = e; }
+                if (d < bd && game.world.clearShot(cur.wx, cur.wy, e.wx, e.wy)) { bd = d; best = e; }     // it arcs, it does not go through rock
             }
             if (!best) break;
             hit.add(best);
@@ -821,7 +845,7 @@ export class SpellSystem {
     fireMeteor(r, src) {
         const game = this.game;
         const p = src || game.state.player;
-        const candidates = this.nearestEnemies(p.wx, p.wy, 620, 30);
+        const candidates = this.nearestEnemies(p.wx, p.wy, REACH.meteor, 30);
         if (!candidates.length) return false;
         for (let i = 0; i < r.p.count && this.meteors.length < CAP.meteors; i++) {
             const t = candidates[Math.floor(Math.random() * candidates.length)];
@@ -1017,7 +1041,7 @@ export class SpellSystem {
     // --------------------------------------------------------------- wisps
     fireWisps(r, src) {
         const p = src || this.game.state.player;
-        const targets = this.nearestEnemies(p.wx, p.wy, 640, r.p.count);
+        const targets = this.nearestEnemies(p.wx, p.wy, REACH.wisps, r.p.count, true);
         if (!targets.length) return false;
         for (let i = 0; i < r.p.count && this.bullets.length < CAP.bullets; i++) {
             const a = Math.random() * Math.PI * 2;
@@ -1033,7 +1057,7 @@ export class SpellSystem {
     // -------------------------------------------------------------- glaive
     fireGlaive(r, src) {
         const p = src || this.game.state.player;
-        const targets = this.nearestEnemies(p.wx, p.wy, r.p.range + 60, r.p.count);
+        const targets = this.nearestEnemies(p.wx, p.wy, r.p.range + 60, r.p.count, true);
         if (!targets.length) return false;
         for (let i = 0; i < r.p.count && this.bullets.length < CAP.bullets; i++) {
             const t = targets[i] || targets[0];
@@ -1051,7 +1075,7 @@ export class SpellSystem {
     // --------------------------------------------------------------- cloud
     fireCloud(r, src) {
         const p = src || this.game.state.player;
-        const t = this.nearestEnemies(p.wx, p.wy, 460, 1)[0];
+        const t = this.nearestEnemies(p.wx, p.wy, REACH.cloud, 1)[0];
         if (!t) return false;
         if (this.zones.length >= CAP.zones) { const old = this.zones.find((z) => z.kind === 'cloud') || this.zones[0]; old.g.destroy(); this.zones.splice(this.zones.indexOf(old), 1); }
         this.zone('cloud', t.wx, t.wy, r.p.radius, r.p.duration, this.dmg(r), r);
