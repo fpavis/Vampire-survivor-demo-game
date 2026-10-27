@@ -172,13 +172,17 @@ if (want('ambush')) {
   });
   check('an ambush plate exists', !!trig);
   if (trig) {
-    await goTo(trig.x, trig.y);
+    // arrive beside the plate, not on it: it must spring inside the one evaluate below, or the page's own ticker
+    // runs on between calls (long on a slow runner) and the first group is awake before anyone looks
+    await goTo(trig.x, trig.y + 1400);
     const amb = await ev((s) => {
       const g = window.game, p = g.state.player;
       for (const e of [...g.state.enemies]) if (!e.siteId) { e.dead = true; e.silent = true; }
       g.reap();
+      p.wx = s.x; p.wy = s.y; g.cam.x = s.x; g.cam.y = s.y; g.lastFogTx = null;
+      g.world.update(s.x, s.y, g.viewW, g.viewH, true);
       g.sites.timer = 0;
-      for (let i = 0; i < 3; i++) { p.wx = s.x; p.wy = s.y; g.gameLoop(1); }
+      for (let i = 0; i < 30 && !g.session.triggered[s.id]; i++) { p.wx = s.x; p.wy = s.y; g.gameLoop(1); }
       const mine = () => g.state.enemies.filter((e) => e.siteId === s.id && !e.dead);
       const ms = mine();
       const dists = ms.map((e) => Math.hypot(e.wx - s.x, e.wy - s.y));
@@ -186,13 +190,15 @@ if (want('ambush')) {
       let gap = angles.length ? angles[0] + Math.PI * 2 - angles[angles.length - 1] : 0;
       for (let i = 1; i < angles.length; i++) gap = Math.max(gap, angles[i] - angles[i - 1]);
       const asleep = ms.filter((e) => e.dormant).length;
+      // the groups as planned when it sprang (a monster hit by the hero's spells wakes early, as it should)
+      const groups = new Set(ms.map((e) => e.ambushWake)).size;
       // step until every one has woken (hit-stop after a crit holds the frame counter, so count frames, not calls)
       const f0 = g.frame, woke = new Map();
       for (let i = 0; i < 900 && ms.some((e) => !e.dead && !woke.has(e)); i++) {
         p.wx = s.x; p.wy = s.y; g.gameLoop(1);
         for (const e of ms) if (!e.dormant && !woke.has(e)) woke.set(e, Math.round(g.frame - f0));
       }
-      const awake = woke.size, groups = new Set(woke.values()).size;
+      const awake = woke.size;
       for (const e of mine()) g.damageEnemy(e, 1e9, { noCrit: true });
       g.sites.timer = 0; for (let i = 0; i < 30; i++) g.gameLoop(1);
       return { waves: s.waves, n: ms.length, min: Math.round(Math.min(...dists)), max: Math.round(Math.max(...dists)), gap: Math.round(gap * 180 / Math.PI), asleep, awake, groups, at: [...new Set(woke.values())].sort((a, b) => a - b) };
