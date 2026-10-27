@@ -153,6 +153,7 @@ export function installDevTools(game: any): void {
   };
   (window as any).__dev.tools = tools;
   (window as any).__dev.setSettings = (patch: any) => setSettings(game, patch);
+  (window as any).__dev.ui = uiBridge;
 
   const eco = section('Economy & building');
   button(eco, '+1000 gold', () => tools.addGold(1000));

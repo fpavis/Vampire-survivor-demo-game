@@ -58,6 +58,7 @@ export const ui = {
   build: signal<{ kind: string; name: string; icon: string; valid: boolean; reason: string; cost: { gold: number; wood: number; stone: number; iron: number } } | null>(null),
   towerPanel: signal<string | null>(null),
   waypointOpen: signal<string | null>(null),
+  worldMap: signal<{ mode: 'view' | 'travel'; from?: string | null } | null>(null),   // the full-screen world map
   sailing: signal(false),
   shopOpen: signal(false),
   innOpen: signal(false),
@@ -99,6 +100,7 @@ export const ui = {
   card: signal<{ id: number; kind: 'boss' | 'victory' | 'wake'; name: string; title: string; text: string } | null>(null),
   ending: signal<{ epilogue: string[]; roll: [string, string][]; credits: { section: string; lines: string[] }[] } | null>(null),
   death: signal<{ place: string; rows: [string, string, string][] } | null>(null),                // recent toasts and banners, newest last
+  mapCtl: null as any,                        // the open world map's controls (zoom, recentre, pan) for the pad and tests
   game: null as any
 };
 
@@ -107,6 +109,6 @@ export const panelOpen = () =>
   ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
   ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
   ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value || !!ui.slotsOpen.value || ui.optionsOpen.value || ui.creditsOpen.value ||
-  !!ui.death.value || !!ui.ending.value;
+  !!ui.death.value || !!ui.ending.value || !!ui.worldMap.value;
 
 export const PICK_KEYS = ['1', '2', '3'];

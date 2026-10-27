@@ -67,6 +67,7 @@ const MANIFEST = {
   hammer: ['gi:hammer-nails', 0xd0b080], journal: ['gi:open-book', 0x9be7ff], codex: ['gi:spell-book', 0xc8a0ff],
   'vault-key': ['gi:skeleton-key', 0xffd84a], lever: ['gi:lever', 0xc8b090], 'vault-gate': ['gi:gate', 0xb8b0a0],
   plate: ['gi:vortex', 0x7ad8ff], kraken: ['gi:giant-squid', 0x6a4ab8],
+  plus: ['mdi:plus', null], minus: ['mdi:minus', null], target: ['mdi:crosshairs-gps', null],
   dummy: ['gi:scarecrow', 0xd8b070], map: ['gi:treasure-map', 0xe8d090], scroll: ['gi:scroll-unfurled', 0xe8d090],
   chest: ['gi:open-treasure-chest', 0xffc84a], swords: ['gi:crossed-swords', 0xe0e6f0], fleur: ['gi:fleur-de-lys', 0xf3d08a],
   warning: ['gi:hazard-sign', 0xff5a5a], sail: ['gi:sailboat', 0x9bd0ff], flag: ['gi:flying-flag', 0xff6a5a], key: ['gi:key', 0xffd84a],

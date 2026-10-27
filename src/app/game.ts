@@ -452,7 +452,8 @@ class Game {
             it.btn.on('pointerdown', (e) => { e.stopPropagation(); it.run(); });
         }
 
-        // find the saves once the store is ready
+        // find the saves once the store is ready (titleReady: Continue is offered if there is a save; tests wait for it)
+        this.titleReady = false;
         this.storeReady.then(async (store) => {
             if (!store.persistent) note.text = 'Progress cannot be saved in this environment (no browser storage available).';
             try {
@@ -473,6 +474,7 @@ class Game {
             } catch (err) {
                 note.text = `Could not read the saved games (${err && err.message ? err.message : err}). You can start a new game.`;
             }
+            this.titleReady = true;
         });
 
         // gentle idle animation
@@ -497,6 +499,7 @@ class Game {
             this.audio.unlock();
             if (!gameState.player || gameState.gameOver) return;
             const act = this.input.keys.actionFor(e.key);
+            if (uiBridge.worldMap.value) { if (act === 'map') this.toggleMap(); return; }
             if (act === 'skill1' && !e.repeat) this.spells.cast(0);
             else if (act === 'skill2' && !e.repeat) this.spells.cast(1);
             else if (act === 'skill3' && !e.repeat) this.spells.cast(2);
@@ -635,6 +638,8 @@ class Game {
         this.map.reset();
         this.map.setMode('overworld');
         this.map.lairDefeated = (id) => this.session.defeatedLairs[id] !== undefined;
+        // badges on the map: towns once visited, caves, ruins and dungeons once everything in them is done
+        this.map.placeBadge = (p) => (p.type === 'city' ? (this.session.cities.some((c) => c.id === p.id) ? 'visited' : null) : (this.visited[p.id] && this.visited[p.id].complete ? 'cleared' : null));
         this.map.extras = () => {
             const out = [];
             for (const r of this.towers.recs) out.push({ tx: r.tx, ty: r.ty, icon: r.built ? TOWER_DEFS[r.kind].icon : 'site', label: r.built ? '' : 'Site', color: '#ffd070' });
@@ -804,7 +809,7 @@ class Game {
         if (tx === this.lastFogTx && ty === this.lastFogTy) return;
         this.lastFogTx = tx; this.lastFogTy = ty;
         if (this.mode === 'overworld') this.fog.revealCircle(tx, ty, 17);
-        else this.interiorFog.revealCircle(tx, ty, 9);
+        else if (this.interiorFog.revealCircle(tx, ty, 9) > 0 && this.interiorState) this.interiorState.fog = this.interiorFog.toJSON();
     }
 
     syncMap() {
@@ -1539,7 +1544,8 @@ class Game {
         // the ground floor keeps its state on the place itself (as before); deeper floors keep theirs beside it
         this.interiorState = floor === 0 ? place : ((place.floors ||= {})[floor] ||= { opened: [], cleared: false, altarUsed: false });
         this.world.setSource(src);
-        this.interiorFog = new FogOfWar();
+        // each floor remembers what was explored (saved with the place); restored chunks repaint on the map
+        this.interiorFog = this.interiorState.fog ? FogOfWar.fromJSON(this.interiorState.fog) : new FogOfWar();
         this.lastFogTx = null;
         this.map.setMode('interior');
         this.mode = 'interior';

@@ -8,6 +8,7 @@ import { SlotsPanel } from './Slots';
 import { CreditsPanel, TitleExtras } from './Front';
 import { RebindPanel } from './Rebind';
 import { TipCard } from './Tips';
+import { WorldMap } from './WorldMap';
 import { DeathScreen, Ending, StoryCard } from './Story';
 import { Icon } from './Icon';
 import { setSettings } from '../app/settings';
@@ -135,7 +136,7 @@ export function App() {
   useEffect(() => { document.documentElement.classList.toggle('vs-modal', modal); }, [modal]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!ui.visible.value || ui.pauseOpen.value || isTyping(e.target)) return;
+      if (!ui.visible.value || ui.pauseOpen.value || ui.worldMap.value || isTyping(e.target)) return;
       const k = e.key.toLowerCase();
       const game = ui.game;
       if (!game) return;
@@ -188,6 +189,7 @@ export function App() {
       <TowerPanel />
       <WaypointPanel />
       <SailingHint />
+      <WorldMap />
       <PauseMenu />
       <ActiveBar />
       <StoryCard />

@@ -328,6 +328,20 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-roll .fin{font-family:var(--font-display);font-size:22px;color:#f3e6c4;margin-top:56px}
 .vs-panel.vs-death{position:fixed;inset:0;border:0;border-radius:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at 50% 45%,rgba(60,8,14,.55),rgba(10,0,4,.94));animation:vs-death-in .9s ease-out both}
 @keyframes vs-death-in{from{opacity:0}to{opacity:1}}
+.vs-panel.vs-worldmap{position:fixed;inset:12px;z-index:30;display:flex;flex-direction:column;gap:8px;padding:10px 12px}
+.vs-worldmap .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.vs-worldmap .top h2{margin:0;font-size:18px}
+.vs-worldmap .tools{display:flex;align-items:center;gap:6px}
+.vs-worldmap .tools .z{min-width:30px;text-align:center;font-variant-numeric:tabular-nums;color:var(--c-muted);font-size:12px}
+.vs-worldmap .view{position:relative;flex:1;min-height:0;border-radius:10px;overflow:hidden;border:1px solid var(--c-line-2);background:#05070c}
+.vs-worldmap canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab;touch-action:none;image-rendering:pixelated}
+.vs-worldmap canvas:active{cursor:grabbing}
+.vs-worldmap .tip{position:absolute;pointer-events:none;background:rgba(8,12,22,.92);border:1px solid var(--c-line-2);border-radius:8px;padding:5px 9px;font-size:12px;display:flex;flex-direction:column;max-width:240px}
+.vs-worldmap .tip small{color:var(--c-muted)}
+.vs-worldmap .foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 16px;font-size:12px;color:var(--c-muted)}
+.vs-worldmap .legend{display:flex;flex-wrap:wrap;gap:4px 14px}
+.vs-worldmap .legend span{display:inline-flex;align-items:center;gap:5px}
+.vs-worldmap .legend .vs-icon{width:16px;height:16px}
 .vs-death .box{width:min(440px,100%);text-align:center}
 .vs-death h1{font-family:var(--font-display);font-weight:700;font-size:clamp(40px,8vw,64px);letter-spacing:3px;color:#ff7a6a;margin:0;text-shadow:0 3px 18px rgba(160,10,10,.6)}
 .vs-death .sub{font-size:14px;color:var(--c-soft);margin:4px 0 16px}

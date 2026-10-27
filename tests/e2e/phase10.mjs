@@ -186,15 +186,20 @@ if (want('ambush')) {
       let gap = angles.length ? angles[0] + Math.PI * 2 - angles[angles.length - 1] : 0;
       for (let i = 1; i < angles.length; i++) gap = Math.max(gap, angles[i] - angles[i - 1]);
       const asleep = ms.filter((e) => e.dormant).length;
-      for (let i = 0; i < 140; i++) { p.wx = s.x; p.wy = s.y; g.gameLoop(1); }
-      const awake = mine().filter((e) => !e.dormant).length;
+      // step until every one has woken (hit-stop after a crit holds the frame counter, so count frames, not calls)
+      const f0 = g.frame, woke = new Map();
+      for (let i = 0; i < 900 && ms.some((e) => !e.dead && !woke.has(e)); i++) {
+        p.wx = s.x; p.wy = s.y; g.gameLoop(1);
+        for (const e of ms) if (!e.dormant && !woke.has(e)) woke.set(e, Math.round(g.frame - f0));
+      }
+      const awake = woke.size, groups = new Set(woke.values()).size;
       for (const e of mine()) g.damageEnemy(e, 1e9, { noCrit: true });
       g.sites.timer = 0; for (let i = 0; i < 30; i++) g.gameLoop(1);
-      return { waves: s.waves, n: ms.length, min: Math.round(Math.min(...dists)), max: Math.round(Math.max(...dists)), gap: Math.round(gap * 180 / Math.PI), asleep, awake };
+      return { waves: s.waves, n: ms.length, min: Math.round(Math.min(...dists)), max: Math.round(Math.max(...dists)), gap: Math.round(gap * 180 / Math.PI), asleep, awake, groups, at: [...new Set(woke.values())].sort((a, b) => a - b) };
     }, trig);
     check('an ambush springs half again as many monsters, 6 or more', amb.n >= 6 && amb.n === Math.max(6, Math.min(15, Math.round(amb.waves * 1.5))), JSON.stringify(amb));
     check('they rise well away from the plate and leave one side open', amb.min >= 300 && amb.gap >= 110, JSON.stringify(amb));
-    check('they show themselves first, then close in group by group', amb.asleep === amb.n && amb.awake === amb.n, JSON.stringify(amb));
+    check('they show themselves first, then close in group by group', amb.asleep === amb.n && amb.awake === amb.n && amb.groups >= 2, JSON.stringify(amb));
   }
 }
 
@@ -237,6 +242,110 @@ if (want('mouse')) {
     check('a tree out of reach is not used; the click walks instead', far.hits === 1 && far.move, JSON.stringify(far));
     check('clicking empty ground still walks', walk);
   }
+}
+
+// ---- 10b: a world map that pans and zooms over everything explored
+if (want('map')) {
+  await goTo(0, 0);
+  await ev(() => { const g = window.game, p = g.state.player; g.fog.revealCircle(Math.floor(p.wx / 48), Math.floor(p.wy / 48), 120); g.syncMap(); });
+  const fog0 = await ev(() => window.game.fog.revealedTileCount());
+  await page.keyboard.press('m');
+  const opened = await until(() => !!document.querySelector('.vs-worldmap canvas') && !!window.__dev.ui.mapCtl && window.game.state.paused);
+  check('M opens the world map over the paused game', opened);
+  const v0 = await ev(() => window.__dev.ui.mapCtl.view());
+  const box = await page.locator('.vs-worldmap canvas').boundingBox();
+  // drag the map: the view moves the other way
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 200, box.y + box.height / 2 - 80, { steps: 6 });
+  await page.mouse.up();
+  const v1 = await ev(() => window.__dev.ui.mapCtl.view());
+  check('dragging pans the map', v1.cx > v0.cx + 20 / v0.ppt && v1.cy > v0.cy, JSON.stringify({ v0, v1 }));
+  // the wheel zooms about the cursor
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.4);
+  await page.mouse.wheel(0, -200);
+  const zoomed = await until((z) => window.__dev.ui.mapCtl.view().z > z, v1.z);
+  await page.mouse.wheel(0, 300);
+  const zoomedOut = await until((z) => window.__dev.ui.mapCtl.view().z === z, v1.z);
+  check('the wheel zooms in and out', zoomed && zoomedOut);
+  // held keys pan, C comes back to the party
+  await page.keyboard.down('d');
+  const keysPan = await until((cx) => window.__dev.ui.mapCtl.view().cx > cx + 3, (await ev(() => window.__dev.ui.mapCtl.view())).cx);
+  await page.keyboard.up('d');
+  await page.keyboard.press('c');
+  const back = await until(() => { const v = window.__dev.ui.mapCtl.view(), p = window.game.state.player; return Math.abs(v.cx - p.wx / 48) < 1 && Math.abs(v.cy - p.wy / 48) < 1; });
+  check('keys pan the map and C brings it back to the party', keysPan && back);
+  // the pad: shoulders zoom (dispatched as the pad would)
+  const pad = await ev(() => { const c = window.__dev.ui.mapCtl, z0 = c.view().z; c.zoom(1); const z1 = c.view().z; c.zoom(-1); return { z0, z1, z2: c.view().z }; });
+  check('the pad zooms it too', pad.z1 === pad.z0 + 1 && pad.z2 === pad.z0, JSON.stringify(pad));
+  // looking around does not explore anything
+  const fog1 = await ev(() => window.game.fog.revealedTileCount());
+  check('panning the map reveals nothing new (the fog stays)', fog1 === fog0, `${fog0} -> ${fog1}`);
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/worldmap.png` });
+  const pos = await ev(() => ({ x: window.game.state.player.wx, y: window.game.state.player.wy }));
+  await page.keyboard.press('Escape');
+  const closed = await until(() => !document.querySelector('.vs-worldmap') && !window.game.state.paused);
+  const pos2 = await ev(() => ({ x: window.game.state.player.wx, y: window.game.state.player.wy }));
+  check('Esc closes the map, and the hero did not move', closed && pos.x === pos2.x && pos.y === pos2.y, JSON.stringify({ pos, pos2 }));
+  // after a resize the map still fills the screen
+  await page.keyboard.press('m');
+  await until(() => !!document.querySelector('.vs-worldmap canvas'));
+  await page.setViewportSize({ width: 1000, height: 700 });
+  const fits = await until(() => { const c = document.querySelector('.vs-worldmap canvas'); return c && c.width > 900 && c.width < 1000; });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.keyboard.press('m');
+  await until(() => !document.querySelector('.vs-worldmap'));
+  check('the map follows a window resize', fits);
+}
+
+// ---- 10b: what was explored in a dungeon stays explored
+if (want('dfog')) {
+  const poi = await ev(() => window.__dev.tools.nearestPlaces('dungeon', 1)[0]);
+  const enter = async () => {
+    await ev((q) => window.game.enterPlace(q), poi);
+    await until(() => window.game.mode === 'interior' && !window.game.busy, undefined, 20000);
+  };
+  const leave = async () => {
+    await ev(() => window.game.exitPlace());
+    await until(() => window.game.mode === 'overworld' && !window.game.busy, undefined, 20000);
+  };
+  await enter();
+  const seen = await ev(() => {
+    const g = window.game, p = g.state.player, s = g.interior;
+    // walk across the floor (revealing as the party goes)
+    for (let i = 0; i < 6; i++) { p.wx = (8 + i * 8) * 48; p.wy = (s.h / 2) * 48; g.lastFogTx = null; g.updateFog(); }
+    return g.interiorFog.revealedTileCount();
+  });
+  await leave();
+  await enter();
+  const again = await ev(() => window.game.interiorFog.revealedTileCount());
+  await leave();
+  await ev(async () => { await window.game.requestSave('test', true); });
+  await page.reload();
+  await page.waitForFunction(() => !!window.game && window.game.titleReady);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.game.state.player && window.__dev, null, { timeout: 15000 });
+  await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; });
+  await enter();
+  const reloaded = await ev(() => window.game.interiorFog.revealedTileCount());
+  await leave();
+  check('a dungeon floor remembers what was explored, also after a reload', seen > 200 && again >= seen && reloaded >= seen, JSON.stringify({ seen, again, reloaded }));
+}
+
+// ---- 10b: badges on the map for towns visited
+if (want('badges')) {
+  const town = await ev(() => window.__dev.tools.nearestPlaces('city', 1)[0]);
+  await ev((q) => window.game.enterPlace(q), town);
+  await until(() => window.game.mode === 'interior' && !window.game.busy, undefined, 20000);
+  await ev(() => window.game.exitPlace());
+  await until(() => window.game.mode === 'overworld' && !window.game.busy, undefined, 20000);
+  const badge = await ev((q) => {
+    const g = window.game;
+    g.fog.revealCircle(q.tx, q.ty, 6); g.syncMap();
+    const mark = g.map.marks().find((m) => m.label === q.name);
+    return { badge: g.map.placeBadge(q), detail: mark ? mark.detail : null };
+  }, town);
+  check('a town once entered shows a Visited badge on the map', badge.badge === 'visited' && /Visited/.test(badge.detail || ''), JSON.stringify(badge));
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

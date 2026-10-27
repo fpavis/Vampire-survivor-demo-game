@@ -6,11 +6,15 @@ import { drawIcon } from './icons';
 import { FONT_UI, FONT_DISPLAY } from '../ui/fonts';
 
 const ROAD = SURFACE_NUM.road;
+const MARKER_NAMES = { chest: 'Treasure', door: 'Exit', 'stairs-up': 'Stairs up', 'stairs-down': 'Stairs down', lair: 'The boss', lock: 'Sealed vault', 'vault-gate': 'Open vault', 'vault-key': 'Vault key', lever: 'Lever', plate: 'Pressure plate' };
 
 const CT = WORLD_CONFIG.chunkTiles;
 const T = WORLD_CONFIG.tile;
 
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+const SUPER = 8;                     // chunks per side of a super tile
+const superKey = (cx, cy) => `${Math.floor(cx / SUPER)},${Math.floor(cy / SUPER)}`;
+const BADGE = { visited: { color: '#3d7fd6', icon: 'flag', word: 'Visited' }, cleared: { color: '#2f9e57', icon: 'check', word: 'Cleared' } };
 
 function paintChunk(chunk, fog) {
     const canvas = document.createElement('canvas');
@@ -51,6 +55,8 @@ export class MapView {
         this.sitesFor = null;            // (cx, cy) => Site[] near a chunk
         this.extras = () => [];          // () => [{ tx, ty, icon, label, color }] towers, docks, caches
         this.regions = () => [];         // () => [{ tx, ty, name, title, capital }] regions the player has seen
+        this.placeBadge = () => null;    // (poi) => 'visited' | 'cleared' | null: a mark on the place's icon
+        this.superTiles = new Map();     // 8x8 chunks composited at one pixel per tile, for the zoomed-out world map
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
         this.minimap = document.createElement('canvas');
@@ -60,6 +66,7 @@ export class MapView {
     }
 
     reset() {
+        this.superTiles.clear();
         this.maps.overworld.clear();
         this.maps.interior.clear();
         this.pois.clear();
@@ -84,6 +91,7 @@ export class MapView {
             const [cx, cy] = key.split(',').map(Number);
             const chunk = world.getChunk(cx, cy);
             map.set(key, paintChunk(chunk, fog));
+            if (this.mode === 'overworld') this.superTiles.delete(superKey(cx, cy));
             if (this.mode === 'overworld') {
                 for (const p of chunk.pois) if (fog.isRevealed(p.tx, p.ty)) this.pois.set(p.id, p);
                 if (population) {
@@ -112,11 +120,21 @@ export class MapView {
         const map = this.maps[this.mode];
         const cs = CT * ppt;
         const ox = w / 2 - centerTx * ppt, oy = h / 2 - centerTy * ppt;
-        for (const [key, thumb] of map) {
-            const [cx, cy] = key.split(',').map(Number);
-            const x = ox + cx * cs, y = oy + cy * cs;
-            if (x > w || y > h || x + cs < 0 || y + cs < 0) continue;
-            ctx.drawImage(thumb, x, y, cs + 0.5, cs + 0.5);
+        if (this.mode === 'overworld' && ppt <= 2) {
+            // zoomed far out: draw composited blocks of 8x8 chunks instead of thousands of small thumbnails
+            const ss = cs * SUPER;
+            const sx0 = Math.floor(-ox / ss), sx1 = Math.floor((w - ox) / ss), sy0 = Math.floor(-oy / ss), sy1 = Math.floor((h - oy) / ss);
+            for (let sy = sy0; sy <= sy1; sy++) for (let sx = sx0; sx <= sx1; sx++) {
+                const tile = this.superTile(sx, sy);
+                if (tile) ctx.drawImage(tile, ox + sx * ss, oy + sy * ss, ss + 0.5, ss + 0.5);
+            }
+        } else {
+            for (const [key, thumb] of map) {
+                const [cx, cy] = key.split(',').map(Number);
+                const x = ox + cx * cs, y = oy + cy * cs;
+                if (x > w || y > h || x + cs < 0 || y + cs < 0) continue;
+                ctx.drawImage(thumb, x, y, cs + 0.5, cs + 0.5);
+            }
         }
 
         ctx.textAlign = 'center';
@@ -130,13 +148,21 @@ export class MapView {
                 ctx.fillStyle = 'rgba(0,0,0,0.55)';
                 ctx.beginPath(); ctx.arc(x, y, iconSize * 0.62, 0, Math.PI * 2); ctx.fill();
                 drawIcon(ctx, p.dungeon ? 'dungeon' : POI_INFO[p.type].icon, x, y, iconSize * 0.95);
-                if (opts.big) {
+                const badge = BADGE[this.placeBadge(p)];
+                if (badge && (opts.big || ppt >= 3)) {
+                    const bx = x + iconSize * 0.55, by = y - iconSize * 0.55, br = Math.max(4.5, iconSize * 0.36);
+                    ctx.fillStyle = badge.color; ctx.strokeStyle = '#0b0f18'; ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                    drawIcon(ctx, badge.icon, bx, by, br * 1.35, 0xffffff);
+                }
+                if (opts.big && opts.labels !== false) {
                     ctx.font = `800 12px ${FONT_UI}`;
                     ctx.fillStyle = '#fff';
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 3;
-                    ctx.strokeText(p.name, x, y + 24);
-                    ctx.fillText(p.name, x, y + 24);
+                    const name = badge ? `${p.name} · ${badge.word}` : p.name;
+                    ctx.strokeText(name, x, y + 24);
+                    ctx.fillText(name, x, y + 24);
                     ctx.font = `${iconSize}px sans-serif`;
                 }
             }
@@ -226,6 +252,39 @@ export class MapView {
             drawIcon(ctx, m.icon, x, y, iconSize);
         }
         return { ox, oy };
+    }
+
+    /** A block of 8x8 explored chunks at one pixel per tile (built on first use, dropped when one of them repaints). */
+    superTile(sx, sy) {
+        const key = `${sx},${sy}`;
+        if (this.superTiles.has(key)) return this.superTiles.get(key);
+        const map = this.maps.overworld;
+        let canvas = null;
+        for (let j = 0; j < SUPER; j++) for (let i = 0; i < SUPER; i++) {
+            const thumb = map.get(`${sx * SUPER + i},${sy * SUPER + j}`);
+            if (!thumb) continue;
+            if (!canvas) { canvas = document.createElement('canvas'); canvas.width = canvas.height = SUPER * CT; }
+            canvas.getContext('2d').drawImage(thumb, i * CT, j * CT);
+        }
+        this.superTiles.set(key, canvas);
+        return canvas;
+    }
+
+    /** Everything on the map that has a name, for the world map's hover and selection. */
+    marks() {
+        const out = [];
+        if (this.mode !== 'overworld') {
+            for (const m of this.markers) out.push({ tx: m.tx, ty: m.ty, label: MARKER_NAMES[m.icon] || '', detail: '' });
+            return out.filter((m) => m.label);
+        }
+        for (const p of this.pois.values()) {
+            const badge = BADGE[this.placeBadge(p)];
+            out.push({ tx: p.tx, ty: p.ty, label: p.name, detail: `${p.dungeon ? `Dungeon, ${p.dungeon.floors} floors` : POI_INFO[p.type].label}${badge ? ` · ${badge.word}` : ''}`, poi: p });
+        }
+        for (const l of this.lairs.values()) if (!this.lairDefeated(l.id)) out.push({ tx: l.tx, ty: l.ty, label: 'Warlord lair', detail: `Level ${l.level}` });
+        for (const st of this.siteList.values()) if (!(st.kind === 'trigger' && this.siteState(st.id) === 'done')) out.push({ tx: st.tx, ty: st.ty, label: st.kind === 'claim' ? 'Claimable zone' : 'Ambush', detail: st.kind === 'claim' && this.siteState(st.id) === 'done' ? 'Claimed' : '' });
+        for (const ex of this.extras()) if (ex.label || ex.name) out.push({ tx: ex.tx, ty: ex.ty, label: ex.name || ex.label, detail: ex.detail || '', extra: ex });
+        return out;
     }
 
     drawPlayer(canvas, px, py, ppt, centerTx, centerTy, facing, time) {

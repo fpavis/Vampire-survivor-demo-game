@@ -260,7 +260,18 @@ export class InputSystem {
             return;
         }
 
-        if (g.ui.mapOverlay) { if (has('map') || has('cancel') || has('interact') || has('menu')) g.ui.toggleMap(g); return; }
+        // the world map: the stick pans it (read each frame by the map itself), the shoulders zoom, X recentres
+        if (g.ui.mapOverlay) {
+            if (has('map') || has('cancel') || has('menu')) { g.ui.toggleMap(g); return; }
+            const c = uiBridge.mapCtl;
+            if (c) {
+                if (has('prevHero')) c.zoom(-1);
+                if (has('nextHero')) c.zoom(1);
+                if (has('skill1')) c.recenter();
+                if (has('interact')) c.confirm();
+            }
+            return;
+        }
         if (has('menu')) { g.ui.toggleSettings(); return; }
         // the pause menu, and the ending (which pauses the game), take the d-pad and the face buttons
         if (uiBridge.pauseOpen.value || uiBridge.ending.value) {

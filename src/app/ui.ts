@@ -416,8 +416,6 @@ export class UIManager {
         this.container.addChild(this.fadeG);
         this.container.sortableChildren = true;
 
-        this.mapOverlay = null;
-
         // small non-blocking message (saves, discoveries)
         this.toastText = new IconLabel('', '', {
             fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xdfe8ff, stroke: 0x000000, strokeThickness: 4
@@ -575,70 +573,20 @@ export class UIManager {
         this.fadeG.visible = this.fadeAlpha > 0.001;
     }
 
-    // Full-screen world map
-    toggleMap(game) {
-        if (this.mapOverlay) {
-            this.app.stage.removeChild(this.mapOverlay.root);
-            this.mapOverlay.root.destroy({ children: true });
-            this.app.renderer.off('resize', this.mapOverlay.onResize);
-            this.mapOverlay = null;
+    // Full-screen world map: a DOM panel (src/ui/WorldMap.tsx) that pans and zooms over the paused game
+    get mapOverlay() { return !!uiBridge.worldMap.value; }
+
+    toggleMap(game, mode = 'view', from = null) {
+        if (uiBridge.worldMap.value) {
+            uiBridge.worldMap.value = null;
             gameState.paused = false;
             return;
         }
         if (gameState.levelUp || gameState.gameOver) return;
         gameState.paused = true;
-        const root = new PIXI.Container();
-        root.zIndex = 2500;
-        root.eventMode = 'static';
-        root.on('pointerdown', (e) => { e.stopPropagation(); this.toggleMap(game); });
-        this.app.stage.addChild(root);
-
-        const build = () => {
-            root.removeChildren().forEach((c) => c.destroy({ children: true }));
-            const w = this.app.screen.width, h = this.app.screen.height;
-            const dim = new PIXI.Graphics();
-            dim.beginFill(0x04060c, 0.9); dim.drawRect(0, 0, w, h); dim.endFill();
-            root.addChild(dim);
-            const side = Math.max(260, Math.min(w - 40, h - 150));
-            const canvas = document.createElement('canvas');
-            canvas.width = side; canvas.height = side;
-            const p = game.state.player;
-            const ppt = game.world.bounded ? 6 : 4;
-            const ctx = game.map.render(canvas, p.wx / WORLD_T, p.wy / WORLD_T, ppt, { big: true });
-            game.map.drawPlayer(canvas, p.wx, p.wy, ppt, p.wx / WORLD_T, p.wy / WORLD_T, 1, game.frame);
-            const sprite = new PIXI.Sprite(PIXI.Texture.from(canvas));
-            sprite.position.set((w - side) / 2, 76);
-            const border = new PIXI.Graphics();
-            border.lineStyle(3, 0xffffff, 0.4);
-            border.drawRoundedRect(sprite.x - 3, sprite.y - 3, side + 6, side + 6, 10);
-            const title = new PIXI.Text(game.world.bounded ? game.interiorName : 'WORLD MAP', {
-                fontFamily: DISPLAY, fontSize: 28, fontWeight: 'bold', fill: 0xf3e6c4, letterSpacing: 4
-            });
-            title.anchor.set(0.5);
-            title.position.set(w / 2, 38);
-            const pois = game.world.bounded ? [] : game.map.discoveredPois();
-            // legend: a row of icons with their meaning
-            const items = game.world.bounded
-                ? [['', 'You are here (blue marker)'], ['door', 'exit'], ...(game.map.markers.some((m) => m.icon === 'chest') ? [['chest', 'treasure']] : [])]
-                : [['', `${pois.length} place${pois.length === 1 ? '' : 's'} discovered`], ['place-cave', 'cave'], ['place-ruins', 'ruins'], ['place-town', 'town'], ['lair', 'warlord lair']];
-            const legend = new PIXI.Container();
-            let lx = 0;
-            for (const [ic, tx] of items) {
-                const l = new IconLabel(ic, tx, { fontFamily: FONT, fontSize: 15, fill: 0xc9d1e6 }, 18, 5, 0);
-                l.x = lx;
-                legend.addChild(l);
-                lx += l.width + 22;
-            }
-            legend.position.set(Math.round(w / 2 - (lx - 22) / 2), sprite.y + side + 26);
-            const close = new PIXI.Text(`Press ${glyph('map')}, ${glyph('cancel')} or click to close`, { fontFamily: FONT, fontSize: 12, fill: 0x8e97b0 });
-            close.anchor.set(0.5);
-            close.position.set(w / 2, sprite.y + side + 50);
-            root.addChild(sprite, border, title, legend, close);
-        };
-        build();
-        const onResize = () => build();
-        this.app.renderer.on('resize', onResize);
-        this.mapOverlay = { root, onResize };
+        gameState.pointerDown = false;
+        if (game) game.moveTarget = null;
+        uiBridge.worldMap.value = { mode, from };
     }
 
     createFlashEffect(target) {
