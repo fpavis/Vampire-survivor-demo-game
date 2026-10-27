@@ -165,6 +165,23 @@ Every bounty from a town's board, every townsfolk job from the town and every in
 - **Escort:** the traveller has `160 × enemyDamageScale(level)` health and takes half of a touching monster's
   damage per second (`src/app/escort.ts`).
 
+## Reach (0.13.0, `REACH` in `src/app/spells.ts`)
+
+How far auto-cast spells look for a target, in world units (a tile is 48, the screen about 1280 by 1200 at
+the normal camera):
+
+| Spell | Reach | Was | Needs a clear line |
+| --- | --- | --- | --- |
+| Arcane Bolt | 440 | 680 | yes |
+| Seeker Wisps | 440 | 640 | yes |
+| Returning Glaive | its range + 60 | same | yes |
+| Chain Lightning | 420 | 560 | the first strike falls from the sky; each jump needs a clear line |
+| Meteor | 440 | 620 | no (it falls) |
+| Spore Cloud | 400 | 460 | no |
+
+The hero's projectiles stop at walls, mountains, peaks, the void and vault gates (`World.shotTile`); water,
+trees and rocks do not stop them. A glaive turns back at a wall.
+
 ## The rest of the curve (unchanged)
 
 | What | Where | Rule |

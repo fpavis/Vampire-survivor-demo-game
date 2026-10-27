@@ -1,17 +1,17 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.12.0';
+export const GAME_VERSION = '0.13.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'Towers that grow, townsfolk with work, and lords who speak',
+  title: 'Fixes from your second playtest',
   notes: [
-    'Spires, obelisks and beacons rise to level 3: tend them with E',
-    'Monsters may besiege a tower and silence it until you drive them off',
-    'Towers on claimed ground cost a quarter less',
-    'Townsfolk ask for help: lost things to recover, travellers to walk to the next town, monsters to thin',
-    'Innkeepers trade rumours of places worth clearing, and pay when you have',
-    'Towns remember what you do for them: better pay, better prices, and a free bed for their hero',
-    'The demon lords speak for themselves, and the Elder has a word between chapters (Settings: Story scenes)'
+    'Switching heroes no longer passes on the last hero\'s wounds or drains the next one\'s mana',
+    'Switching works again after loading a save, and says how long it has left when it must wait',
+    'Mountains and cave walls have rounded, natural edges instead of square steps',
+    'Spells look for monsters on screen, not across it, and bolts stop at walls and mountains',
+    'The climbing tower is now the Expedition Mine, as it bores into the mountain',
+    'Bridges can be walked onto from their gatehouse, and building never traps you',
+    'From a town\'s teleporter the travel map scrolls over everything you have explored'
   ]
 };
 
