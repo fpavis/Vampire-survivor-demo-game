@@ -369,11 +369,21 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-acts.col{flex-direction:column;align-items:stretch;margin-top:14px}
 .vs-death .vs-btn.go{border-color:#5fd88a;background:rgba(30,90,50,.6);color:#d8ffe4}
 .vs-death .hint{font-size:12px;color:var(--c-muted);margin-top:10px}
-.vs-meter{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--c-panel);border:1px solid var(--c-line);border-radius:var(--r-m);font-size:13px;pointer-events:none}
-.vs-meter .vs-icon{font-size:26px}
-.vs-meter>span{display:flex;flex-direction:column;gap:1px}
+.vs-meter{display:flex;flex-direction:column;gap:2px;width:min(270px,calc(100vw - 32px));padding:8px 12px;background:var(--c-panel);border:1px solid var(--c-line);border-radius:var(--r-m);font-size:13px;pointer-events:auto}
+.vs-meter .hd{display:flex;align-items:center;gap:8px}
+.vs-meter .hd .vs-icon{font-size:22px}
+.vs-meter .hd .vs-btn{margin-left:auto;font-size:11px;padding:2px 8px}
 .vs-meter .n{font-variant-numeric:tabular-nums;color:var(--c-gold);font-size:15px}
 .vs-meter small{color:var(--c-muted);font-variant-numeric:tabular-nums}
+.vs-meter .n small{font-size:11px;margin-left:4px}
+.vs-mrows{display:flex;flex-direction:column;gap:3px;margin:5px 0 3px}
+.vs-mrow{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr) auto 34px;align-items:center;gap:6px;font-size:12px;padding:2px 4px;border-radius:5px;overflow:hidden}
+.vs-mrow::before{content:'';position:absolute;inset:0 auto 0 0;width:var(--sh);background:rgba(255,216,74,.14);pointer-events:none}
+.vs-mrow .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vs-mrow b{font-variant-numeric:tabular-nums;color:var(--c-text)}
+.vs-mrow .sh{font-size:11px;color:var(--c-muted);text-align:right;font-variant-numeric:tabular-nums}
+.vs-kind{font-style:normal;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:#34426c;color:#cdd7f5;border-radius:4px;padding:0 4px;margin-left:5px}
+.vs-meter .note{font-size:10.5px;line-height:1.25}
 .vs-hintbar{position:sticky;bottom:-14px;margin:10px -14px -14px;padding:7px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:#aab4cc;background:rgba(8,11,22,.97);border-top:1px solid var(--c-line);border-radius:0 0 12px 12px}
 .vs-hintbar kbd{display:inline-block;min-width:18px;text-align:center;font:700 10.5px/1 inherit;color:#ffe9a8;background:var(--c-panel-2);border:1px solid var(--c-line-2);border-bottom-width:2px;border-radius:5px;padding:3px 5px;margin-right:4px}
 .vs-hintbar kbd+kbd{margin-left:-1px}

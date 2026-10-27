@@ -295,8 +295,9 @@ export class SpellSystem {
         return false;
     }
 
-    /** A copy of a resolved spell with its damage scaled (assists and linked casts hit softer). */
-    scaled(r, k) { return { ...r, p: { ...r.p, damage: r.p.damage * k, burn: r.p.burn * k } }; }
+    /** A copy of a resolved spell with its damage scaled (assists and linked casts hit softer), its damage counted
+     *  as `srcKind` on the training ground's meter. */
+    scaled(r, k, srcKind = r.srcKind) { return { ...r, srcKind, p: { ...r.p, damage: r.p.damage * k, burn: r.p.burn * k } }; }
 
     /**
      * ASSIST: each resting hero (alive) may lend one of their own auto spells, cast from the party at a lower
@@ -315,7 +316,7 @@ export class SpellSystem {
             const key = 'assist:' + h.assist;
             this.timers[key] = (this.timers[key] ?? 60) - step;
             if (this.timers[key] > 0) continue;
-            const fired = this.fireAuto(this.scaled(r, ASSIST.power));
+            const fired = this.fireAuto(this.scaled(r, ASSIST.power, 'assist'));
             this.timers[key] = fired ? msToFrames(r.p.cooldown) * ASSIST.cooldown : 0;
         }
     }
@@ -329,7 +330,7 @@ export class SpellSystem {
         const i = this.auto.indexOf(r.item.uid);
         const next = list.find((u) => this.auto.indexOf(u) > i) || list[0];
         this.linkedAt = g.frame + 30;
-        this.fireAuto(this.scaled(this.resolved(this.item(next)), power));
+        this.fireAuto(this.scaled(this.resolved(this.item(next)), power, 'linked'));
     }
 
     /** Active skills (dash, blink, aegis) count their cooldown down here; auto-cast spells do it as they fire. */
@@ -349,11 +350,14 @@ export class SpellSystem {
         if (e.dead) return;
         const p = r.p;
         const knock = opts.knock ? { ...opts.knock, force: opts.knock.force * p.knock } : undefined;
-        g.damageEnemy(e, amount, { color: opts.color, knock, spell: r.item, critBonus: p.crit, quiet: opts.quiet });
+        // where the damage came from, for the training ground's meter: the spell, and how (its own hit, a zone, an
+        // echo, a rune it set off; an assist, a linked cast or a tower count as such whatever they do)
+        const source = { uid: r.item.uid, tpl: r.item.tpl, kind: r.srcKind || opts.kind || 'hit' };
+        g.damageEnemy(e, amount, { color: opts.color, knock, spell: r.item, critBonus: p.crit, quiet: opts.quiet, source });
         if (e.dead) return;
         const dur = g.stats.duration || 1;      // Persistence: burns and slows last longer
         if (p.slow > 0) { e.slowUntil = Math.max(e.slowUntil || 0, g.frame + 150 * dur); e.slowAmount = Math.max(e.slowAmount || 0, p.slow); }
-        if (p.burn > 0) { e.burnUntil = g.frame + 180 * dur; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; this.burning.add(e); }
+        if (p.burn > 0) { e.burnUntil = g.frame + 180 * dur; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; e.burnKind = r.srcKind || 'burn'; this.burning.add(e); }
         if (this.depth < MAX_TRIGGER_DEPTH) {
             for (const t of r.triggers) {
                 if (t.on !== 'hit' || Math.random() > t.chance) continue;
@@ -372,7 +376,7 @@ export class SpellSystem {
             if (d < bd) { bd = d; best = e; }
         }
         if (!best) return;
-        this.hit(best, amount, r, { color: 0xfff3a0 });
+        this.hit(best, amount, r, { color: 0xfff3a0, kind: 'rune:spark' });
         this.arc(from.wx, from.wy, best.wx, best.wy, 0xfff3a0);
     }
 
@@ -395,7 +399,8 @@ export class SpellSystem {
             e.burnAcc = (e.burnAcc || 0) + delta;
             if (e.burnAcc >= 30) {
                 e.burnAcc = 0;
-                g.damageEnemy(e, e.burnDps * 0.5, { color: 0xff9a3a, noCrit: true, spell: e.burnSrc, noEngage: true });
+                const src = e.burnSrc;
+                g.damageEnemy(e, e.burnDps * 0.5, { color: 0xff9a3a, noCrit: true, spell: src, noEngage: true, source: src ? { uid: src.uid, tpl: src.tpl, kind: e.burnKind || 'burn' } : null });
             }
         }
     }
@@ -430,7 +435,7 @@ export class SpellSystem {
         for (const e of g.state.enemies) {
             if (e.dead || e.untargetable) continue;
             const dx = e.wx - x, dy = e.wy - y, rr = radius + e.radius;
-            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force: 3 } });
+            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force: 3 }, kind: 'rune:burst' });
         }
         g.fx.burst(x, y, 12, r.color, 20, 3.5, { size: 0.8, life: 22 });
     }
@@ -462,12 +467,12 @@ export class SpellSystem {
     }
 
     /** An instant ring of damage (slams and aftershocks). */
-    pulse(x, y, radius, amount, r, force = 8) {
+    pulse(x, y, radius, amount, r, force = 8, kind = 'hit') {
         const g = this.game;
         for (const e of g.state.enemies) {
             if (e.dead || e.untargetable) continue;
             const dx = e.wx - x, dy = e.wy - y, rr = radius + e.radius;
-            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force } });
+            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force }, kind });
         }
         g.fx.shockwave(x, y, radius * 1.1, r.color, 22, 6);
     }
@@ -566,7 +571,7 @@ export class SpellSystem {
                     if (dx * dx + dy * dy < rr * rr) {
                         b.hits.add(e);
                         if (b.shard) this.depth++;
-                        try { this.hit(e, b.damage, b.r, { knock: { x: b.vx, y: b.vy, force: 2.2 } }); } finally { if (b.shard) this.depth--; }
+                        try { this.hit(e, b.damage, b.r, { knock: { x: b.vx, y: b.vy, force: 2.2 }, kind: b.shard ? 'rune:shard' : 'hit' }); } finally { if (b.shard) this.depth--; }
                         if (b.pierce > 0) { b.pierce--; continue; }
                         // Ricochet: jump to the next enemy instead of fizzling
                         if (b.jumps > 0) {
@@ -750,7 +755,7 @@ export class SpellSystem {
                 if (this.rings.length >= CAP.rings) return;
                 const g2 = new PIXI.Graphics();
                 game.groundLayer.addChild(g2);
-                this.rings.push({ g: g2, x, y, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r) * 0.6, rs: r, fade: 0, spin: Math.random() * 6 });
+                this.rings.push({ g: g2, x, y, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r) * 0.6, rs: r, fade: 0, spin: Math.random() * 6, echo: true });
                 game.audio.play('nova', { x, y, vol: 0.6 });
             });
         }
@@ -769,7 +774,7 @@ export class SpellSystem {
                     const rr = ring.r + e.radius;
                     if (dx * dx + dy * dy <= rr * rr) {
                         ring.hit.add(e);
-                        this.hit(e, ring.damage, ring.rs, { color: 0xbdefff, knock: { x: dx, y: dy, force: 7 } });
+                        this.hit(e, ring.damage, ring.rs, { color: 0xbdefff, knock: { x: dx, y: dy, force: 7 }, kind: ring.echo ? 'echo' : 'hit' });
                         game.fx.burst(e.wx, e.wy, 16, 0xbdefff, 4, 2, { size: 0.6, life: 20 });
                     }
                 }
@@ -880,7 +885,7 @@ export class SpellSystem {
                 game.audio.play('boom', { x: m.x, y: m.y });
                 for (let k = 1; k <= m.r.p.echo; k++) {
                     const mx = m.x, my = m.y, mr = m.r, rad = m.radius, dmg = m.damage * 0.6;
-                    this.after(27 * k, () => { this.pulse(mx, my, rad, dmg, mr, 6); game.audio.play('boom', { x: mx, y: my, vol: 0.6 }); });
+                    this.after(27 * k, () => { this.pulse(mx, my, rad, dmg, mr, 6, 'echo'); game.audio.play('boom', { x: mx, y: my, vol: 0.6 }); });
                 }
                 game.fx.flash(m.x, m.y, m.radius * 4, 0xffa040, 26);
                 game.fx.shockwave(m.x, m.y, m.radius * 1.6, 0xffa040, 24, 7);
@@ -921,7 +926,7 @@ export class SpellSystem {
         const key = 'tw' + rec.id;
         this.timers[key] = (this.timers[key] ?? 30) - delta;
         if (this.timers[key] > 0) return;
-        const r = this.resolved(item, true);
+        const r = { ...this.resolved(item, true), srcKind: 'tower' };
         this.srcMult = 1;
         let fired = false;
         switch (r.tpl.expr) {
@@ -981,7 +986,7 @@ export class SpellSystem {
                 for (const e of game.state.enemies) {
                     if (e.dead || e.untargetable || (z.kind === 'ember' && e.flying)) continue;
                     const dx = e.wx - z.x, dy = e.wy - z.y, rr = z.r + e.radius * 0.5;
-                    if (dx * dx + dy * dy <= rr * rr) this.hit(e, z.damage * 0.5, z.rs, { color: z.kind === 'ember' ? 0xffa040 : 0x9be07b });
+                    if (dx * dx + dy * dy <= rr * rr) this.hit(e, z.damage * 0.5, z.rs, { color: z.kind === 'ember' ? 0xffa040 : 0x9be07b, kind: 'dot' });
                 }
             }
             const fade = Math.min(1, z.life / 40, (z.max - z.life) / 10 + 0.2);
@@ -1065,7 +1070,7 @@ export class SpellSystem {
         g.input?.rumble(0.9, 0.5, 220);
         for (let k = 1; k <= r.p.echo; k++) {
             const x = p.wx, y = p.wy;
-            this.after(27 * k, () => { this.pulse(x, y, r.p.radius * 1.1, dmg * 0.6, r, 6); g.audio.play('slam', { x, y, vol: 0.6 }); g.fx.addShake(4); });
+            this.after(27 * k, () => { this.pulse(x, y, r.p.radius * 1.1, dmg * 0.6, r, 6, 'echo'); g.audio.play('slam', { x, y, vol: 0.6 }); g.fx.addShake(4); });
         }
     }
 

@@ -66,6 +66,8 @@ export class InteriorSource implements TerrainSource {
     puzzle: Puzzle | null = null;
     /** towns: where each service stands (healer, merchant, innkeeper, elder, board, dummy, teleporter), in world units */
     services: Record<string, Vec2> | null = null;
+    /** towns: the training ground's dummies, in world units */
+    dummies: Vec2[] | null = null;
     /** The elite guardians of a floor: the stairs down stay sealed until every one of them has fallen. */
     get guardians(): number { return this.spawns.filter((s) => s.elite).length; }
 
@@ -379,6 +381,7 @@ function generateCity(poi: Poi): InteriorSource {
     src.start = at(plan.start);
     src.services = {};
     for (const id of ['healer', 'merchant', 'innkeeper', 'elder', 'board', 'dummy', 'teleporter'] as const) src.services[id] = at(plan.services[id]);
+    src.dummies = plan.dummies.map(at);
     for (const v of plan.villagers) src.npcs.push({ x: v.x * T, y: v.y * T, hue: v.hue });
     return src;
 }

@@ -979,6 +979,19 @@ function drawSignpost(g) {
     g.beginFill(0x3a2a1a); g.drawCircle(0, -41, 0.9); g.drawCircle(0, -26, 0.9); g.endFill();
 }
 
+/** A low rail fence round a town's training ground: a rail between two posts (0), or a lone post (1). Walked through. */
+function drawFence(g, rail) {
+    const post = (x) => { opoly(g, [x - 2.4, 0, x - 2.4, -17, x, -19.5, x + 2.4, -17, x + 2.4, 0], 0x8a5a30, 1.3); fpoly(g, [x + 0.4, -17, x + 2.4, -17, x + 2.4, 0, x + 0.4, 0], 0x6a4222); };
+    if (rail) {
+        shadow(g, 34, 3, 0.18);
+        for (const y of [-13, -6.5]) { opoly(g, [-36, y - 1.8, 36, y - 1.8, 36, y + 1.8, -36, y + 1.8], 0xb88a4e, 1.1); fpoly(g, [-36, y + 0.4, 36, y + 0.4, 36, y + 1.8, -36, y + 1.8], 0x8a6236); }
+        post(-34); post(34);
+    } else {
+        shadow(g, 5, 2.5, 0.2);
+        post(0);
+    }
+}
+
 // ---------------------------------------------------------------- REGISTRY
 export interface DecorDef { w: number; h: number; pad: number; r: number; solid: boolean; variants: ((g: any) => void)[] }
 const D = (w: number, h: number, pad: number, r: number, solid: boolean, variants: ((g: any) => void)[]): DecorDef => ({ w, h, pad, r, solid, variants });
@@ -1054,6 +1067,7 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     teleporter: D(112, 64, 22, 0, false, [(g) => drawTeleporter(g, false), (g) => drawTeleporter(g, true)]),
     exitportal: D(88, 104, 14, 0, false, [drawExitPortal]),
     signpost: D(52, 58, 8, 0, false, [drawSignpost]),
+    fence: D(84, 30, 6, 0, false, [(g) => drawFence(g, true), (g) => drawFence(g, false)]),
     lairtotem: D(48, 92, 8, 8, true, [drawLairTotem]),
     vaultgate: D(130, 104, 12, 0, false, [(g) => drawVaultGate(g, true, false), (g) => drawVaultGate(g, true, true), (g) => drawVaultGate(g, false, false), (g) => drawVaultGate(g, false, true)]),
     lever: D(44, 50, 8, 0, false, [(g) => drawLever(g, false), (g) => drawLever(g, true)]),

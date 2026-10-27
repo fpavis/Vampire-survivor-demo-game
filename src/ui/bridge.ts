@@ -96,7 +96,8 @@ export const ui = {
   creditsOpen: signal(false),
   newGameSeed: signal(''),                    // seed for the next new game ('' = random)
   log: signal<LogEntry[]>([]),
-  dummy: signal<{ dps: number; total: number; peak: number } | null>(null),   // the training dummy's damage meter
+  // the training ground's meter: everything together, and a row per skill (its icon, name, kind of damage, share)
+  dummy: signal<{ dps: number; total: number; peak: number; hit: number; of: number; rows: { key: string; name: string; icon: string; kind: string; dps: number; share: number }[] } | null>(null),
   // story moments: a boss or victory card over the action, the ending and its closing roll, the death screen
   card: signal<{ id: number; kind: 'boss' | 'victory' | 'wake'; name: string; title: string; text: string } | null>(null),
   ending: signal<{ epilogue: string[]; roll: [string, string][]; credits: { section: string; lines: string[] }[] } | null>(null),

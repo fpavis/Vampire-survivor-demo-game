@@ -1,6 +1,7 @@
 // Town layouts with controlled randomness: size, street plan and houses vary from town to town, while the
-// services (healer, merchant, inn, elder, bounty board, training dummy, teleporter) always stand somewhere that
-// makes sense and can be walked to. Pure and seeded; verifyTown proves every service is reachable from the gate.
+// services (healer, merchant, inn, elder, bounty board, teleporter, and a training ground with three dummies)
+// always stand somewhere that makes sense and can be walked to. Pure and seeded; verifyTown proves every service
+// is reachable from the gate.
 import { makeRng } from './noise';
 
 export type TownSize = 'hamlet' | 'town' | 'city';
@@ -25,13 +26,17 @@ export interface TownPlan {
   hall: Rect;
   start: TownSpot; exit: TownSpot; gateX: number;
   services: Record<ServiceId, TownSpot>;
+  yard: Rect;                                // the training ground
+  dummies: TownSpot[];                       // its three dummies (services.dummy is the middle one)
   decor: TownDecor[];
   villagers: (TownSpot & { hue: number })[];
 }
 
 const SIZES: Record<TownSize, [number, number]> = { hamlet: [46, 38], town: [60, 48], city: [72, 56] };
 /** Collision radius of solid town props, in tiles (from the decor art: fountain 38 px, altar 28 ... at 48 px a tile). */
-export const SOLID_RADIUS: Record<string, number> = { fountain: 0.8, altar: 0.6, stall: 0.67, well: 0.46, planter: 0.21, crate: 0.3, barrel: 0.23 };
+export const SOLID_RADIUS: Record<string, number> = { fountain: 0.8, altar: 0.6, stall: 0.67, well: 0.46, planter: 0.21, crate: 0.3, barrel: 0.23, haystack: 0.25 };
+/** The training ground: a yard of this many tiles, at least this share of the town's width from the fountain. */
+export const YARD = { w: 9, h: 6, away: 0.3 };
 
 /**
  * A town for this seed, or null if no valid layout came out in a few tries (the caller then keeps the classic
@@ -94,6 +99,24 @@ function buildTown(seed: number, opts: { capital?: boolean; gateVariant?: number
   build(hall);
   keepOpen({ x: hall.x - 1, y: hall.y + hall.h, w: hall.w + 2, h: 2 });
 
+  // the training ground: a yard well away from the fountain (practice never crowds the square), on ground no
+  // street or square takes, the farthest such place give or take a little; houses then keep off it
+  const fx = main.x + main.w / 2, fy = main.y + main.h / 2;
+  const clearOf = (r: Rect) => {
+    for (let y = r.y - 1; y < r.y + r.h + 1; y++) for (let x = r.x - 1; x < r.x + r.w + 1; x++) if (open[at(x, y)] || tiles[at(x, y)] !== TILE.FLOOR) return false;
+    return true;
+  };
+  let yard: Rect | null = null, best = w * YARD.away;
+  for (let y = 3; y + YARD.h <= h - 3; y++) for (let x = 3; x + YARD.w <= w - 3; x++) {
+    const r: Rect = { x, y, w: YARD.w, h: YARD.h };
+    const d = Math.hypot(x + YARD.w / 2 - fx, y + YARD.h / 2 - fy);
+    if (d < w * YARD.away || !clearOf(r)) continue;
+    const score = d + rng() * 3;
+    if (score > best) { best = score; yard = r; }
+  }
+  if (!yard) return null;
+  keepOpen(yard);
+
   // houses on the remaining ground, with alleys of at least two tiles between them
   const buildings: Rect[] = [hall];
   const free = (r: Rect) => {
@@ -128,7 +151,6 @@ function buildTown(seed: number, opts: { capital?: boolean; gateVariant?: number
   const hs = rng() < 0.5 ? 1 : -1;                         // the healer's side of the fountain (the market takes the other)
   const es = rng() < 0.5 ? 1 : -1;                         // the elder's side of the hall door
   const bs = rng() < 0.5 ? 1 : -1;                         // the board's corner of the square
-  const ds = rng() < 0.5 ? 1 : -1;                         // the training yard's corner
   const ts = rng() < 0.5 ? 1 : -1;                         // the teleporter's side of the gate square
   const edge = (r: Rect, side: number, inset: number) => (side > 0 ? r.x + r.w - inset : r.x + inset);
   const services: Record<ServiceId, TownSpot> = {
@@ -138,7 +160,7 @@ function buildTown(seed: number, opts: { capital?: boolean; gateVariant?: number
     healer: { x: fountain.x + hs * 3.6, y: fountain.y + 0.4 },
     board: { x: edge(main, bs, 1.6), y: main.y + 1.6 },
     merchant: market === main ? { x: edge(main, -hs, 2.2), y: fountain.y + 0.4 } : { x: edge(market, -hs, 3), y: market.y + market.h / 2 },
-    dummy: market === main ? { x: edge(main, ds, 1.8), y: main.y + main.h - 1.6 } : { x: edge(market, hs, 2.2), y: market.y + market.h / 2 },
+    dummy: { x: yard.x + yard.w / 2, y: yard.y + yard.h / 2 - 0.8 },
     innkeeper: inn,
     teleporter: { x: cx + 0.5 + ts * 3.7, y: h - 5.4 }
   };
@@ -148,13 +170,18 @@ function buildTown(seed: number, opts: { capital?: boolean; gateVariant?: number
     if (Math.hypot(a.x - b.x, a.y - b.y) < 2.4) return null;
   }
 
+  // three dummies in a shallow arc, close enough for chains, ricochets and sparks to jump between them
+  const yc = { x: yard.x + yard.w / 2, y: yard.y + yard.h / 2 };
+  const dummies: TownSpot[] = [{ x: yc.x - 3.4, y: yc.y + 0.6 }, services.dummy, { x: yc.x + 3.4, y: yc.y + 0.6 }];
+
   const start = { x: cx + 0.5, y: h - 6 };
   const exit = { x: cx + 0.5, y: h - 4.4 };
-  const plan: TownPlan = { w, h, size, layout, tiles, buildings, hall, start, exit, gateX: cx, services, decor: [], villagers: [] };
+  const plan: TownPlan = { w, h, size, layout, tiles, buildings, hall, start, exit, gateX: cx, services, yard, dummies, decor: [], villagers: [] };
 
   // paths from the gate to every service stay clear of props
   const clear = clearance(plan);
-  const nearService = (x: number, y: number, d: number) => SERVICES.some((id) => Math.hypot(services[id].x - x, services[id].y - y) < d);
+  const nearService = (x: number, y: number, d: number) => SERVICES.some((id) => Math.hypot(services[id].x - x, services[id].y - y) < d) || dummies.some((s) => Math.hypot(s.x - x, s.y - y) < d);
+  const inYard = (x: number, y: number) => x > yard.x - 0.5 && x < yard.x + yard.w + 0.5 && y > yard.y - 0.5 && y < yard.y + yard.h + 0.5;
   const decor = plan.decor;
   const put = (type: string, x: number, y: number, variant = 0) => {
     const solid = SOLID_RADIUS[type] !== undefined;
@@ -170,9 +197,26 @@ function buildTown(seed: number, opts: { capital?: boolean; gateVariant?: number
   decor.push({ type: 'teleporter', x: services.teleporter.x, y: services.teleporter.y, variant: 1 });
   decor.push({ type: 'banner', x: hall.x + 1.5, y: hall.y + hall.h + 0.4, variant: 0 });
   decor.push({ type: 'banner', x: hall.x + hall.w - 1.5, y: hall.y + hall.h + 0.4, variant: 1 });
+  // the yard: a low rail fence (walked through, it only marks the ground) open on the side facing the town, a
+  // haystack in a back corner and a sign at the opening
+  const towardX = Math.sign(fx - yc.x) || 1, towardY = Math.sign(fy - yc.y) || 1;
+  const openSide = Math.abs(fx - yc.x) / YARD.w > Math.abs(fy - yc.y) / YARD.h ? (towardX > 0 ? 'E' : 'W') : (towardY > 0 ? 'S' : 'N');
+  const x0 = yard.x + 0.3, x1 = yard.x + yard.w - 0.3, y0 = yard.y + 0.3, y1 = yard.y + yard.h - 0.3;
+  for (let x = x0 + 0.75; x < x1; x += 1.5) {
+    if (!(openSide === 'N' && Math.abs(x - yc.x) < 1.6)) decor.push({ type: 'fence', x, y: y0, variant: 0 });
+    if (!(openSide === 'S' && Math.abs(x - yc.x) < 1.6)) decor.push({ type: 'fence', x, y: y1, variant: 0 });
+  }
+  for (let y = y0 + 1; y < y1 - 0.5; y += 1.2) {
+    if (!(openSide === 'W' && Math.abs(y - yc.y) < 1.4)) decor.push({ type: 'fence', x: x0, y, variant: 1 });
+    if (!(openSide === 'E' && Math.abs(y - yc.y) < 1.4)) decor.push({ type: 'fence', x: x1, y, variant: 1 });
+  }
+  const back = { x: openSide === 'E' ? x0 + 0.9 : x1 - 0.9, y: openSide === 'S' ? y0 + 0.9 : y1 - 0.9 };
+  const sign = openSide === 'N' ? { x: yc.x + 2, y: y0 - 0.4 } : openSide === 'S' ? { x: yc.x + 2, y: y1 + 0.6 } : openSide === 'W' ? { x: x0 - 0.4, y: yc.y + 1.8 } : { x: x1 + 0.4, y: yc.y + 1.8 };
+  decor.push({ type: 'signpost', x: sign.x, y: sign.y, variant: 0 });
   // the market: stalls behind the merchant (on the far side from the fountain)
   const m = services.merchant;
   for (const [dx, dy] of [[-2.6, -1.5], [-2.6, 1.6], [0.4, -2.8], [0.4, 3]]) put('stall', m.x + hs * dx, m.y + dy, Math.floor(rng() * 3));
+  put('haystack', back.x, back.y);
   // lamps along the avenue and round the squares (they do not block)
   for (let y = gateSq.y - 2; y > main.y + main.h; y -= 5) { put('lamp', cx - 3.6, y); put('lamp', cx + 3.6, y); }
   for (const p of [main, market]) {
@@ -196,7 +240,7 @@ function buildTown(seed: number, opts: { capital?: boolean; gateVariant?: number
   const folk = (size === 'hamlet' ? 7 : size === 'town' ? 9 : 12) + Math.floor(rng() * 3);
   for (let i = 0; i < 400 && plan.villagers.length < folk; i++) {
     const x = 3 + rng() * (w - 6), y = 3 + rng() * (h - 6);
-    if (!open[at(Math.floor(x), Math.floor(y))] || !walkable(x, y) || nearService(x, y, 2)) continue;
+    if (!open[at(Math.floor(x), Math.floor(y))] || !walkable(x, y) || nearService(x, y, 2) || inYard(x, y)) continue;
     if (decor.some((d) => SOLID_RADIUS[d.type] !== undefined && Math.hypot(d.x - x, d.y - y) < SOLID_RADIUS[d.type] + 0.6)) continue;
     plan.villagers.push({ x, y, hue: Math.floor(rng() * 6) });
   }
@@ -279,13 +323,18 @@ export function verifyTown(plan: TownPlan): { ok: boolean; reason?: string } {
     return false;
   };
   if (!reached(plan.exit)) return { ok: false, reason: 'exit unreachable' };
+  let bad = '';
   for (const id of SERVICES) {
     const s = plan.services[id];
     if (tiles[Math.floor(s.y) * w + Math.floor(s.x)] !== TILE.FLOOR) return { ok: false, reason: `${id} inside a wall` };
     if (!reached(s)) return { ok: false, reason: `${id} unreachable` };
   }
-  for (const id of STANDING) {
-    const s = plan.services[id];
+  plan.dummies.forEach((s, i) => {
+    if (tiles[Math.floor(s.y) * w + Math.floor(s.x)] !== TILE.FLOOR || !reached(s)) bad = bad || `dummy ${i} unreachable`;
+  });
+  if (bad) return { ok: false, reason: bad };
+  const standing: [string, TownSpot][] = [...STANDING.map((id): [string, TownSpot] => [id, plan.services[id]]), ...plan.dummies.map((s, i): [string, TownSpot] => [`dummy ${i}`, s])];
+  for (const [id, s] of standing) {
     for (const d of plan.decor) {
       const r = SOLID_RADIUS[d.type];
       if (r !== undefined && Math.hypot(d.x - s.x, d.y - s.y) < r + 1.2) return { ok: false, reason: `${id} crowded by ${d.type}` };

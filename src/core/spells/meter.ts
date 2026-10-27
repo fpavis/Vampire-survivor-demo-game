@@ -16,16 +16,25 @@ export class DpsMeter {
     this.last = t;
   }
 
-  /** Damage per second over the last `window` seconds; a fresh burst counts over at least one second. */
-  dps(now: number): number {
+  /** The damage of the last `window` seconds, and when its first hit landed (Infinity: none). */
+  windowSum(now: number): { sum: number; first: number } {
     const from = now - this.window;
     let i = 0;
     while (i < this.hits.length && this.hits[i].t < from) i++;
     if (i) this.hits.splice(0, i);
-    if (!this.hits.length) return 0;
     let sum = 0;
     for (const h of this.hits) sum += h.v;
-    const rate = sum / Math.max(1, Math.min(this.window, now - this.hits[0].t));
+    return { sum, first: this.hits.length ? this.hits[0].t : Infinity };
+  }
+
+  /** The span a rate is taken over: the window, or since the first hit of a fresh burst (at least one second). */
+  span(now: number, first: number) { return Math.max(1, Math.min(this.window, now - first)); }
+
+  /** Damage per second over the last `window` seconds; a fresh burst counts over at least one second. */
+  dps(now: number): number {
+    const { sum, first } = this.windowSum(now);
+    if (!sum) return 0;
+    const rate = sum / this.span(now, first);
     if (now - this.hits[0].t >= 1) this.peak = Math.max(this.peak, rate);
     return rate;
   }

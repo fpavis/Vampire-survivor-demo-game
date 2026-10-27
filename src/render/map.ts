@@ -8,7 +8,7 @@ import { FONT_UI, FONT_DISPLAY } from '../ui/fonts';
 
 const ROAD = SURFACE_NUM.road;
 const MARKER_NAMES = { chest: 'Treasure', door: 'Exit', 'stairs-up': 'Stairs up', 'stairs-down': 'Stairs down', lair: 'The boss', lock: 'Sealed vault', 'vault-gate': 'Open vault', 'vault-key': 'Vault key', lever: 'Lever', plate: 'Pressure plate',
-    healer: 'Healer', merchant: 'Merchant', innkeeper: 'Inn', elder: 'Elder', board: 'Bounty board', dummy: 'Training dummy', teleporter: 'Teleporter' };
+    healer: 'Healer', merchant: 'Merchant', innkeeper: 'Inn', elder: 'Elder', board: 'Bounty board', dummy: 'Training ground', teleporter: 'Teleporter' };
 
 const CT = WORLD_CONFIG.chunkTiles;
 const T = WORLD_CONFIG.tile;

@@ -354,7 +354,7 @@ if (want('dummy')) {
   check('the dummy is no threat: the town stays safe for editing spells', !!d0 && d0.safe, JSON.stringify(d0));
   await page.waitForTimeout(200);
   const meter = await ev(() => document.querySelector('.vs-meter')?.innerText || '');
-  check('the damage meter shows while hitting the dummy', /Training dummy/.test(meter) && /damage\/s/.test(meter), meter.replace(/\n/g, ' '));
+  check('the damage meter shows while hitting the dummy', /Training (dummy|ground)/.test(meter) && /damage\/s/.test(meter), meter.replace(/\n/g, ' '));
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/dummy.png` });
   await ev(() => {
     const g = window.game, it = g.interactables.find((i) => i.kind === 'healer'), p = g.state.player;

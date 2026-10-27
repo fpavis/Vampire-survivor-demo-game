@@ -219,7 +219,7 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
     ? [['teleporter', 'Town teleporter: a fare by distance'], ['tower-waypoint', 'Waypoint: free to another waypoint']]
     : g.world.bounded
     ? (g.interiorPoi?.type === 'city'
-      ? [['door', 'Gate'], ['teleporter', 'Teleporter'], ['healer', 'Healer'], ['merchant', 'Merchant'], ['innkeeper', 'Inn'], ['elder', 'Elder'], ['board', 'Bounties'], ['dummy', 'Training dummy']]
+      ? [['door', 'Gate'], ['teleporter', 'Teleporter'], ['healer', 'Healer'], ['merchant', 'Merchant'], ['innkeeper', 'Inn'], ['elder', 'Elder'], ['board', 'Bounties'], ['dummy', 'Training ground']]
       : [['door', 'Exit'], ['chest', 'Treasure'], ['stairs-down', 'Stairs down']])
     : [['place-town', 'Town'], ['place-cave', 'Cave'], ['place-ruins', 'Ruins'], ['dungeon', 'Dungeon'], ['lair', 'Warlord lair'], ['flag', 'Visited'], ['check', 'Cleared']];
   const hint = here

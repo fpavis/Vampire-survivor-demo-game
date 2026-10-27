@@ -1253,8 +1253,8 @@ class Game {
             this.audio.play(crit ? 'crit' : 'hit', { x: e.wx, y: e.wy });
             if (crit) this.addHitStop('crit');
         }
-        // the training dummy only counts the damage: no knock-back, no waking, no death
-        if (e.dummy) { this.dummy.hit(dmg); e.hitFlash = 6; e.health = e.maxHealth; return; }
+        // a training dummy only counts the damage, per skill: no knock-back, no waking, no death
+        if (e.dummy) { this.dummy.hit(e, dmg, opts.source); e.hitFlash = 6; e.health = e.maxHealth; return; }
 
         const k = opts.knock;
         if (k) {
@@ -1687,14 +1687,15 @@ class Game {
             for (const k of ['healer', 'merchant', 'innkeeper', 'elder']) this.spawnNpc(k, sv[k].x, sv[k].y);
             this.map.markers.push({ tx: sv.teleporter.x / T, ty: sv.teleporter.y / T, icon: 'teleporter' });
             this.spawnBoard(sv.board.x, sv.board.y);
-            this.dummy.spawn(sv.dummy.x, sv.dummy.y);
+            this.dummy.spawnAll(src.dummies || [sv.dummy]);
         } else if (poi.type === 'city' && src.fountain) {
             this.spawnNpc('healer', src.fountain.x + 120, src.fountain.y + 10);
             this.spawnNpc('merchant', src.fountain.x - 130, src.fountain.y + 20);
             if (src.altar) this.spawnNpc('innkeeper', src.altar.x + 150, src.altar.y + 70);
             this.spawnNpc('elder', src.fountain.x - 230, src.fountain.y - 150);
             this.spawnBoard(src.fountain.x + 240, src.fountain.y - 140);
-            this.dummy.spawn(src.fountain.x + 260, src.fountain.y + 150);
+            const f = src.fountain;
+            this.dummy.spawnAll([{ x: f.x + 200, y: f.y + 180 }, { x: f.x + 360, y: f.y + 120 }, { x: f.x + 520, y: f.y + 180 }]);
         }
         this.map.markers.push({ tx: src.exit.x / T, ty: src.exit.y / T, icon: src.floor > 0 ? 'stairs-up' : 'door' });
         if (src.stairsDown) this.map.markers.push({ tx: src.stairsDown.x / T, ty: src.stairsDown.y / T, icon: 'stairs-down' });

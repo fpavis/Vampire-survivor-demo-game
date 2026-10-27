@@ -84,16 +84,25 @@ function Pill() {
   );
 }
 
-/** The training dummy's meter, while the player is near it and hitting it. */
+/** The training ground's meter while the player is near its dummies and hitting them: the whole, then each skill. */
 function DummyMeter() {
   const m = ui.dummy.value;
   if (!m) return null;
   return (
-    <div class="vs-meter" role="status" aria-live="off">
-      <Icon name="dummy" />
-      <span><b>Training dummy</b>
-        <span class="n"><b>{m.dps}</b> damage/s</span>
-        <small>best {m.peak}/s · total {m.total}</small></span>
+    <div class="vs-meter hit" role="status" aria-live="off">
+      <div class="hd"><Icon name="dummy" /><b>Training ground</b>
+        <button class="vs-btn vs-mini" data-act="reset" tabIndex={-1} title="Start counting again" onClick={() => ui.game?.dummy.reset()}>Reset</button></div>
+      <span class="n"><b>{m.dps}</b> damage/s <small>{m.hit} of {m.of} dummies hit</small></span>
+      <small>best {m.peak}/s · total {m.total}</small>
+      <div class="vs-mrows">
+        {m.rows.map((r) => (
+          <div key={r.key} class="vs-mrow" style={{ '--sh': `${Math.round(r.share * 100)}%` }}>
+            <Icon name={r.icon} /><span class="nm">{r.name}{r.kind && <i class="vs-kind">{r.kind}</i>}</span>
+            <b>{r.dps}/s</b><span class="sh">{Math.round(r.share * 100)}%</span>
+          </div>
+        ))}
+      </div>
+      <small class="note">Kill effects (Death Echo, Splinter, Resonance, Vampiric, Mana Siphon) never go off here: a dummy does not die.</small>
     </div>
   );
 }

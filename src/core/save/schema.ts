@@ -3,7 +3,7 @@
 
 export const SAVE_VERSION = 10;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
-export const GENERATOR_VERSION = 4;   // 2: seeded Fisher–Yates shuffles in dungeon floors (were engine-dependent); 3: towns laid out by core/world/towns; 4: corrupted lands (barren decor, denser camps)
+export const GENERATOR_VERSION = 5;   // 2: seeded Fisher–Yates shuffles in dungeon floors (were engine-dependent); 3: towns laid out by core/world/towns; 4: corrupted lands (barren decor, denser camps); 5: a training ground in every town
 
 export interface SpellSave { uid: string; tpl: string; level: number; xp: number; runes: (string | null)[]; locked?: boolean; fav?: boolean }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SERVICES, TILE, planTown, verifyTown } from '../src/core/world/towns';
+import { SERVICES, TILE, YARD, planTown, verifyTown } from '../src/core/world/towns';
 
 const plans = Array.from({ length: 300 }, (_, i) => planTown((i * 2654435761) >>> 0, { capital: i % 7 === 0 }));
 const made = plans.filter((p) => p);
@@ -61,5 +61,32 @@ describe('town layouts', () => {
       expect(p!.start.y).toBeLessThan(p!.exit.y);
       expect(p!.exit.y).toBeLessThan(p!.h - 2);
     }
+  });
+
+  it('have a training ground well away from the fountain, with three dummies in reach of each other', () => {
+    for (const p of made) {
+      const f = p!.services.fountain, y = p!.yard;
+      const yc = { x: y.x + y.w / 2, y: y.y + y.h / 2 };
+      expect(Math.hypot(yc.x - f.x, yc.y - f.y)).toBeGreaterThanOrEqual(p!.w * YARD.away);
+      expect(p!.dummies).toHaveLength(3);
+      for (const d of p!.dummies) {
+        expect(d.x).toBeGreaterThan(y.x); expect(d.x).toBeLessThan(y.x + y.w);
+        expect(d.y).toBeGreaterThan(y.y); expect(d.y).toBeLessThan(y.y + y.h);
+        expect(p!.tiles[Math.floor(d.y) * p!.w + Math.floor(d.x)]).toBe(TILE.FLOOR);
+      }
+      // neighbours within a chain's jump (240 px = 5 tiles), and none on top of another
+      const [a, b, c] = p!.dummies;
+      for (const [u, v] of [[a, b], [b, c]]) { const d = Math.hypot(u.x - v.x, u.y - v.y); expect(d).toBeLessThan(5); expect(d).toBeGreaterThan(2.5); }
+      expect(p!.services.dummy).toEqual(b);
+      // no house stands in the yard, and it is fenced and signposted
+      for (let ty = y.y; ty < y.y + y.h; ty++) for (let tx = y.x; tx < y.x + y.w; tx++) expect(p!.tiles[ty * p!.w + tx]).toBe(TILE.FLOOR);
+      expect(p!.decor.filter((d) => d.type === 'fence').length).toBeGreaterThan(8);
+      expect(p!.decor.some((d) => d.type === 'signpost')).toBe(true);
+    }
+  });
+
+  it('put the training ground in different places from town to town', () => {
+    const where = new Set(made.map((p) => `${p!.yard.x < p!.w / 2 ? 'W' : 'E'}${p!.yard.y < p!.h / 2 ? 'N' : 'S'}`));
+    expect(where.size).toBeGreaterThanOrEqual(3);
   });
 });
