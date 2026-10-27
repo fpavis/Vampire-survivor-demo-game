@@ -7,6 +7,7 @@ import { SURFACE_NUM, surfaceAt } from './surfaces';
 import { dungeonForLand, dungeonName } from './dungeons';
 import { RoadNet } from './roads';
 import { regionAt, regionInfo, type RegionInfo } from './regions';
+import { areaMayBeCorrupt, corruptionAt } from './corruption';
 import type { ChunkLike, DecorItem, Poi, PoiType, TerrainSource } from '../types';
 
 const T = WORLD_CONFIG.tile;
@@ -56,6 +57,11 @@ export function addDecorItem(chunk: ChunkLike, type: string, x: number, y: numbe
 }
 
 const TREE_TYPES = new Set(['appletree', 'birch', 'oak', 'pine', 'snowpine', 'palm']);
+/** What grows (and what farms put up): the blight strips most of it, and its trees stand dead. */
+const GROWTH = new Set(['flowerbed', 'bush', 'tallgrass', 'wheat', 'haystack', 'scarecrow', 'bigmushroom', 'fern', 'glowshroom',
+    'cactus', 'barrelcactus', 'dunebush', 'seagrass']);
+/** What the blight leaves behind instead, with their odds per bare tile at full strength. */
+const BLIGHT_DECOR: [number, string][] = [[0.012, 'blightspire'], [0.026, 'corruptcrystal'], [0.05, 'bones']];
 
 const ENTRANCE_OFFSET: Record<PoiType, number> = { cave: 64, ruins: 48, city: 58 };
 
@@ -65,6 +71,7 @@ export class OverworldSource implements TerrainSource {
     theme = null;
     poiCache = new Map<string, Poi | null>();
     roads: RoadNet;
+    private corruptCache = new Map<string, Float32Array | null>();
     private regionCache = new Map<string, RegionInfo & { capital: Poi | null }>();
 
     constructor(seed: number) {
@@ -124,6 +131,23 @@ export class OverworldSource implements TerrainSource {
     }
 
     tierAt(tx: number, ty: number): number { return tierOf(this.levelAt(tx, ty)); }
+
+    /** How blighted a tile is (0 untouched .. 1, see corruption.ts), worked out a chunk at a time and kept. */
+    corruptionAt(tx: number, ty: number): number {
+        const CT = WORLD_CONFIG.chunkTiles;
+        const cx = Math.floor(tx / CT), cy = Math.floor(ty / CT), key = `${cx},${cy}`;
+        let a = this.corruptCache.get(key);
+        if (a === undefined) {
+            if (this.corruptCache.size > 4000) this.corruptCache.clear();
+            a = null;
+            if (areaMayBeCorrupt(this.seed, cx * CT, cy * CT, CT)) {
+                a = new Float32Array(CT * CT);
+                for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) a[j * CT + i] = corruptionAt(this.seed, cx * CT + i, cy * CT + j);
+            }
+            this.corruptCache.set(key, a);
+        }
+        return a ? a[(ty - cy * CT) * CT + (tx - cx * CT)] : 0;
+    }
 
     /** numeric surface id (0 = none) at a tile whose biome is already known */
     surfaceNumAt(tx: number, ty: number, biome: number): number {
@@ -273,6 +297,16 @@ export class OverworldSource implements TerrainSource {
                 const r = hash(tx, ty, seed + 31);
                 let type: string | null = null;
                 for (const [max, t] of table) if (r < max) { type = t; break; }
+                // the blight: most growth gone, the trees dead, and its own spires, crystals and bones instead
+                const blight = this.corruptionAt(tx, ty);
+                if (blight > 0.3) {
+                    if (type && (GROWTH.has(type) || TREE_TYPES.has(type)) && hash(tx, ty, seed + 131) < 0.55 + 0.3 * blight) type = TREE_TYPES.has(type) ? 'dead' : null;
+                    else if (type && TREE_TYPES.has(type)) type = 'dead';
+                    if (!type && !isWaterBiome(biome)) {
+                        const b = hash(tx, ty, seed + 137) / blight;
+                        for (const [max, t] of BLIGHT_DECOR) if (b < max) { type = t; break; }
+                    }
+                }
                 if (!type) continue;
                 if (chunkTier > 0 && TREE_TYPES.has(type) && hash(tx, ty, seed + 63) < Math.min(0.8, chunkTier * 0.25)) type = 'dead';
                 const variant = Math.floor(hash(tx, ty, seed + 57) * 8);

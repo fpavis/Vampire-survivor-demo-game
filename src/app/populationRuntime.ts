@@ -4,6 +4,7 @@ import { POPULATION, Population, pickRosterEntry, type Camp } from '../core/worl
 import type { OverworldSource } from '../core/world/terrain';
 import { groupOf } from '../core/world/biomes';
 import { tierOf } from '../core/world/difficulty';
+import { CORRUPT_DENSITY } from '../core/world/corruption';
 
 const CHUNK = WORLD_CONFIG.tile * WORLD_CONFIG.chunkTiles;
 const SPAWN_DIST = CHUNK * 3.0;
@@ -142,9 +143,11 @@ export class PopulationRuntime {
       return true;
     });
     if (this.roamerTimer > 0) return;
-    this.roamerTimer = 100;
+    // the blight breeds wanderers: more of them, coming twice as often
+    const blighted = !!g.inBlight;
+    this.roamerTimer = blighted ? 50 : 100;
     const source = g.overworld;
-    const cap = 3 + Math.floor(g.zoneLevelNow / 12);
+    const cap = Math.round((3 + Math.floor(g.zoneLevelNow / 12)) * (blighted ? CORRUPT_DENSITY : 1));
     if (this.roamers.length >= cap) return;
     const pt = g.spawnPoint(true);
     if (!pt) return;

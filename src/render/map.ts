@@ -1,6 +1,7 @@
 // @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import { WORLD_CONFIG } from '../core/config';
-import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf } from '../core/world/biomes';
+import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf, isWaterBiome } from '../core/world/biomes';
+import { blightColor } from '../core/world/corruption';
 import { SURFACE_NUM } from '../core/world/surfaces';
 import { drawIcon } from './icons';
 import { FONT_UI, FONT_DISPLAY } from '../ui/fonts';
@@ -35,6 +36,7 @@ function paintChunk(chunk, fog) {
         else if (b === BIOME.BRIDGE) c = 0xc89a5a;
         else if (b === BIOME.PLATEAU) c = 0xb8c0a0;
         if (chunk.surf && chunk.surf[i] === ROAD) c = 0xd2b47c;
+        if (chunk.corrupt && chunk.corrupt[i] && !isWaterBiome(b)) c = blightColor(c, chunk.corrupt[i] / 255);
         img.data[i * 4] = (c >> 16) & 255;
         img.data[i * 4 + 1] = (c >> 8) & 255;
         img.data[i * 4 + 2] = c & 255;

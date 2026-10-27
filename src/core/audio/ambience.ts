@@ -2,7 +2,7 @@
 // ground under the hero makes. The runtime (app/audio.ts) synthesizes them; nothing here touches Web Audio.
 import { BIOME } from '../world/biomes';
 
-export type BedId = 'field' | 'forest' | 'desert' | 'shore' | 'mountain' | 'cave' | 'town' | 'dungeon' | 'sea' | 'silence';
+export type BedId = 'field' | 'forest' | 'desert' | 'shore' | 'mountain' | 'cave' | 'town' | 'dungeon' | 'sea' | 'corrupt' | 'silence';
 
 /** A looping band of filtered noise; `swell` slowly modulates its loudness (wind gusts, waves). */
 export interface NoiseBand { f: number; q: number; type: 'bandpass' | 'lowpass' | 'highpass'; vol: number; swell?: { rate: number; depth: number } }
@@ -34,14 +34,20 @@ export const BEDS: Record<BedId, BedDef> = {
   },
   town: { bands: [{ f: 700, q: 0.5, type: 'bandpass', vol: 0.035, swell: { rate: 0.2, depth: 0.4 } }], events: [bird(3000, [5, 11], 0.02)] },
   sea: { bands: [{ f: 380, q: 0.5, type: 'lowpass', vol: 0.1, swell: { rate: 0.08, depth: 0.9 } }, { f: 2400, q: 0.4, type: 'highpass', vol: 0.012 }], events: [] },
+  // the blight: a low, uneasy drone, a thin whine above it, and now and then something groaning far off
+  corrupt: {
+    bands: [{ f: 85, q: 0.8, type: 'lowpass', vol: 0.075, swell: { rate: 0.05, depth: 0.7 } }, { f: 1900, q: 3, type: 'bandpass', vol: 0.006, swell: { rate: 0.17, depth: 0.9 } }],
+    events: [{ wave: 'triangle', f: 150, f2: 105, t: 1.1, vol: 0.03, notes: 1, gap: 0, every: [7, 15] }]
+  },
   silence: { bands: [], events: [] }
 };
 
 /** The bed for where the hero is: a place (town, cave, dungeon) wins over the region; sailing is the open sea. */
-export function ambientFor(s: { group?: string | null; place?: string | null; dungeon?: boolean; sailing?: boolean; title?: boolean }): BedId {
+export function ambientFor(s: { group?: string | null; place?: string | null; dungeon?: boolean; sailing?: boolean; title?: boolean; corrupt?: boolean }): BedId {
   if (s.title) return 'silence';
   if (s.sailing) return 'sea';
   if (s.place) return s.dungeon ? 'dungeon' : s.place === 'city' ? 'town' : 'cave';
+  if (s.corrupt) return 'corrupt';
   switch (s.group) {
     case 'forest': case 'desert': case 'shore': case 'mountain': return s.group;
     default: return 'field';

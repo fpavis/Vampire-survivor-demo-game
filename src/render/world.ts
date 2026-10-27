@@ -13,6 +13,7 @@ import { addDecorItem } from '../core/world/terrain';
 import { boatBlocked } from '../core/world/towers';
 import { DECOR_LIGHTS } from './lighting';
 import { SURFACES, SURFACE_IDS, surfaceByNum, NAV_COST_BY_NUM } from '../core/world/surfaces';
+import { blightColor } from '../core/world/corruption';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -33,6 +34,7 @@ class ChunkData {
         this.size = CHUNK_SIZE;
         this.biomes = new Uint8Array(CT * CT);
         this.surf = new Uint8Array(CT * CT);     // surface ids (lava, swamp ...), 0 = none
+        this.corrupt = null;                     // how blighted each tile is (0..255), or null for a clean chunk
         this.hard = new Uint8Array(CT * CT);   // tiles that block navigation (walls, water, big landmarks)
         this.decor = [];
         this.solids = [];
@@ -149,6 +151,12 @@ export class World {
         }
         if (src.surfaceNumAt) {
             for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) chunk.surf[j * CT + i] = src.surfaceNumAt(cx * CT + i, cy * CT + j, chunk.biomes[j * CT + i]);
+        }
+        if (src.corruptionAt) {
+            for (let j = 0; j < CT; j++) for (let i = 0; i < CT; i++) {
+                const c = src.corruptionAt(cx * CT + i, cy * CT + j);
+                if (c > 0) (chunk.corrupt ||= new Uint8Array(CT * CT))[j * CT + i] = Math.round(c * 255);
+            }
         }
         if (this.removed.size && !src.bounded) {
             const gone = (d) => this.removed.has(nodeId(d.type, d.x, d.y));
@@ -496,6 +504,7 @@ export class World {
         if (!src.bounded && !isWaterBiome(biome) && src.tierAt) {
             const tier = src.tierAt(tx, ty);
             if (tier > 0) { const [tc, tk] = TIER_TINT[Math.min(tier, TIER_TINT.length - 1)]; color = mixColor(color, tc, tk); }
+            if (src.corruptionAt) color = blightColor(color, src.corruptionAt(tx, ty));
         }
         return color;
     }

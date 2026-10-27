@@ -20,7 +20,8 @@ const STYLES: Record<string, Style> = {
     cave: { count: 30, colors: [0xbfe8ff, 0xd8c8ff, 0xfff0c0], size: [1.2, 2.2], vx: [-0.12, 0.12], vy: [-0.1, 0.1], fall: -0.05, spin: 0, glow: true, shape: 'dot', alpha: 0.75, sway: 0.4 },
     ruins: { count: 22, colors: [0xffb060, 0xff8a3a], size: [1.2, 2], vx: [-0.1, 0.15], vy: [-0.1, 0.05], fall: -0.25, spin: 0, glow: true, shape: 'dot', alpha: 0.8, sway: 0.7 },
     city: { count: 0, colors: [0xffffff], size: [1, 1], vx: [0, 0], vy: [0, 0], fall: 0, spin: 0, glow: false, shape: 'dot', alpha: 0, sway: 0 },
-    ash: { count: 40, colors: [0x5a5058, 0x8a8088, 0xff7a3a], size: [1.5, 3], vx: [0.1, 0.5], vy: [0, 0.1], fall: 0.35, spin: 0.04, glow: false, shape: 'leaf', alpha: 0.75, sway: 0.4 }
+    ash: { count: 40, colors: [0x5a5058, 0x8a8088, 0xff7a3a], size: [1.5, 3], vx: [0.1, 0.5], vy: [0, 0.1], fall: 0.35, spin: 0.04, glow: false, shape: 'leaf', alpha: 0.75, sway: 0.4 },
+    blight: { count: 38, colors: [0x4a3a58, 0x7a5a9a, 0xb07ae0], size: [1.5, 3], vx: [-0.15, 0.3], vy: [-0.05, 0.1], fall: 0.22, spin: 0.03, glow: false, shape: 'leaf', alpha: 0.7, sway: 0.6 }
 };
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -51,8 +52,8 @@ export class Ambience {
     }
 
     /** region: overworld group or interior type; ash: dangerous far regions add falling ash */
-    setRegion(region: string, ash = false) {
-        const key = ash ? 'ash' : region;
+    setRegion(region: string, ash = false, blight = false) {
+        const key = blight ? 'blight' : ash ? 'ash' : region;
         if (key === this.key) return;
         this.key = key;
         this.style = STYLES[key] || null;

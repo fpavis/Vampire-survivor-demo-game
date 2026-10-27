@@ -851,6 +851,32 @@ function drawExitPortal(g) {
     glow(g, 0, -40, 44, 0xffd86a, 0.16);
 }
 
+/** The blight's own growth: a twisted black spire veined with violet light. */
+function drawBlightSpire(g, tall = 1) {
+    const h = 72 * tall;
+    shadow(g, 20, 6, 0.35);
+    opoly(g, [-15, 0, -7, -h * 0.5, -12, -h * 0.66, -1, -h, 7, -h * 0.6, 12, -h * 0.36, 16, 0], 0x2a2230, 2.2);
+    opoly(g, [-12, -h * 0.6, -22, -h * 0.74, -10, -h * 0.69], 0x2a2230, 1.6);
+    opoly(g, [9, -h * 0.42, 20, -h * 0.5, 11, -h * 0.34], 0x2a2230, 1.6);
+    g.lineStyle(2, 0xb06af0, 0.9);
+    g.moveTo(-6, -3); g.lineTo(-3, -h * 0.32); g.lineTo(1, -h * 0.55); g.lineTo(-1, -h * 0.82);
+    g.moveTo(7, -4); g.lineTo(5, -h * 0.26); g.lineTo(8, -h * 0.4);
+    noLine(g);
+    g.beginFill(0xe0b8ff, 0.8); g.drawCircle(1, -h * 0.55, 2.2); g.endFill();
+    glow(g, 0, -h * 0.5, 34, 0xb06af0, 0.13);
+}
+
+/** Violet crystals pushing up out of the dead ground. */
+function drawCorruptCrystal(g) {
+    shadow(g, 20, 6, 0.3);
+    opoly(g, [-13, 0, -18, -18, -10, -30, -4, -6], 0x6a2a98, 1.8);
+    opoly(g, [-5, 0, -3, -38, 5, -46, 9, -4], 0x9a4ad8, 1.8);
+    opoly(g, [6, 0, 12, -22, 18, -15, 15, 0], 0x7a3ab0, 1.8);
+    g.beginFill(0xf0d8ff, 0.65); g.drawPolygon([0, -36, 4, -42, 5, -12, 1, -10]); g.endFill();
+    g.beginFill(0xf0d8ff, 0.45); g.drawPolygon([-12, -24, -9, -28, -7, -10, -10, -9]); g.endFill();
+    glow(g, 0, -22, 32, 0xc08aff, 0.17);
+}
+
 /**
  * A vault gate. Facing the camera (`front`): two stone posts with an iron portcullis between them, raised when open.
  * Edge-on (the corridor runs left to right): a tall post with the bars seen from the side.
@@ -984,6 +1010,8 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     barrelcactus: D(36, 36, 8, 8, true, [drawBarrelCactus]),
     dead: D(48, 60, 10, 8, true, [drawDeadTree, (g) => drawDeadTree(g, 0x6a5a48)]),
     bones: D(44, 22, 6, 0, false, [drawBones]),
+    blightspire: D(48, 84, 12, 9, true, [(g) => drawBlightSpire(g, 1), (g) => drawBlightSpire(g, 0.78)]),
+    corruptcrystal: D(44, 54, 10, 8, true, [drawCorruptCrystal]),
     sandrock: D(56, 40, 12, 17, true, [drawSandRock]),
     spire: D(48, 76, 12, 13, true, [drawSpire]),
     dunebush: D(36, 24, 6, 0, false, [drawDuneBush]),

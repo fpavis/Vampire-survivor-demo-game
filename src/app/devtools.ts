@@ -11,7 +11,7 @@ import { ui as uiBridge } from '../ui/bridge';
 import { setSettings } from './settings';
 import { setAccess } from './access';
 import { engage } from '../core/ai/ai';
-import { BIOME } from '../core/world/biomes';
+import { BIOME, isWaterBiome } from '../core/world/biomes';
 import { iconDef } from '../core/icons/icons';
 
 declare const __BUILD_INFO__: string;
@@ -144,6 +144,16 @@ export function installDevTools(game: any): void {
       }
       return out.slice(0, n);
     },
+    /** the nearest corrupted ground (heart of a blight patch), searched outward from the party */
+    nearestBlight() {
+      const at = overworldAt();
+      const tx0 = Math.floor(at.x / 48), ty0 = Math.floor(at.y / 48);
+      for (let r = 8; r < 1600; r += 8) for (let a = 0; a < 6.283; a += Math.max(0.02, 6 / r)) {
+        const tx = Math.round(tx0 + Math.cos(a) * r), ty = Math.round(ty0 + Math.sin(a) * r);
+        if (game.overworld.corruptionAt(tx, ty) > 0.9 && !isWaterBiome(game.overworld.biomeAt(tx, ty))) return { tx, ty, x: (tx + 0.5) * 48, y: (ty + 0.5) * 48 };
+      }
+      return null;
+    },
     /** mark everything in the place the party is in as done (every floor, chest and the boss): it is cleared */
     clearPlace() {
       if (!ready() || game.mode !== 'interior' || !game.interiorPoi || game.interiorPoi.type === 'city') { game.ui.toast('Enter a cave, ruin or dungeon first'); return false; }
@@ -220,6 +230,13 @@ export function installDevTools(game: any): void {
     for (const q of tools.nearestPlaces('city', 12)) if (!game.session.cities.some((c: any) => c.id === q.id)) game.session.cities.push({ id: q.id, name: q.name, ex: q.ex, ey: q.ey });
     game.map.dirty = true; game.ui.toast('Nearby towns marked as visited');
   });
+  button(spawn, 'Go to corrupted land', () => {
+    if (!ready() || game.mode !== 'overworld') return;
+    const b = tools.nearestBlight();
+    if (!b) { game.ui.toast('No corrupted land within reach'); return; }
+    const p = game.state.player; p.wx = b.x; p.wy = b.y; game.cam.x = b.x; game.cam.y = b.y; game.lastFogTx = null;
+  });
+  for (const kind of ['warband', 'swarm', 'hunters']) button(spawn, `Event: ${kind}`, () => { if (ready() && game.mode === 'overworld') game.worldEvents.start(kind); });
   button(spawn, 'Respawn all camps', () => { game.session.clearedCamps = {}; game.ui.toast('Camps will respawn'); });
   button(spawn, 'Kill all nearby', () => { for (const e of [...game.state.enemies]) if (!e.dead) game.damageEnemy(e, 1e9, { noCrit: true }); });
 

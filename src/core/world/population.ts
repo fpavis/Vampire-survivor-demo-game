@@ -2,6 +2,7 @@ import { WORLD_CONFIG } from '../config';
 import { hash } from './noise';
 import { BIOME, ROSTERS, WARLORDS, groupOf, isSolidBiome, isWaterBiome, type RosterEntry } from './biomes';
 import type { OverworldSource } from './terrain';
+import { CORRUPT_DENSITY, isCorrupt } from './corruption';
 import { GROUP_LEVEL_OFFSET, tierOf, zoneLevel } from './difficulty';
 
 const T = WORLD_CONFIG.tile;
@@ -74,10 +75,14 @@ export class Population {
 
     if (dist >= POPULATION.noCampRadius) {
       const level = this.source.levelAt(Math.floor(centerTx), Math.floor(centerTy));
-      const chance = Math.min(0.62, 0.28 + 0.008 * level);
-      const count = hash(cx, cy, seed + 4001) < chance ? (level > 10 && hash(cx, cy, seed + 4002) < chance * 0.3 ? 2 : 1) : 0;
+      // the blight breeds monsters: camps come far more often there (and a third one can share the chunk)
+      const blighted = isCorrupt(this.source.corruptionAt(Math.floor(centerTx), Math.floor(centerTy)));
+      const base = Math.min(0.62, 0.28 + 0.008 * level);
+      const chance = blighted ? Math.min(0.9, base * CORRUPT_DENSITY) : base;
+      let count = hash(cx, cy, seed + 4001) < chance ? (level > 10 && hash(cx, cy, seed + 4002) < chance * 0.3 ? 2 : 1) : 0;
+      if (blighted && count && hash(cx, cy, seed + 4003) < 0.55) count++;
       for (let i = 0; i < count; i++) {
-        const camp = this.makeCamp(cx, cy, i);
+        const camp = this.makeCamp(cx, cy, i, blighted);
         if (camp) out.push(camp);
       }
     }
@@ -87,7 +92,7 @@ export class Population {
     return out;
   }
 
-  private makeCamp(cx: number, cy: number, index: number): Camp | null {
+  private makeCamp(cx: number, cy: number, index: number, blighted = false): Camp | null {
     const seed = this.seed;
     for (let attempt = 0; attempt < 8; attempt++) {
       const tx = cx * CT + 2 + Math.floor(hash(cx, cy, seed + 4100 + index * 31 + attempt) * (CT - 4));
@@ -102,7 +107,7 @@ export class Population {
 
       const primary = pickRosterEntry(group, level, h(1));
       const [lo, hi] = primary.group ?? [2, 4];
-      let n = lo + Math.floor(h(2) * (hi - lo + 1)) + Math.floor(level / 20);
+      let n = lo + Math.floor(h(2) * (hi - lo + 1)) + Math.floor(level / 20) + (blighted ? 1 : 0);
       n = Math.min(10, Math.max(1, n));
       const members: CampMember[] = [];
       const eliteChance = 0.05 + 0.01 * tier;

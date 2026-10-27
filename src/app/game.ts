@@ -54,7 +54,9 @@ import { InputSystem } from './input';
 import { DungeonSystem } from './dungeons';
 import { TravelSystem } from './travel';
 import { LookSystem } from './look';
+import { WorldEventSystem } from './worldEvents';
 import { snapToCell } from '../core/render/look';
+import { isCorrupt } from '../core/world/corruption';
 import { townNodeId } from '../core/world/travel';
 import { QuestSystem } from './quests';
 import { TipSystem } from './tips';
@@ -124,6 +126,7 @@ class Game {
         this.sea = new SeaSystem(this);
         this.dungeons = new DungeonSystem(this);
         this.travel = new TravelSystem(this);
+        this.worldEvents = new WorldEventSystem(this);
         this.world.extraPois = (cx, cy) => this.dungeons.poisForChunk(cx, cy);   // plateau and island entrances
         this.floor = 0;
         this.boat = null;           // { dockId } while sailing
@@ -577,6 +580,7 @@ class Game {
         this.interactables = [];
         this.critters.reset();
         this.hazards.reset();
+        this.worldEvents.cancel();
         this.dungeons.clearFeatures();
         this.vaults.clear();
         this.spells.clearProjectiles();
@@ -636,6 +640,9 @@ class Game {
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
         this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
+        this.worldEvents.reset();
+        this.inBlight = null;
+        this.zoneCorrupt = 0;
         this.gemStash = null;
         this.visited = {};
         this.fog = new FogOfWar();
@@ -847,7 +854,12 @@ class Game {
         if (this.mode !== 'overworld' || !this.state.player || !this.overworld) return 0xffffff;
         const p = this.state.player;
         const tier = tierOf(this.overworld.levelAt(Math.floor(p.wx / T), Math.floor(p.wy / T)));
-        return [0xffffff, 0xf0e6f4, 0xdcd4cc, 0xb0bcdc, 0xd4a8a8, 0xb0a0c8][Math.min(tier, 5)];
+        const day = [0xffffff, 0xf0e6f4, 0xdcd4cc, 0xb0bcdc, 0xd4a8a8, 0xb0a0c8][Math.min(tier, 5)];
+        // the blight dims the day and turns it violet
+        const c = this.zoneCorrupt || 0;
+        if (c <= 0) return day;
+        const mix = (sh) => Math.round(((day >> sh) & 255) * (1 - 0.45 * c) + ((0xa090c8 >> sh) & 255) * 0.45 * c * 0.85);
+        return (mix(16) << 16) | (mix(8) << 8) | mix(0);
     }
 
     // gather light sources near the camera and render the light map (called once per rendered frame)
@@ -926,6 +938,7 @@ class Game {
         this.updateFog();
         this.surfaces.update(delta);
         this.sites.update(delta);
+        this.worldEvents.update(delta);
         this.towers.update(delta);
         this.sea.update(delta);
         this.dungeons.update(delta);
@@ -1329,9 +1342,9 @@ class Game {
         const boss = s.enemies.some((e) => e.isBoss && !e.dead && Math.abs(e.wx - p.wx) < 1100 && Math.abs(e.wy - p.wy) < 900);
         const inside = this.mode === 'interior' && this.interiorPoi;
         const id = pickTrack({ boss, place: inside ? this.interiorPoi.type : null, dungeon: !!(inside && this.interior && this.interior.dungeon), sailing: !!this.boat, group: this.zoneGroup });
-        a.music.setTrack(id, !inside && (this.zoneTier || 0) >= 2);
+        a.music.setTrack(id, !inside && ((this.zoneTier || 0) >= 2 || !!this.inBlight));
         a.music.setIntensity(boss ? 1 : this.musicHeat);
-        a.ambience.setBed(ambientFor({ group: this.zoneGroup, place: inside ? this.interiorPoi.type : null, dungeon: !!(inside && this.interior && this.interior.dungeon), sailing: !!this.boat }));
+        a.ambience.setBed(ambientFor({ group: this.zoneGroup, place: inside ? this.interiorPoi.type : null, dungeon: !!(inside && this.interior && this.interior.dungeon), sailing: !!this.boat, corrupt: !inside && !!this.inBlight }));
         if (s.health > 0 && s.health / s.maxHealth < 0.25) a.play('heartbeat');
     }
 
@@ -1347,13 +1360,31 @@ class Game {
         this.zoneLevelNow = level;
         this.zoneTier = tier;
         this.zoneThreat = threatBand(level, this.state.level);
+        this.zoneCorrupt = this.overworld.corruptionAt(tx, ty);
+        const blighted = isCorrupt(this.zoneCorrupt);
         this.lighting.setAmbient(this.regionAmbient(), false);
-        this.ambience.setRegion(group, tier >= 2);
+        this.ambience.setRegion(group, tier >= 2, blighted);
         const regionId = this.overworld.regionId(tx, ty);
         const region = this.overworld.region(regionId);
         this.zoneIcon = info.icon;
         this.regionName = region.name;
-        this.zoneLabel = `${region.name} · ${info.name} · Lv ${level}`;
+        this.zoneLabel = `${blighted ? 'Corrupted ' : ''}${region.name} · ${info.name} · Lv ${level}`;
+        // the first reading of a run or a load only notes where the party is; stepping in later is announced
+        if (this.inBlight === null) this.inBlight = blighted;
+        else if (blighted !== this.inBlight) {
+            this.inBlight = blighted;
+            if (blighted) {
+                this.ui.showZone(`CORRUPTED ${region.name.toUpperCase()}`, 'skull', 0xc08aff);
+                // the first time: a discovery, and a word on what it means
+                const flags = this.quests.state.flags;
+                if (!flags['seen.blight']) {
+                    flags['seen.blight'] = true;
+                    this.ui.banner('CORRUPTED LANDS', 0xc08aff, 'warning');
+                    this.audio.stinger('stingDiscover');
+                    this.ui.toast('The blight breeds monsters: camps and wanderers are far more common here', 'skull');
+                }
+            }
+        }
         const newRegion = regionId !== this.regionId;
         if (newRegion) {
             this.regionId = regionId;

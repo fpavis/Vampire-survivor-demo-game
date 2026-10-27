@@ -630,6 +630,76 @@ if (want('look')) {
   await goTo(0, 0);
 }
 
+// ---- 10g: the corrupted lands, and monsters that come looking for the party
+const run = (n) => ev((n) => { const g = window.game, p = g.state.player, x = p.wx, y = p.wy; for (let i = 0; i < n; i++) { p.wx = x; p.wy = y; g.gameLoop(1); } }, n);
+const logHas = (re) => ev((src) => window.__dev.ui.log.value.some((l) => new RegExp(src).test(l.text)), re.source);
+if (want('corrupt')) {
+  const b = await ev(() => window.__dev.tools.nearestBlight());
+  check('there is corrupted land within reach of the start', !!b, JSON.stringify(b));
+  if (b) {
+    await run(25);                 // the game has read the zone where the party stands, outside the blight
+    await goTo(b.x, b.y);
+    await run(130);
+    const st = await ev(() => {
+      const g = window.game, T = 48, p = g.state.player, CT = g.world.getChunk(0, 0).size / T;
+      const cx = Math.floor(p.wx / T / CT), cy = Math.floor(p.wy / T / CT);
+      let spires = 0, trees = 0;
+      for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) for (const d of g.world.getChunk(x, y).decor) {
+        if (d.type === 'blightspire' || d.type === 'corruptcrystal') spires++;
+        if (['appletree', 'birch', 'oak', 'pine', 'snowpine', 'palm'].includes(d.type) && g.overworld.corruptionAt(Math.floor(d.x / T), Math.floor(d.y / T)) > 0.5) trees++;
+      }
+      return {
+        blight: g.inBlight, label: g.zoneLabel, seen: !!g.quests.state.flags['seen.blight'], chunk: !!g.world.getChunk(cx, cy).corrupt,
+        spires, trees, bed: g.audio.ambience.want, grade: +g.look.worldFx.uniforms.uTint2A.toFixed(3), ambience: g.ambience.key
+      };
+    });
+    check('stepping into the blight names it, and the first time is a discovery', st.blight && /^Corrupted /.test(st.label) && st.seen && (await logHas(/CORRUPTED LANDS/)), JSON.stringify(st));
+    check('the ground there is blighted: its own spires and crystals, no living trees', st.chunk && st.spires > 0 && st.trees === 0, JSON.stringify(st));
+    check('it sounds and looks wrong: its own ambience, violet ash and a drained, violet grade', st.bed === 'corrupt' && st.ambience === 'blight' && st.grade > 0.05, JSON.stringify(st));
+  }
+}
+
+if (want('events')) {
+  const b = await ev(() => window.__dev.tools.nearestBlight());
+  await goTo(b.x, b.y);
+  await run(30);
+  // near a town an event never starts
+  const town = await ev(() => window.__dev.tools.nearestPlaces('city', 1)[0]);
+  const near = await ev((q) => { const g = window.game, p = g.state.player, x0 = p.wx, y0 = p.wy; p.wx = q.ex; p.wy = q.ey + 80; const c = g.worldEvents.context(); p.wx = x0; p.wy = y0; return c.tilesFromTown; }, town);
+  check('the rules see a town close by (no events there)', near < 24, String(near));
+  const ws = await ev(() => {
+    const g = window.game, p = g.state.player;
+    for (const e of [...g.state.enemies]) { e.dead = true; e.silent = true; } g.reap();
+    const a = g.worldEvents.start('warband');
+    const vw = g.viewW / 2, vh = g.viewH / 2;
+    return { n: a.members.length, off: a.members.every((e) => Math.abs(e.wx - p.wx) > vw - 40 || Math.abs(e.wy - p.wy) > vh - 40), engaged: a.members.every((e) => e.shell === 'engaged'), marker: g.map.markers.some((m) => m.event), elites: a.members.filter((e) => e.elite).length };
+  });
+  check('a warband appears off screen, already on its way, with a leader and a marker on the map', ws.n >= 6 && ws.off && ws.engaged && ws.elites === 1 && ws.marker && (await logHas(/WARBAND APPROACHES FROM THE/)), JSON.stringify(ws));
+  const won = await ev(() => {
+    const g = window.game, coins0 = g.state.gems.filter((x) => x.kind === 'coin').length;
+    for (const e of g.worldEvents.active.members) if (!e.dead) { e.untargetable = false; g.damageEnemy(e, 1e9, { noCrit: true }); }
+    // big kills hold the action for a moment (hit-stop): step until the event has noticed
+    for (let i = 0; i < 120 && g.worldEvents.active; i++) g.gameLoop(1);
+    return { active: !!g.worldEvents.active, coins: g.state.gems.filter((x) => x.kind === 'coin').length - coins0, marker: g.map.markers.some((m) => m.event) };
+  });
+  check('beating it pays out and clears the marker', !won.active && won.coins >= 8 && !won.marker && (await logHas(/IS BEATEN/)), JSON.stringify(won));
+  const swarm = await ev(() => {
+    const g = window.game, a = g.worldEvents.start('swarm'), first = a.members.length, pending = a.pending.length;
+    for (let i = 0; i < 900 && a.pending.length; i++) g.gameLoop(1);
+    return { first, pending, after: a.members.length };
+  });
+  check('a swarm comes in two groups', swarm.pending > 0 && swarm.after === swarm.first + swarm.pending, JSON.stringify(swarm));
+  const lost = await ev(() => {
+    const g = window.game, p = g.state.player;
+    p.wx += 3000; g.cam.x = p.wx;
+    g.world.update(p.wx, p.wy, g.viewW, g.viewH, true);
+    for (let i = 0; i < 300 && g.worldEvents.active; i++) g.gameLoop(1);
+    return { active: !!g.worldEvents.active, left: g.state.enemies.filter((e) => e.eventId && !e.dead).length };
+  });
+  check('running far enough away loses them', !lost.active && lost.left === 0 && (await logHas(/lost your trail/)), JSON.stringify(lost));
+  await goTo(0, 0);
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 process.kill(-preview.pid);

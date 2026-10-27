@@ -22,6 +22,7 @@ export class LookSystem {
         this.worldFx.resolution = 0;
         this.post.resolution = 0;
         this.look = { ...NO_LOOK };
+        this.blight = 0;            // how far into corrupted land the party stands, eased (0..1)
         this.cell = 0;
         this.t = 0;
         this.held = false;
@@ -80,8 +81,14 @@ export class LookSystem {
         u.uTime = this.t;
         hexToVec(L.tint, u.uTint);
         u.uTintA = L.tintAlpha;
-        u.uDesat = L.desat;
         u.uShimmer = L.shimmer;
+        // corrupted lands: the whole picture drained and leaning violet, more so toward the heart of the blight
+        const blight = g.mode === 'overworld' && g.state.player ? (g.zoneCorrupt || 0) : 0;
+        this.blight += (blight - this.blight) * Math.min(1, 0.03 * delta);
+        if (this.blight < 0.002) this.blight = 0;
+        hexToVec(0x6a3a9a, u.uTint2);
+        u.uTint2A = 0.13 * this.blight;
+        u.uDesat = Math.max(L.desat, 0.22 * this.blight);
 
         const p = this.post.uniforms, grade = GRADES[settings.colorGrade] || GRADES.none;
         p.uMode = POST_MODE[settings.postFx] || 0;
