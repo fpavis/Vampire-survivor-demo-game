@@ -13,6 +13,11 @@ export interface ObjView { text: string; progress: string; done: boolean }
 export interface QuestView {
   id: string; title: string; summary: string; kind: string; giver: string; level: number;
   ready: boolean; payable: boolean; tracked: boolean; reward: string; objectives: ObjView[];
+  back?: string;                         // where it is handed in
+}
+/** What a town thinks of the party. */
+export interface StandingView {
+  town: string; tier: string; n: number; next: { name: string; at: number } | null; bonus: number; discount: number; freeInn: boolean;
 }
 export interface QuestsView {
   begun: boolean;
@@ -21,6 +26,7 @@ export interface QuestsView {
   main: QuestView | null;
   bounties: QuestView[];
   done: number;
+  standing?: StandingView[];
   lords: { name: string; title: string; group: string; dead: boolean }[];
   sovereign: { name: string; title: string; dead: boolean };
 }
@@ -28,6 +34,7 @@ export interface BoardView {
   town: string; nextIn: number;
   offers: { slot: number; title: string; summary: string; level: number; reward: string; lines: string[]; taken: boolean }[];
   mine: QuestView[];
+  standing?: StandingView;
 }
 export interface HealQuoteView { id: string; dead: boolean; missing: number; cost: number }
 
@@ -62,8 +69,8 @@ export const ui = {
   sailing: signal(false),
   shopOpen: signal(false),
   innOpen: signal(false),
-  shop: signal<{ town: string; nextIn: number; items: ({ kind: 'spell'; tpl: string; price: number; sold: boolean } | { kind: 'rune'; id: string; price: number; sold: boolean })[] } | null>(null),
-  dialog: signal<{ speaker: string; icon: string; text: string; choices?: { text: string; index: number }[]; last?: boolean; script?: boolean } | null>(null),
+  shop: signal<{ town: string; nextIn: number; discount?: number; items: ({ kind: 'spell'; tpl: string; price: number; sold: boolean } | { kind: 'rune'; id: string; price: number; sold: boolean })[] } | null>(null),
+  dialog: signal<{ speaker: string; icon: string; text: string; choices?: { text: string; index: number }[]; last?: boolean; script?: boolean; job?: boolean } | null>(null),
   quests: signal<QuestsView | null>(null),
   tracker: signal<QuestView | null>(null),
   board: signal<BoardView | null>(null),

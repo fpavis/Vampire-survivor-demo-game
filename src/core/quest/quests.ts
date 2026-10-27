@@ -25,7 +25,9 @@ export type ObjectiveDef =
   | { type: 'gather'; resource: Resource; count: number; text?: string }
   | { type: 'deliver'; resource: Resource; count: number; text?: string }
   | { type: 'survive'; seconds: number; group?: string; text?: string }
-  | { type: 'build'; kind: string; text?: string };
+  | { type: 'build'; kind: string; text?: string }
+  | { type: 'fetch'; item: string; target: PlaceTarget; text?: string }       // pick something up in a place, bring it back
+  | { type: 'escort'; npc: string; target: PlaceTarget; text?: string };      // walk someone safely to a place
 
 export interface Rewards {
   gold?: number;
@@ -39,8 +41,10 @@ export interface QuestDef {
   id: string;
   title: string;
   summary: string;
-  kind: 'main' | 'bounty';
-  giver: string;                         // 'elder' | 'board'
+  kind: 'main' | 'bounty' | 'job';       // job: a townsperson's or an innkeeper's
+  giver: string;                         // 'elder' | 'board' | 'townsfolk' | 'inn'
+  town?: string;                         // the town a job belongs to (where it is handed in)
+  npc?: number;                          // the townsperson who asked (an index into the town's people)
   chapter?: string;
   level?: number;                        // recommended hero level
   prerequisites?: { quests?: string[]; flags?: string[]; minLevel?: number };
@@ -62,9 +66,11 @@ export interface QuestState {
   flags: Record<string, number | boolean>;
   tracked: string | null;
   bounties: Record<string, { epoch: number; taken: string[] }>;   // per board: which rotation and which slots were accepted
+  rep?: Record<string, number>;          // per town: bounties and jobs done there (reputation)
+  rumours?: Record<string, { epoch: number; place: string; marked?: boolean }>;   // per town: the place its innkeeper named this rotation
 }
 
-export const newQuestState = (): QuestState => ({ active: {}, done: [], flags: {}, tracked: null, bounties: {} });
+export const newQuestState = (): QuestState => ({ active: {}, done: [], flags: {}, tracked: null, bounties: {}, rep: {}, rumours: {} });
 
 export interface PlaceFacts { id: string; type: string; group: string; dungeon?: { realm: string } }
 
@@ -76,7 +82,9 @@ export type QuestEvent =
   | { type: 'clear'; poi: PlaceFacts }
   | { type: 'gather'; resource: Resource; count: number }
   | { type: 'survive'; seconds: number; group: string }
-  | { type: 'build'; kind: string };
+  | { type: 'build'; kind: string }
+  | { type: 'fetch'; item: string }
+  | { type: 'arrive'; npc: string; poi: PlaceFacts };
 
 export interface QuestUpdate { quest: string; index: number; before: number; after: number; objectiveDone: boolean; ready: boolean }
 
@@ -117,6 +125,8 @@ function gain(o: ObjectiveDef, target: string | null, ev: QuestEvent): number {
     case 'gather': return ev.type === 'gather' && ev.resource === o.resource ? ev.count : 0;
     case 'survive': return ev.type === 'survive' && (!o.group || ev.group === o.group) ? ev.seconds : 0;
     case 'build': return ev.type === 'build' && ev.kind === o.kind ? 1 : 0;
+    case 'fetch': return ev.type === 'fetch' && ev.item === o.item ? 1 : 0;
+    case 'escort': return ev.type === 'arrive' && ev.npc === o.npc && placeMatches(o.target, ev.poi, target) ? 1 : 0;
     default: return 0;   // deliver is settled at turn-in
   }
 }
@@ -176,7 +186,7 @@ export function startQuest(state: QuestState, def: QuestDef, now: number, ctx: S
     progress: def.objectives.map(() => 0),
     targets: def.objectives.map((o) => ('target' in o ? resolve(o.target) : null)),
     startedAt: now,
-    ...(def.kind === 'bounty' ? { def } : {})
+    ...(def.kind !== 'main' ? { def } : {})
   };
   if (!state.tracked) state.tracked = def.id;
   return true;
@@ -238,8 +248,39 @@ export function describeObjective(o: ObjectiveDef, names: TextNames, resolved: s
     case 'deliver': return `Bring ${o.count} ${o.resource}`;
     case 'survive': return `Survive ${o.seconds} seconds${o.group ? ` in the ${GROUP_NAMES[o.group] ?? o.group}` : ' out in the world'}`;
     case 'build': return `Build a ${o.kind === 'climb' ? 'climbing tower' : o.kind === 'spire' ? 'spire' : o.kind}`;
+    case 'fetch': return `Recover ${o.item} from ${names.place(o.target, resolved)}`;
+    case 'escort': return `Escort ${o.npc} to ${names.place(o.target, resolved)}`;
   }
 }
+
+// ---------------------------------------------------------------- reputation
+export interface RepTier { name: string; min: number; bonus: number; discount: number; freeInn: boolean }
+/** What a town thinks of the party, by bounties and jobs done there: better pay, better prices, a free bed. */
+export const REP_TIERS: RepTier[] = [
+  { name: 'Stranger', min: 0, bonus: 0, discount: 0, freeInn: false },
+  { name: 'Known', min: 3, bonus: 0.1, discount: 0, freeInn: false },
+  { name: 'Trusted', min: 8, bonus: 0.2, discount: 0.05, freeInn: false },
+  { name: 'Hero', min: 15, bonus: 0.3, discount: 0.1, freeInn: true }
+];
+export const repOf = (state: QuestState, town: string): number => state.rep?.[town] ?? 0;
+export function repTier(n: number): RepTier & { index: number; next: RepTier | null } {
+  let i = 0;
+  while (i + 1 < REP_TIERS.length && n >= REP_TIERS[i + 1].min) i++;
+  return { ...REP_TIERS[i], index: i, next: REP_TIERS[i + 1] ?? null };
+}
+export function addRep(state: QuestState, town: string, n = 1): number {
+  if (!state.rep) state.rep = {};
+  state.rep[town] = (state.rep[town] ?? 0) + n;
+  return state.rep[town];
+}
+/** The town a side quest was given in: a bounty's board, or a job's town. Story quests belong to no town. */
+export function townOfQuest(id: string, def?: QuestDef): string | null {
+  if (def?.town) return def.town;
+  if (id.startsWith('b:')) return id.split(':')[1] ?? null;
+  return null;
+}
+/** Gold rewards raised by the town's regard for the party. */
+export const withRep = (r: Rewards, tier: RepTier): Rewards => (r.gold && tier.bonus ? { ...r, gold: Math.round(r.gold * (1 + tier.bonus)) } : r);
 
 /** "7 / 20" for counted objectives; empty once done or when there is nothing to count. */
 export function progressText(o: ObjectiveDef, value: number): string {

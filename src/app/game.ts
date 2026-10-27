@@ -60,6 +60,7 @@ import { snapToCell } from '../core/render/look';
 import { isCorrupt } from '../core/world/corruption';
 import { townNodeId } from '../core/world/travel';
 import { QuestSystem } from './quests';
+import { EscortSystem } from './escort';
 import { TipSystem } from './tips';
 import { TrainingDummy } from './dummy';
 import { StoryDirector } from './story';
@@ -170,6 +171,7 @@ class Game {
         this.events.on('EnemyKilled', (e) => this.codexFound('monsters', e.type));
         this.lastBackupAt = {};
         this.quests = new QuestSystem(this);
+        this.escort = new EscortSystem(this);
         this.tips = new TipSystem(this);
         this.dummy = new TrainingDummy(this);
         this.story = new StoryDirector(this);
@@ -945,6 +947,7 @@ class Game {
         this.dungeons.update(delta);
         this.vaults.update(delta);
         this.quests.update(delta);
+        this.escort.update(delta);
         this.tips.update(delta);
         this.story.update();
         this.updateShakers(delta);
@@ -1149,6 +1152,8 @@ class Game {
             if (!list.some((e) => !e.dead && !e.minion)) {
                 this.interiorState.cleared = true;
                 this.ui.banner(this.interior && this.interior.dungeon ? 'FLOOR CLEARED!' : 'PLACE CLEARED!', 0xffd84a);
+                const poi = this.interiorPoi;
+                if (poi && !this.interior.dungeon && poi.type !== 'city') this.events.emit('PlaceCleared', { id: poi.id, name: poi.name, type: poi.type, group: poi.group });
                 this.dropGem(p.wx + 30, p.wy + 20, 0, 'heart');
                 const lvl = this.placeLevel();
                 for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + lvl * 2, 'gem', lvl);
@@ -1453,6 +1458,7 @@ class Game {
     interiorCandidates(add) {
         for (const it of this.interactables) {
             if (it.kind === 'chest' && !it.opened) add({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64, 70);
+            if (it.kind === 'relic' && !it.taken) add({ kind: 'relic', it, text: `[E]  Pick up ${it.item}` }, it.x, it.y, 64, 80);
             if (it.npc) add({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper', elder: '[E]  Speak with the Elder', board: '[E]  Read the bounty board' }[it.kind] }, it.x, it.y, 90, 150);
         }
         for (const c of this.critters.list) {
@@ -1529,6 +1535,7 @@ class Game {
             case 'up': this.changeFloor(-1); break;
             case 'down': if (t.sealed) { this.audio.play('deny'); this.ui.toast('Defeat the guardians first: the seal holds until they fall'); } else this.changeFloor(1); break;
             case 'chest': this.openChest(t.it); break;
+            case 'relic': this.quests.pickRelic(t.it); break;
             case 'vault': this.vaults.interact(t); break;
             case 'gather': this.gatherHit(t.node); break;
             case 'sign': this.readSign(t.sign); break;
@@ -1705,7 +1712,9 @@ class Game {
             else if (!place.bossChestOpened) this.dungeons.spawnBossChest(src.boss.x, src.boss.y);
             if (place.bossDead) this.dungeons.spawnExitPortal(src);
         }
-        src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
+        src.npcs.forEach((n, i) => { this.critters.spawnVillager(n.x, n.y, n.hue).slot = i; });
+        if (poi.type === 'city') this.quests.refreshMark();
+        else this.quests.placeRelics(src, poi);
         this.vaults.setup(src, st);
     }
 
@@ -1811,7 +1820,9 @@ class Game {
         uiBridge.shop.value = {
             town: poi.name,
             nextIn: Math.ceil(STOCK_EPOCH_SECONDS - (this.state.time % STOCK_EPOCH_SECONDS)),
-            items: stockFor(poi.seed, epoch, level).map((it, i) => ({ ...it, sold: sold.includes(i) }))
+            // a town that trusts the party takes a little off
+            discount: this.quests.discountHere(),
+            items: stockFor(poi.seed, epoch, level).map((it, i) => ({ ...it, price: Math.max(1, Math.round(it.price * (1 - this.quests.discountHere()))), sold: sold.includes(i) }))
         };
     }
 
@@ -1839,6 +1850,7 @@ class Game {
 
     // ---- inn
     innQuote() {
+        if (this.quests.freeInnHere()) return 0;          // the Hero of the town never pays for a bed
         this.party.commit();
         const hs = this.party.heroes;
         return innCost(hs.reduce((a, h) => a + h.level, 0) / hs.length);
@@ -1860,6 +1872,7 @@ class Game {
 
     // ---- townsfolk
     talkToVillager(c) {
+        if (this.quests.talkToVillager(c)) return;      // the one with a job
         const poi = this.interiorPoi;
         const dirs = ['north', 'east', 'south', 'west'];
         const seed = ((poi ? poi.seed : 1) ^ Math.imul(Math.round(c.home ? c.home.x : c.wx) + 7, 7919) ^ Math.round(c.home ? c.home.y : c.wy)) | 0;

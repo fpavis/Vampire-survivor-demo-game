@@ -209,11 +209,15 @@ export class Critters {
             const c = this.list[i];
             const dx = p.wx - c.wx, dy = p.wy - c.wy;
             const d = Math.hypot(dx, dy) || 1;
-            if (!c.home && d > 1400) { EntityManager.cleanup(c); this.list.splice(i, 1); continue; }
+            if (!c.home && !c.follow && d > 1400) { EntityManager.cleanup(c); this.list.splice(i, 1); continue; }
 
             c.phase += 0.12 * delta;
             let vx = 0, vy = 0, spd = 0;
-            if (!c.tame && d < c.flee) {
+            if (c.follow) {
+                // a traveller in the party's care walks after the hero, faster the further behind, and waits when left far behind
+                if (d > 70 && d < 900) { vx = dx / d; vy = dy / d; spd = Math.min(6, 1 + (d - 70) * 0.025); }
+                c.tx = c.wx; c.ty = c.wy;
+            } else if (!c.tame && d < c.flee) {
                 vx = -dx / d; vy = -dy / d; spd = c.speed * 2.6;
                 c.wait = 0;
             } else {

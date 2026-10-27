@@ -250,6 +250,12 @@ html[data-input="pad"] .vs-hint-key{display:none}
 
 .vs-journal{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
 .vs-board{left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-standing{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;margin:6px 0;color:#ffd98a}
+.vs-standing small{color:var(--c-muted)}
+.vs-strow{display:flex;justify-content:space-between;gap:10px;align-items:baseline;border-bottom:1px solid var(--c-line);padding:2px 0}
+.vs-strow .vs-standing{margin:0}
+.vs-rumour .vs-acts{display:flex;flex-direction:column;gap:4px}
+.vs-inn{max-height:calc(100vh - 24px);overflow:auto}
 .vs-quest{background:#131a30;border:2px solid var(--c-line);border-radius:12px;padding:9px 11px;margin:6px 0}
 .vs-quest.tracked{border-color:#5a8aff}
 .vs-quest.ready{border-color:#7be07b}

@@ -1,4 +1,4 @@
-import { ui, type QuestView } from './bridge';
+import { ui, type QuestView, type StandingView } from './bridge';
 import { glyph } from './hints';
 import { Icon } from './Icon';
 import { useState } from 'preact/hooks';
@@ -23,14 +23,26 @@ function Objectives({ q }: { q: QuestView }) {
   );
 }
 
-function QuestCard({ q, children }: { q: QuestView; children?: any }) {
+export function QuestCard({ q, children }: { q: QuestView; children?: any }) {
+  const from = q.giver === 'townsfolk' ? 'townsfolk' : q.giver === 'inn' ? 'rumour' : '';
   return (
     <div class={`vs-quest${q.ready ? ' ready' : ''}${q.tracked ? ' tracked' : ''}`}>
-      <div class="hd"><b>{q.title}</b>{q.level > 0 && <span class="vs-tag">Lv {q.level}</span>}{q.ready && <span class="vs-tag ok">ready</span>}</div>
+      <div class="hd"><b>{q.title}</b>{q.level > 0 && <span class="vs-tag">Lv {q.level}</span>}{from && <span class="vs-tag">{from}</span>}{q.ready && <span class="vs-tag ok">ready</span>}</div>
       <div class="sub">{q.summary}</div>
       <Objectives q={q} />
       {q.reward && <div class="rw">Reward: {q.reward}</div>}
       <div class="vs-acts">{children}</div>
+    </div>
+  );
+}
+
+/** "Known · 4 of 8 to Trusted · bounties +10%": a town's regard for the party. */
+export function Standing({ s }: { s: StandingView }) {
+  const perks = [s.bonus ? `bounties +${Math.round(s.bonus * 100)}%` : '', s.discount ? `${Math.round(s.discount * 100)}% off at the market` : '', s.freeInn ? 'a free bed' : ''].filter(Boolean);
+  return (
+    <div class="vs-standing" data-standing={s.town}>
+      <Icon name="fleur" /> <b>{s.tier}</b>
+      <small>{s.next ? `${s.n} of ${s.next.at} to ${s.next.name}` : `${s.n} done`}{perks.length ? ` · ${perks.join(' · ')}` : ''}</small>
     </div>
   );
 }
@@ -183,14 +195,20 @@ export function JournalPage() {
           <div class="rw">{v.next.status === 'offer' ? 'Speak with the Elder in any town to take this on.' : 'Not available yet: grow stronger first.'}</div>
         </div>
       )}
-      <div class="vs-sec">BOUNTIES ({v.bounties.length})</div>
-      {!v.bounties.length && <div class="vs-empty">None taken. Bounty boards stand in every town.</div>}
+      <div class="vs-sec">BOUNTIES AND JOBS ({v.bounties.length})</div>
+      {!v.bounties.length && <div class="vs-empty">None taken. Bounty boards stand in every town; townsfolk and innkeepers have work too.</div>}
       {v.bounties.map((q) => (
         <QuestCard key={q.id} q={q}>
           <button class="vs-btn" onClick={() => game.quests.track(q.id)}><Icon name={q.tracked ? 'radio-on' : 'radio-off'} /> {q.tracked ? 'Tracking' : 'Track'}</button>
           <button class="vs-btn" onClick={() => game.quests.abandon(q.id)}>Drop</button>
         </QuestCard>
       ))}
+      {!!v.standing?.length && (
+        <>
+          <div class="vs-sec">STANDING</div>
+          {v.standing.map((st) => <div key={st.town} class="vs-strow"><span>{st.town}</span><Standing s={st} /></div>)}
+        </>
+      )}
       <div class="vs-sec">THE DEMON HOST</div>
       <div class="vs-lords">
         {v.lords.map((l) => <span key={l.group} class={`vs-lord${l.dead ? ' dead' : ''}`}><Icon name={l.dead ? 'skull' : 'lord'} /> {l.name}, {l.title}</span>)}
@@ -213,6 +231,7 @@ export function BoardPanel() {
       <button class="vs-btn vs-x" onClick={() => game.closeNpcPanels()} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="board" /> {b.town} bounty board</h2>
       <div class="sub">Side jobs, never required. New postings in {mins}:{secs}. Press {glyph('cancel')} to close.</div>
+      {b.standing && <Standing s={b.standing} />}
       <div class="vs-sec">POSTED</div>
       <div class="vs-goods">
         {b.offers.map((o) => (
@@ -248,9 +267,9 @@ export function Tracker() {
   const left = q.objectives.filter((o) => !o.done).length;
   return (
     <button class="vs-tracker hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.ui.openMenu('journal')}>
-      <div class="t"><Icon name={q.kind === 'main' ? 'journal' : 'board'} /> {q.title}</div>
+      <div class="t"><Icon name={q.kind === 'main' ? 'journal' : q.kind === 'job' ? 'person' : 'board'} /> {q.title}</div>
       {q.ready
-        ? <div class="r">{q.giver === 'elder' ? 'Return to the Elder' : 'Claim at a bounty board'}</div>
+        ? <div class="r">{q.back ?? (q.giver === 'elder' ? 'Return to the Elder' : 'Claim at a bounty board')}</div>
         : next && <div class="o"><Icon name="box" /> {next.text}{next.progress ? ` (${next.progress})` : ''}{left > 1 ? <span class="more"> +{left - 1}</span> : null}</div>}
     </button>
   );

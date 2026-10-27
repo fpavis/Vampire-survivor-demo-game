@@ -49,6 +49,8 @@ export class TravelSystem {
         const g = this.game;
         const a = this.node(fromId), b = this.node(toId);
         if (!a || !b || a.id === b.id || g.busy || g.boat) return false;
+        const esc = g.escort && g.escort.job();
+        if (esc) { g.ui.toast(`${esc.o.npc} will not step into a teleporter: walk there together`, 'person'); g.audio.play('deny'); return false; }
         const fare = travelFare(a, b);
         if (g.state.wallet.gold < fare) { g.ui.toast(`The fare is ${fare} gold`, 'res-gold'); g.audio.play('deny'); return false; }
         g.state.wallet.gold -= fare;

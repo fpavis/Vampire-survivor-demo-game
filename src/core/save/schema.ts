@@ -73,6 +73,8 @@ export interface QuestSave {
   flags: Record<string, number | boolean>;
   tracked: string | null;
   bounties: Record<string, { epoch: number; taken: number[] }>;
+  rep?: Record<string, number>;                                  // per town: bounties and jobs done there
+  rumours?: Record<string, { epoch: number; place: string; marked?: boolean }>;    // per town: the innkeeper's rumour this rotation
 }
 export const emptyQuests = (): QuestSave => ({ active: {}, done: [], flags: {}, tracked: null, bounties: {} });
 
