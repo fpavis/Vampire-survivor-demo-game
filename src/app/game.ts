@@ -1117,9 +1117,10 @@ class Game {
         if (this.mode === 'interior' && this.interiorState && !this.interiorState.cleared && this.interiorHostiles > 0) {
             if (!list.some((e) => !e.dead && !e.minion)) {
                 this.interiorState.cleared = true;
-                this.ui.banner('PLACE CLEARED!', 0xffd84a);
+                this.ui.banner(this.interior && this.interior.dungeon ? 'FLOOR CLEARED!' : 'PLACE CLEARED!', 0xffd84a);
                 this.dropGem(p.wx + 30, p.wy + 20, 0, 'heart');
                 for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + this.zoneLevelNow * 2);
+                this.dungeons.checkComplete();
             }
         }
     }
@@ -1408,6 +1409,7 @@ class Game {
         const src = this.interior;
         if (src.fountain) add({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96, 170);
         if (src.altar) add({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80, 170);
+        if (this.dungeons.portal) add({ kind: 'portal', text: '[E]  Step through the portal to the entrance' }, this.dungeons.portal.x, this.dungeons.portal.y, 80, 130);
         if (src.floor > 0) add({ kind: 'up', text: '[E]  Climb back up' }, src.exit.x, src.exit.y, 74, 150);
         else add({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74, 150);
         this.vaults.considerTargets((t, x, y, r) => add(t, x, y, r, t.act === 'gate' ? 220 : 110));
@@ -1469,7 +1471,7 @@ class Game {
         if (!t || this.busy || s.levelUp || s.paused || s.gameOver) return;
         switch (t.kind) {
             case 'enter': this.enterPlace(t.poi); break;
-            case 'exit': this.exitPlace(); break;
+            case 'exit': case 'portal': this.exitPlace(); break;
             case 'up': this.changeFloor(-1); break;
             case 'down': if (t.sealed) { this.audio.play('deny'); this.ui.toast('Defeat the guardians first: the seal holds until they fall'); } else this.changeFloor(1); break;
             case 'chest': this.openChest(t.it); break;
@@ -1560,6 +1562,7 @@ class Game {
         this.cam.x = p.wx; this.cam.y = p.wy;
         this.populateInterior(src, poi);
         this.dungeons.showFeatures();
+        this.dungeons.checkComplete(true);        // a place finished before completion was tracked gets its badge
         const label = src.dungeon ? `${poi.name} · floor ${floor + 1} of ${src.floors}` : poi.name;
         this.zoneIcon = POI_INFO[poi.type].icon;
         this.zoneLabel = label;
@@ -1631,6 +1634,7 @@ class Game {
             const place = this.visited[poi.id];
             if (!place.bossDead) { this.dungeons.spawnBoss(src, poi, place); this.map.markers.push({ tx: src.boss.x / T, ty: src.boss.y / T, icon: 'lair' }); }
             else if (!place.bossChestOpened) this.dungeons.spawnBossChest(src.boss.x, src.boss.y);
+            if (place.bossDead) this.dungeons.spawnExitPortal(src);
         }
         src.npcs.forEach((n) => this.critters.spawnVillager(n.x, n.y, n.hue));
         this.vaults.setup(src, st);
@@ -1803,9 +1807,10 @@ class Game {
         this.audio.play('chest');
         this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== 'chest');
         this.map.dirty = true;
-        if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); return; }
-        if (it.idx === 'vault') { this.vaults.openChest(it); return; }
-        this.grantLoot(it.big ? 1 : 0, this.chestLootOpts());
+        if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); }
+        else if (it.idx === 'vault') this.vaults.openChest(it);
+        else this.grantLoot(it.big ? 1 : 0, this.chestLootOpts());
+        this.dungeons.checkComplete();
     }
 
     /** Chests inside a dungeon favour its region's schools and pay better the deeper they are. */

@@ -348,6 +348,88 @@ if (want('badges')) {
   check('a town once entered shows a Visited badge on the map', badge.badge === 'visited' && /Visited/.test(badge.detail || ''), JSON.stringify(badge));
 }
 
+// ---- 10c: a dungeon is cleared once everything in it is done, and a portal leads out from the boss
+const inside = () => until(() => window.game.mode === 'interior' && !window.game.busy, undefined, 20000);
+const outside = () => until(() => window.game.mode === 'overworld' && !window.game.busy, undefined, 20000);
+// dungeons of several floors near the start, the first with a chest on its ground floor
+const deepDungeons = () => ev(() => {
+  const g = window.game;
+  return window.__dev.tools.nearestPlaces('dungeon', 10).filter((q) => q.dungeon.floors >= 2)
+    .sort((a, b) => (g.dungeons.manifest(b)[0].chests > 0) - (g.dungeons.manifest(a)[0].chests > 0));
+});
+const killAll = (pred) => ev((src) => {
+  const g = window.game, pred = new Function('e', `return (${src})(e)`);
+  for (const e of [...g.state.enemies]) if (!e.dead && pred(e)) { e.untargetable = false; e.dormant = false; g.damageEnemy(e, 1e9, { noCrit: true }); }
+  g.gameLoop(2);
+}, pred.toString());
+
+if (want('complete')) {
+  const [poi] = await deepDungeons();
+  await ev((q) => window.game.enterPlace(q), poi);
+  await inside();
+  // everything else in the dungeon is done (through its saved state); one chest on this floor is left
+  const before = await ev(() => {
+    const g = window.game, poi = g.interiorPoi, place = g.visited[poi.id], man = g.dungeons.manifest(poi);
+    const last = g.interactables.find((i) => i.kind === 'chest' && typeof i.idx === 'number' && !i.opened);
+    man.forEach((m, f) => {
+      const st = f === 0 ? place : ((place.floors ||= {})[f] ||= { opened: [], cleared: false, altarUsed: false });
+      st.cleared = true;
+      for (let i = 0; i < m.chests; i++) if (!st.opened.includes(i) && !(f === 0 && i === last.idx)) st.opened.push(i);
+      if (m.vault && !st.opened.includes('vault')) st.opened.push('vault');
+    });
+    place.bossDead = true; place.bossChestOpened = true;
+    g.dungeons.checkComplete();
+    return { complete: !!place.complete, text: g.dungeons.progress(poi), idx: last.idx };
+  });
+  const after = await ev(() => {
+    const g = window.game, poi = g.interiorPoi;
+    g.openChest(g.interactables.find((i) => i.kind === 'chest' && typeof i.idx === 'number' && !i.opened));
+    return { complete: !!g.visited[poi.id].complete, banner: g.ui.elements.banner.text.text, done: g.dungeons.progress(poi).done };
+  });
+  check('a dungeon is not cleared while a chest is still closed', !before.complete && !before.text.done && before.text.chestsOpened === before.text.chests - 1, JSON.stringify(before));
+  check('opening the last chest clears the dungeon, with a banner', after.complete && after.done && /DUNGEON CLEARED/.test(after.banner), JSON.stringify(after));
+  await ev(() => window.game.exitPlace());
+  await outside();
+  const shown = await ev((q) => {
+    const g = window.game;
+    g.fog.revealCircle(q.tx, q.ty, 6); g.syncMap();
+    const mark = g.map.marks().find((m) => m.label === q.name);
+    return { badge: g.map.placeBadge(q), detail: mark ? mark.detail : null };
+  }, poi);
+  check('the map shows a Cleared badge on it', shown.badge === 'cleared' && /Cleared/.test(shown.detail || ''), JSON.stringify(shown));
+}
+
+if (want('portal')) {
+  const list = await deepDungeons();
+  const poi = list[list.length > 1 ? 1 : 0];
+  const toBoss = async () => {
+    await ev((q) => window.game.enterPlace(q), poi);
+    await inside();
+    await ev((q) => { const g = window.game; g.clearWorldEntities(); g.loadFloor(q, q.dungeon.floors - 1); for (let i = 0; i < 3; i++) g.gameLoop(1); }, poi);
+  };
+  await toBoss();
+  const pre = await ev(() => ({ portal: !!window.game.dungeons.portal, boss: window.game.state.enemies.some((e) => e.dungeonBoss && !e.dead) }));
+  await killAll((e) => e.dungeonBoss);
+  const open = await ev(() => {
+    const g = window.game, pt = g.dungeons.portal, p = g.state.player;
+    if (!pt) return null;
+    p.wx = pt.x; p.wy = pt.y + 30; g.updateInteraction();
+    // the banner may already show the loot that fell with the boss: read the message log, which keeps every banner
+    return { kind: g.target && g.target.kind, text: g.target && g.target.text, sprite: !!pt.sprite && pt.sprite.parent === g.objectLayer, banner: window.__dev.ui.log.value.some((l) => /BOSS DEFEATED/.test(l.text)) };
+  });
+  check('a portal opens once the boss of a deep dungeon falls', pre.boss && !pre.portal && open && open.sprite && open.banner, JSON.stringify({ pre, open }));
+  check('standing at the portal offers the way out', open && open.kind === 'portal', JSON.stringify(open));
+  await ev(() => window.game.interact());
+  await outside();
+  const out = await ev((q) => { const p = window.game.state.player; return { mode: window.game.mode, d: Math.round(Math.hypot(p.wx - q.ex, p.wy - q.ey)) }; }, poi);
+  check('stepping through it leads out to the dungeon entrance', out.mode === 'overworld' && out.d < 120, JSON.stringify(out));
+  await toBoss();
+  const back = await ev(() => ({ portal: !!window.game.dungeons.portal, boss: window.game.state.enemies.some((e) => e.dungeonBoss && !e.dead) }));
+  check('the portal is still there on a later visit', back.portal && !back.boss, JSON.stringify(back));
+  await ev(() => window.game.exitPlace());
+  await outside();
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 process.kill(-preview.pid);

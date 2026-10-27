@@ -7,6 +7,7 @@ export interface GameEvents {
   PlaceEntered: { id: string; name: string; kind: string; dungeon?: string | null; group?: string };
   FloorEntered: { id: string; floor: number; floors: number };
   DungeonCleared: { id: string; name: string; type: string; group: string; realm: string };
+  DungeonCompleted: { id: string; name: string; type: string };
   QuestCompleted: { id: string };
   Collected: { resource: string; count: number };
   TowerBuilt: { kind: string; id: string };

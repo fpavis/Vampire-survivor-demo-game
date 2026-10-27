@@ -143,6 +143,18 @@ export function installDevTools(game: any): void {
       }
       return out.slice(0, n);
     },
+    /** mark everything in the place the party is in as done (every floor, chest and the boss): it is cleared */
+    clearPlace() {
+      if (!ready() || game.mode !== 'interior' || !game.interiorPoi || game.interiorPoi.type === 'city') { game.ui.toast('Enter a cave, ruin or dungeon first'); return false; }
+      const poi = game.interiorPoi, place = game.visited[poi.id], man = game.dungeons.manifest(poi);
+      man.forEach((m: any, f: number) => {
+        const st = f === 0 ? place : ((place.floors ||= {})[f] ||= { opened: [], cleared: false, altarUsed: false });
+        st.cleared = true;
+        st.opened = [...new Set([...st.opened, ...Array.from({ length: m.chests }, (_, i) => i), ...(m.vault ? ['vault'] : [])])];
+      });
+      if (man.some((m: any) => m.boss)) { place.bossDead = true; place.bossChestOpened = true; }
+      return game.dungeons.checkComplete();
+    },
     /** walk in through the door of a place (anywhere in the world) */
     enter(poi: any) {
       if (!ready()) return;
@@ -179,6 +191,7 @@ export function installDevTools(game: any): void {
   };
   button(places, 'Towns', () => listPlaces('city'));
   button(places, 'Dungeons', () => listPlaces('dungeon'));
+  button(places, 'Clear this place', () => tools.clearPlace());
 
   const hero = section('Hero');
   button(hero, 'Heal', () => { if (ready()) game.state.health = game.state.maxHealth; });

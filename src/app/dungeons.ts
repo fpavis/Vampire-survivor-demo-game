@@ -2,11 +2,13 @@
 // Multi-floor play: stairs, sealed floors, the boss and its chest; plateau and sea entrances hosted by the world.
 import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
+import { access } from './access';
 import { ENEMY_TYPES } from '../core/config';
 import { CACHE_CELL, bossChestTier, bossLevel, floorLevel, isSeaDungeonCell, plateauPoi, seaDungeonPoi } from '../core/world/dungeons';
 import { findPlace } from '../core/quest/places';
 import { bossTitle } from '../core/story/story';
 import { lordFor } from '../core/story/ending';
+import { placeManifest, placeProgress } from '../core/world/completion';
 
 const T = WORLD_CONFIG.tile;
 const TILT = WORLD_CONFIG.tilt;
@@ -18,12 +20,14 @@ export class DungeonSystem {
         this.sea = new Map();           // cache-grid cell -> Poi | null
         this.plateaus = new Map();      // tower id -> Poi
         this.lairs = new Map();         // region group -> id of the nearest land dungeon (the lord's lair)
+        this.manifests = new Map();     // place id -> what each of its floors holds (from the seed)
         this.gfx = null;
+        this.portal = null;             // the way out that opens where a dungeon's boss fell
         this.t = 0;
     }
 
     reset() {
-        this.sea.clear(); this.plateaus.clear(); this.lairs.clear();
+        this.sea.clear(); this.plateaus.clear(); this.lairs.clear(); this.manifests.clear();
         this.clearFeatures();
     }
 
@@ -142,8 +146,9 @@ export class DungeonSystem {
         const place = g.visited[poi.id];
         place.bossDead = true;
         g.map.markers = g.map.markers.filter((m) => m.icon !== 'lair');
-        g.ui.banner('DUNGEON CLEARED!', 0xffd84a);
+        g.ui.banner('BOSS DEFEATED!', 0xffd84a);
         this.spawnBossChest(e.wx, e.wy + 40);
+        this.spawnExitPortal(g.interior, true);
         g.events.emit('DungeonCleared', { id: poi.id, name: poi.name, type: poi.type, group: poi.group, realm: poi.dungeon.realm });
         g.requestSave('dungeon', true);
     }
@@ -155,6 +160,62 @@ export class DungeonSystem {
         const lvl = this.levelOf(poi, poi.dungeon.floors - 1);
         for (let i = 0; i < 10; i++) g.dropGem(it.x + (Math.random() - 0.5) * 120, it.y + 20 + Math.random() * 40, Math.round(20 + lvl * 5), 'coin');
         g.requestSave('dungeon', true);
+    }
+
+    // ------------------------------------------------------- the way out
+    /**
+     * In a dungeon of several floors a portal opens beside the boss's arena once the boss is down (and is there
+     * again on every later visit): one step takes the party back to the entrance.
+     */
+    spawnExitPortal(src, fresh = false) {
+        const g = this.game, poi = g.interiorPoi;
+        if (!src || !src.boss || !poi || !poi.dungeon || poi.dungeon.floors < 2) return;
+        let x = src.boss.x, y = src.boss.y - 3 * T;
+        if (g.world.blocked(x, y, 24)) { const f = g.world.findFree(x, y, 24); x = f.x; y = f.y; }
+        const set = g.world.decorTextures.exitportal;
+        const sprite = new PIXI.Sprite(set[0].texture);
+        sprite.anchor.set(0.5, set[0].anchorY);
+        sprite.position.set(x, y * TILT);
+        sprite.zIndex = y;
+        g.objectLayer.addChild(sprite);
+        this.portal = { kind: 'exitportal', x, y, sprite };
+        g.interactables.push(this.portal);
+        g.map.markers.push({ tx: x / T, ty: y / T, icon: 'door' });
+        g.map.dirty = true;
+        if (fresh) { g.fx.pillar(x, y, 0x9ad8ff, 70, 70, 260); g.audio.play('seal'); }
+    }
+
+    // ---------------------------------------------------------- completion
+    /** What each floor of a place holds, built from its seed once per place. */
+    manifest(poi) {
+        if (!this.manifests.has(poi.id)) this.manifests.set(poi.id, placeManifest(poi));
+        return this.manifests.get(poi.id);
+    }
+
+    /** How far the party got in a place: floors cleared, chests opened, the boss (null for towns). */
+    progress(poi) {
+        const man = this.manifest(poi);
+        return man ? placeProgress(man, this.game.visited[poi.id]) : null;
+    }
+
+    /**
+     * Once every floor of the place the party is in is cleared and every chest in it opened, mark it complete: a
+     * banner, a stinger and a badge on the map. `quiet` only records it (a place finished before this was tracked).
+     */
+    checkComplete(quiet = false) {
+        const g = this.game, poi = g.interiorPoi;
+        if (!poi || poi.type === 'city' || g.mode !== 'interior') return false;
+        const place = g.visited[poi.id];
+        if (!place || place.complete) return false;
+        const p = this.progress(poi);
+        if (!p || !p.done) return false;
+        place.complete = true;
+        if (quiet) return true;
+        g.ui.banner(`${poi.dungeon ? 'DUNGEON' : poi.type === 'ruins' ? 'RUINS' : 'CAVE'} CLEARED`, 0x8ae6a0, 'check');
+        g.audio.stinger('stingVictory');
+        g.events.emit('DungeonCompleted', { id: poi.id, name: poi.name, type: poi.type });
+        g.requestSave('complete', true);
+        return true;
     }
 
     // ------------------------------------------------------------- the seal
@@ -177,10 +238,11 @@ export class DungeonSystem {
     // ------------------------------------------------------------ features
     clearFeatures() {
         if (this.gfx) { this.gfx.destroy(); this.gfx = null; }
+        this.portal = null;
     }
 
     showFeatures() {
-        this.clearFeatures();
+        if (this.gfx) { this.gfx.destroy(); this.gfx = null; }
         const g = this.game;
         if (!g.interior || !g.interior.dungeon) return;
         this.gfx = new PIXI.Graphics();
@@ -217,6 +279,17 @@ export class DungeonSystem {
             for (let k = 0; k < 2; k++) { const dy = -10 - k * 9 - ((t * 0.3) % 9); gr.lineStyle(2.5, 0xeaf6ff, 0.8 - k * 0.3); gr.moveTo(x - 10, y + dy + 6); gr.lineTo(x, y + dy); gr.lineTo(x + 10, y + dy + 6); }
             gr.lineStyle(0);
         }
+        if (this.portal) {
+            const { x, y } = this.portal, spin = access.reducedMotion ? 0 : t * 0.04;
+            for (let k = 0; k < 3; k++) {
+                const a = spin + (k / 3) * Math.PI * 2;
+                gr.lineStyle(2.5, 0xbfe6ff, 0.35 + 0.25 * pulse);
+                gr.arc(x, y, 30 - k * 3, a, a + 1.6);
+                gr.moveTo(x, y);
+            }
+            gr.lineStyle(0);
+            gr.beginFill(0x9ad8ff, 0.08 + 0.08 * pulse); gr.drawEllipse(x, y, 40, 28); gr.endFill();
+        }
         if (src.boss && !g.visited[g.interiorPoi.id].bossDead) {
             const { x, y } = src.boss, a = t * 0.012;
             gr.lineStyle(3, 0xc04aff, 0.5 + 0.3 * pulse); gr.drawCircle(x, y, 150);
@@ -238,5 +311,6 @@ export class DungeonSystem {
         if (src.stairsDown) L.add({ x: src.stairsDown.x, y: src.stairsDown.y, z: 16, r: 190, color: this.guardiansLeft() > 0 ? 0xff6a4a : 0x6ad8ff, i: 0.8 });
         if (src.floor > 0) L.add({ x: src.exit.x, y: src.exit.y, z: 16, r: 170, color: 0xd8f0ff, i: 0.7 });
         if (src.boss && !g.visited[g.interiorPoi.id].bossDead) L.add({ x: src.boss.x, y: src.boss.y, z: 12, r: 300, color: 0xb04aff, i: 0.55 });
+        if (this.portal) L.add({ x: this.portal.x, y: this.portal.y, z: 40, r: 200, color: 0x9ad8ff, i: 0.8 });
     }
 }

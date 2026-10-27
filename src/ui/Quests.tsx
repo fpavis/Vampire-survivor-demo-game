@@ -6,6 +6,7 @@ import { formatPlayTime } from '../core/save/slots';
 import { BESTIARY_ORDER, bestiaryEntry } from '../core/codex/codex';
 import { CORE_INFO, RARITY_NAMES, RUNES, TEMPLATES } from '../core/spells/spells';
 import { GROUP_INFO, POI_INFO } from '../core/world/biomes';
+import { progressText } from '../core/world/completion';
 import { portrait } from '../app/portraits';
 
 function Objectives({ q }: { q: QuestView }) {
@@ -87,7 +88,9 @@ function Codex() {
           {!pois.length && <div class="vs-empty">None yet. Places appear on the map as you explore.</div>}
           {pois.map((p) => {
             const v = g.visited[p.id];
-            const state = v?.cleared || v?.bossDead ? 'cleared' : v ? 'visited' : 'seen from afar';
+            // towns: visited or not; caves, ruins and dungeons: how much of them is done
+            const prog = v && p.type !== 'city' ? g.dungeons?.progress(p) : null;
+            const state = prog ? progressText(prog) : v || g.session?.cities?.some((c: { id: string }) => c.id === p.id) ? 'visited' : 'seen from afar';
             return (
               <div key={p.id} class="vs-cx" data-place={p.id}>
                 <span class="pic"><Icon name={p.dungeon ? 'lair' : POI_INFO[p.type as keyof typeof POI_INFO]?.icon ?? 'map'} /></span>

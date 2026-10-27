@@ -815,6 +815,42 @@ function drawPortal(g) {
     glow(g, 0, -34, 36, 0x4cc8ff, 0.12);
 }
 
+/** A town's teleporter: a round stone dais set with runes between two short obelisks; the runes burn gold once attuned. */
+function drawTeleporter(g, active) {
+    const stone = 0x9a948a, dark = 0x6a655e, rune = active ? 0xffd86a : 0x8a8478;
+    shadow(g, 50, 12, 0.25);
+    ink(g, 1.8); g.beginFill(dark); g.drawEllipse(0, 0, 50, 17); g.endFill();
+    g.beginFill(stone); g.drawEllipse(0, -3, 46, 15); g.endFill(); noLine(g);
+    g.lineStyle(2, rune, active ? 1 : 0.7); g.drawEllipse(0, -3, 34, 10.5); g.drawEllipse(0, -3, 22, 6.5); noLine(g);
+    for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2, x = Math.cos(a) * 28, y = -3 + Math.sin(a) * 8.6;
+        g.beginFill(rune, active ? 1 : 0.75); g.drawRect(x - 1.6, y - 1.1, 3.2, 2.2); g.endFill();
+    }
+    for (const sx of [-1, 1]) {
+        const x = sx * 46;
+        ink(g, 1.6); g.beginFill(stone); g.drawPolygon([x - 6, -2, x - 4.5, -46, x, -52, x + 4.5, -46, x + 6, -2]); g.endFill(); noLine(g);
+        g.beginFill(dark, 0.55); g.drawPolygon([x + 1, -2, x + 1.5, -46, x, -52, x + 4.5, -46, x + 6, -2]); g.endFill();
+        g.beginFill(rune, active ? 1 : 0.6); g.drawCircle(x, -36, 2.4); g.endFill();
+    }
+    if (active) { glow(g, 0, -10, 46, 0xffd86a, 0.12); glow(g, -46, -36, 12, 0xffd86a, 0.25); glow(g, 46, -36, 12, 0xffd86a, 0.25); }
+}
+
+/** The way home from a dungeon's depths: a stone arch with a gold swirl that leads straight back to the entrance. */
+function drawExitPortal(g) {
+    const stone = 0x8a8478, dark = 0x5e594f;
+    shadow(g, 40, 10, 0.3);
+    ink(g, 2); g.beginFill(stone);
+    g.drawRect(-34, -84, 14, 84); g.drawRect(20, -84, 14, 84); g.drawRect(-38, -96, 76, 14);
+    g.endFill(); noLine(g);
+    g.beginFill(dark, 0.6); g.drawRect(-26, -84, 6, 84); g.drawRect(28, -84, 6, 84); g.endFill();
+    g.beginFill(0xffd86a, 0.3); g.drawRect(-20, -82, 40, 82); g.endFill();
+    g.lineStyle(2.4, 0xfff0b0, 0.85);
+    for (let k = 0; k < 3; k++) g.drawEllipse(0, -40, 15 - k * 4.5, 32 - k * 9);
+    noLine(g);
+    g.beginFill(0xfff6d0, 0.7); g.drawEllipse(0, -40, 3.5, 9); g.endFill();
+    glow(g, 0, -40, 44, 0xffd86a, 0.16);
+}
+
 /**
  * A vault gate. Facing the camera (`front`): two stone posts with an iron portcullis between them, raised when open.
  * Edge-on (the corridor runs left to right): a tall post with the bars seen from the side.
@@ -987,6 +1023,8 @@ export const DECOR_DEFS: Record<string, DecorDef> = {
     planter: D(36, 40, 8, 10, true, [drawPlanter]),
     well: D(56, 60, 10, 22, true, [drawWell]),
     portal: D(72, 90, 12, 0, false, [drawPortal]),
+    teleporter: D(112, 64, 22, 0, false, [(g) => drawTeleporter(g, false), (g) => drawTeleporter(g, true)]),
+    exitportal: D(88, 104, 14, 0, false, [drawExitPortal]),
     signpost: D(52, 58, 8, 0, false, [drawSignpost]),
     lairtotem: D(48, 92, 8, 8, true, [drawLairTotem]),
     vaultgate: D(130, 104, 12, 0, false, [(g) => drawVaultGate(g, true, false), (g) => drawVaultGate(g, true, true), (g) => drawVaultGate(g, false, false), (g) => drawVaultGate(g, false, true)]),

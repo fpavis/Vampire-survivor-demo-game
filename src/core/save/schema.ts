@@ -42,10 +42,16 @@ export interface TowerSave {
   spell: string | null;
 }
 
-export interface FloorState { opened: number[]; cleared: boolean; altarUsed: boolean; unsealed?: boolean }
+export interface FloorState {
+  opened: (number | string)[];           // chest indices, and 'vault' for a vault's chest
+  cleared: boolean;
+  altarUsed: boolean;
+  unsealed?: boolean;
+  fog?: unknown;                         // what of the floor has been explored (FogOfWar.toJSON)
+}
 
 export interface PlaceState {
-  opened: number[];
+  opened: (number | string)[];
   cleared: boolean;
   altarUsed: boolean;
   fountainAt?: number;
@@ -53,6 +59,8 @@ export interface PlaceState {
   floors?: Record<string, FloorState>;   // dungeon floors below the first, by floor number
   bossDead?: boolean;                    // the dungeon boss has fallen for good
   bossChestOpened?: boolean;             // and its guaranteed chest has been opened
+  complete?: boolean;                    // every floor cleared and every chest opened (a badge on the map)
+  fog?: unknown;                         // what of the first floor has been explored (FogOfWar.toJSON)
 }
 
 export interface CityRef { id: string; name: string; ex: number; ey: number }
