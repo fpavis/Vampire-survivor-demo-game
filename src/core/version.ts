@@ -1,19 +1,18 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.9.0';
+export const GAME_VERSION = '0.10.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'A new look, new monsters and an ending',
+  title: 'Pixel art, teleporters and corrupted lands',
   notes: [
-    'Icons drawn for the game, new typefaces, and towns redrawn in ink',
-    'Three save slots with backups, export and import; settings in tabs',
-    'Edit any hero\'s spells, keep loadout sets, let a resting hero assist',
-    'A codex, a training dummy in every town, a log and statistics',
-    'Ten new monsters for the far regions, and lairs marked by totems',
-    'Warlord cards, an ending with credits, and a new death screen',
-    'Hit-stop, a camera that looks ahead, and sounds for every region',
-    'Dungeon vaults with keys, levers and pressure plates',
-    'Monsters walk around lava, and a kraken waits in the open sea'
+    'Everything drawn at the ground\'s pixel grain (or smooth), with CRT, pixelate, film grain and colour grades',
+    'The ground is felt: lava glows and shimmers, ice frosts the edges, quicksand drains the colour',
+    'A world map to pan and zoom, with Visited and Cleared badges; dungeon floors remember what you explored',
+    'Dungeons are cleared when everything is done, and a portal leads out from the boss',
+    'Towns of every size and shape, each with a teleporter: travel between towns and your own waypoints',
+    'Corrupted lands: barren, violet and full of monsters',
+    'Warbands, swarms and hunters come looking for you out in the world',
+    'Fairer ambushes, boat recall at docks, and an experimental click to use'
   ]
 };
 
