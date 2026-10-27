@@ -680,8 +680,8 @@ if (want('vaults')) {
   // an open vault and a slain kraken survive a reload
   await ev(async () => { await window.game.requestSave('test', true); });
   await page.reload();
-  await page.waitForFunction(() => !!window.game);
-  await page.waitForTimeout(1000);
+  // Continue is offered only once the saves are read (titleReady); before that Enter would start a new game
+  await page.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 15000 });
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
   await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; });
@@ -735,6 +735,7 @@ if (want('front')) {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   // Continue loads the newest save
+  await page.waitForFunction(() => window.game.titleReady, null, { timeout: 15000 });
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
