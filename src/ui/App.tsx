@@ -109,7 +109,7 @@ function HoldBar() {
 
 function Pill() {
   const n = ui.pending.value;
-  if (!n || ui.cardsOpen.value) return null;
+  if (!n || ui.cardsOpen.value || panelOpen()) return null;      // a panel open: it would sit on top of it
   return (
     <button class="vs-pill hit" onClick={() => (ui.cardsOpen.value = true)}>
       <Icon name="upgrade" /> {n} upgrade{n > 1 ? 's' : ''}<span class="long"> ready</span> · {quickGlyph('upgrades')}
@@ -169,8 +169,9 @@ export function App() {
   return (
     <>
       <HoldBar />
+      {/* the upgrades pill sits on its own at the top: inside the scaled left column it would land on the party */}
+      <div class="vs-pillbar vs-hud"><Pill /></div>
       <div class="vs-left vs-hud">
-        <Pill />
         <Tracker />
         <PartyBar />
         <DummyMeter />

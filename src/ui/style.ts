@@ -27,8 +27,9 @@ export const CSS = `
 .vs-btn:hover{border-color:var(--c-focus);background:linear-gradient(rgba(32,40,68,.95),rgba(14,18,34,.95))}
 .vs-btn:active:not(:disabled){transform:translateY(1px)}
 .vs-btn.vs-ico{font-size:18px;line-height:1;padding:6px 8px;min-width:38px}
-.vs-pill{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2;padding:7px 16px;border-radius:20px;background:linear-gradient(var(--c-gold),#e8a317);color:#2a1a00;font-weight:700;font-size:14px;border:0;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);animation:vs-pulse 1.3s infinite}
-@keyframes vs-pulse{50%{transform:translateX(-50%) scale(1.07)}}
+.vs-pillbar{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2;pointer-events:none}
+.vs-pill{pointer-events:auto;padding:7px 16px;border-radius:20px;background:linear-gradient(var(--c-gold),#e8a317);color:#2a1a00;font-weight:700;font-size:14px;border:0;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);animation:vs-pulse 1.3s infinite}
+@keyframes vs-pulse{50%{transform:scale(1.07)}}
 .vs-panel{position:absolute;z-index:5;background:linear-gradient(rgba(18,24,44,.96),rgba(10,13,26,.96));border:2px solid var(--c-line-2);border-radius:var(--r-l);padding:14px;box-shadow:0 6px 28px rgba(0,0,0,.6),inset 0 0 0 1px rgba(217,164,64,.18)}
 /* panels ease in (opacity and the independent scale/translate properties, so each panel keeps its own transform);
    reduced motion turns every animation off below */
@@ -398,7 +399,8 @@ html.vs-reduced .vs-roll{padding:24px 0}
   .vs-load .sub{display:none}
   .vs-hintbar{bottom:-10px;margin:8px -10px -10px;padding:6px 10px}
   .vs-hint-mouse{display:none}
-  .vs-pill{position:static;transform:none;animation:vs-glow 1.3s infinite;font-size:12px;padding:5px 11px}
+  .vs-pillbar{top:46px}
+  .vs-pill{animation:vs-glow 1.3s infinite;font-size:12px;padding:5px 11px}
   .vs-pill .long{display:none}
   .vs-tracker{width:200px;padding:4px 8px;font-size:11px}
   .vs-tracker .t{font-size:12px}

@@ -520,6 +520,7 @@ class Game {
             if (!gameState.player || gameState.gameOver) return;
             const act = this.input.keys.actionFor(e.key);
             if (uiBridge.worldMap.value) { if (act === 'map') this.toggleMap(); return; }
+            if (uiBridge.pauseOpen.value) return;      // the menu is open: the world waits (no map on top of it)
             if (act === 'skill1' && !e.repeat) this.spells.cast(0);
             else if (act === 'skill2' && !e.repeat) this.spells.cast(1);
             else if (act === 'skill3' && !e.repeat) this.spells.cast(2);

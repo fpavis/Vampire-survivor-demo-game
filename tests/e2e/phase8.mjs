@@ -57,6 +57,17 @@ const overlap = (page) => page.evaluate(() => {
 });
 for (const [w, h, name] of [[740, 420, 'landscape phone'], [390, 760, 'portrait phone'], [1280, 720, 'desktop']]) {
   const { context, page } = await open(w, h);
+  // the "upgrades ready" pill never sits on the party's portraits
+  await page.evaluate(() => { const g = window.game, s = g.state; s.nextLevel = 10; s.experience = 35; g.checkLevelUp(); s.nextLevel = 1e12; for (let i = 0; i < 3; i++) g.gameLoop(1); });
+  await page.waitForFunction(() => !!document.querySelector('.vs-pill'), null, { timeout: 4000 }).catch(() => {});
+  const pill = await page.evaluate(() => {
+    const p = document.querySelector('.vs-pill');
+    if (!p) return { pill: false };
+    const a = p.getBoundingClientRect();
+    const over = [...document.querySelectorAll('.vs-hero, .vs-tracker')].filter((el) => { const r = el.getBoundingClientRect(); return r.width && r.right > a.left && r.left < a.right && r.bottom > a.top && r.top < a.bottom; }).map((el) => el.className);
+    return { pill: true, over, box: [Math.round(a.left), Math.round(a.top), Math.round(a.width), Math.round(a.height)] };
+  });
+  check(`${name}: the upgrades pill does not cover the party`, pill.pill && pill.over.length === 0, JSON.stringify(pill));
   for (const key of ['i', 'j']) {
     await page.keyboard.press(key);
     await page.waitForTimeout(250);
