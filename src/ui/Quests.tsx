@@ -1,5 +1,5 @@
 import { ui, type QuestView } from './bridge';
-import { glyph, quickGlyph } from './hints';
+import { glyph } from './hints';
 import { Icon } from './Icon';
 import { useState } from 'preact/hooks';
 import { formatPlayTime } from '../core/save/slots';
@@ -147,14 +147,14 @@ function Log() {
   );
 }
 
-export function Journal() {
+/** The Journal page of the game menu: quests, the message log, statistics and the codex. */
+export function JournalPage() {
   const [tab, setTab] = useState<JTab>('quests');
   const v = ui.quests.value;
   const game = ui.game;
-  if (!ui.journalOpen.value || !game || !v) return null;
+  if (!game || !v) return <div class="vs-page vs-journal"><h2><Icon name="journal" /> Journal</h2><div class="vs-empty">Nothing written yet.</div></div>;
   return (
-    <div class="vs-panel vs-journal hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.journalOpen.value = false)}><Icon name="close" /> ({quickGlyph('journal')})</button>
+    <div class="vs-page vs-journal">
       <h2><Icon name="journal" /> Journal</h2>
       <div class="vs-tabs" role="tablist">
         {([['quests', 'Quests', 'scroll'], ['log', 'Log', 'journal'], ['stats', 'Statistics', 'gauge'], ['codex', 'Codex', 'codex']] as const).map(([id, label, icon]) => (
@@ -247,7 +247,7 @@ export function Tracker() {
   const next = q.objectives.find((o) => !o.done);
   const left = q.objectives.filter((o) => !o.done).length;
   return (
-    <button class="vs-tracker hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.input.openPanel('journal')}>
+    <button class="vs-tracker hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.ui.openMenu('journal')}>
       <div class="t"><Icon name={q.kind === 'main' ? 'journal' : 'board'} /> {q.title}</div>
       {q.ready
         ? <div class="r">{q.giver === 'elder' ? 'Return to the Elder' : 'Claim at a bounty board'}</div>

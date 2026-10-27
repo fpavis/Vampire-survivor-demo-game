@@ -1,5 +1,5 @@
 import { ui } from './bridge';
-import { glyph, onPad, quickGlyph } from './hints';
+import { glyph, onPad } from './hints';
 import { Icon } from './Icon';
 import { TOWER_DEFS, TOWER_KINDS, totalOf } from '../core/world/towers';
 import { CORE_INFO, TEMPLATES, describeSpell, resolveSpell } from '../core/spells/spells';
@@ -7,15 +7,17 @@ import { CORE_INFO, TEMPLATES, describeSpell, resolveSpell } from '../core/spell
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const RES: [keyof typeof TOWER_DEFS.spire.cost, string][] = [['gold', 'res-gold'], ['wood', 'res-wood'], ['stone', 'res-stone'], ['iron', 'res-iron']];
 
-export function BuildMenu() {
-  if (!ui.buildMenuOpen.value || !ui.game) return null;
+/** The Build page of the game menu: choosing a tower closes the menu and starts placing its site. */
+export function BuildPage() {
   const game = ui.game;
+  if (!game) return null;
   const w = ui.wallet.value;
+  const where = game.mode !== 'overworld' ? 'Towers stand out in the open: step outside to build.' : game.boat ? 'Nothing can be built at sea: go ashore first.' : '';
   return (
-    <div class="vs-panel vs-build hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.buildMenuOpen.value = false)}><Icon name="close" /> ({quickGlyph('build')})</button>
+    <div class="vs-page vs-build">
       <h2><Icon name="hammer" /> Build</h2>
-      <div class="sub">Towers are monumental and permanent. Lay a site, then haul in the materials and press E at the site. No limit on how many, only on what you can gather.</div>
+      <div class="sub">Towers are monumental and permanent. Lay a site, then haul in the materials and press {glyph('interact')} at the site. No limit on how many, only on what you can gather.</div>
+      {where && <div class="vs-note"><Icon name="warning" /> {where}</div>}
       <div class="vs-goods">
         {TOWER_KINDS.map((k) => {
           const d = TOWER_DEFS[k];
@@ -27,7 +29,7 @@ export function BuildMenu() {
                 <small>{d.blurb}</small>
                 <small class="cost">{RES.map(([r, ic]) => <span key={r} class={w[r] >= d.cost[r] ? 'ok' : ''}><Icon name={ic} /> {d.cost[r]}{'  '}</span>)}</small>
               </span>
-              <button class="vs-btn" onClick={() => game.towers.startBuild(k)}>Place</button>
+              <button class="vs-btn" disabled={!!where} onClick={() => game.towers.startBuild(k)}>Place</button>
             </div>
           );
         })}
@@ -76,7 +78,7 @@ export function TowerPanel() {
     <div class="vs-panel vs-tpanel hit">
       <button class="vs-btn vs-x" onClick={() => (ui.towerPanel.value = null)} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="tower-spire" /> Arcane Spire</h2>
-      <div class="sub">Arm it with an auto-cast spell. It fires from here at anything nearby, using the spell’s own level and runes (socket runes in your spell panel, I). Spells in a tower are not available to your heroes.</div>
+      <div class="sub">Arm it with an auto-cast spell. It fires from here at anything nearby, using the spell’s own level and runes (socket runes on the Spells page, I). Spells in a tower are not available to your heroes.</div>
       <div class="vs-sec">ARMED</div>
       {armed ? row(armed, 'Disarm', () => { game.towers.arm(id, null); ui.version.value++; }) : <div class="vs-empty">Nothing armed.</div>}
       <div class="vs-sec">SPARE SPELLS IN YOUR BAG</div>

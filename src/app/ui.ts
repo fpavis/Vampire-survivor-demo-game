@@ -132,7 +132,7 @@ export class UIManager {
         settingsButton.addChild(settingsBg, settingsIcon);
         settingsButton.eventMode = 'static';
         settingsButton.cursor = 'pointer';
-        settingsButton.on('pointerdown', (e) => { e.stopPropagation(); this.toggleSettings(); });
+        settingsButton.on('pointerdown', (e) => { e.stopPropagation(); this.toggleMenu(); });
         settingsButton.on('pointerover', () => drawBg(0.9));
         settingsButton.on('pointerout', () => drawBg(0.6));
         this.settingsButton = settingsButton;
@@ -775,12 +775,38 @@ export class UIManager {
         joystick.position = { x: 0, y: 0 };
     }
 
-    /** The pause menu is a DOM panel (so the keyboard, mouse and controller all drive it). */
-    toggleSettings() {
+    /** The game menu (src/ui/Menu.tsx) is a DOM panel over the paused game, so the keyboard, mouse and controller
+     *  all drive it. Opened on `page`, or on the page it was left on. */
+    openMenu(page = null) {
         if (gameState.gameOver || !gameState.player) return;
-        const open = !uiBridge.pauseOpen.value;
-        uiBridge.pauseOpen.value = open;
-        gameState.paused = open;
+        if (page && uiBridge.pauseOpen.value && uiBridge.menuPage.value === 'spells' && page !== 'spells') this.leaveSpells();
+        if (page) uiBridge.menuPage.value = page;
+        uiBridge.menuSeq.value++;
+        if (uiBridge.pauseOpen.value) return;
+        uiBridge.pauseOpen.value = true;
+        gameState.paused = true;
+        gameState.pointerDown = false;
+    }
+
+    closeMenu() {
+        if (!uiBridge.pauseOpen.value) return;
+        if (uiBridge.menuPage.value === 'spells') this.leaveSpells();
+        uiBridge.pauseOpen.value = false;
+        uiBridge.slotsOpen.value = null;      // and whatever it had opened on top
+        uiBridge.rebindOpen.value = false;
+        gameState.paused = false;
+    }
+
+    /** Leaving the Spells page: what was new has been seen, and the view returns to the active hero. */
+    leaveSpells() {
+        const sp = this.game && this.game.spells;
+        if (sp && (sp.viewHero != null || sp.spells.some((s) => s.isNew) || (sp.newRunes && sp.newRunes.size))) { sp.clearNew(); sp.setView(null); }
+    }
+
+    /** Esc / Start with nothing else open; a page hotkey (I, U, J, B, C) closes the menu when it is on that page. */
+    toggleMenu(page = null) {
+        if (uiBridge.pauseOpen.value && (!page || uiBridge.menuPage.value === page)) this.closeMenu();
+        else this.openMenu(page);
     }
 
     // Add other UI update methods...

@@ -1,6 +1,5 @@
 import { useState } from 'preact/hooks';
 import { ui } from './bridge';
-import { glyph, onPad, quickGlyph } from './hints';
 import { padGlyph } from '../core/input/gamepad';
 import { PALETTES } from '../core/access/palettes';
 import { setAccess } from '../app/access';
@@ -20,15 +19,17 @@ export function Controls() {
     ['Interact · confirm', `${key('interact')} · Enter`, pad('interact')],
     ['Skills (Dash …)', `${key('skill1')} · ${key('skill2')} · ${key('skill3')}`, `${pad('skill1')} · ${pad('skill2')} · ${pad('skill3')}`],
     ['Switch hero', `1 2 3 · ${key('nextHero')}`, `${pad('prevHero')} · ${pad('nextHero')}`],
+    ['Game menu (party, spells, journal …)', 'Esc', pad('menu')],
+    ['Party and stats', key('party'), `${pad('menu')}, then ${pad('prevHero')} ${pad('nextHero')}`],
     ['Spells and runes', key('spells'), 'D-pad ↑'],
-    ['Level-up cards', key('upgrades'), 'D-pad ↓'],
-    ['Build menu', key('build'), 'D-pad ←'],
+    ['Upgrades', key('upgrades'), 'D-pad ↓'],
+    ['Build', key('build'), 'D-pad ←'],
     ['Journal and quests', key('journal'), 'D-pad →'],
+    ['Flip the menu\'s pages', 'Click a page, or its key', `${pad('prevHero')} · ${pad('nextHero')}`],
     ['World map', key('map'), pad('map')],
-    ['Pause · settings', 'Esc', pad('menu')],
     ['Back · close · cancel', 'Esc', pad('cancel')],
-    ['Equip · lock in the spell panel', 'F · L', `${pad('skill1')} · ${pad('skill2')}`],
-    ['Move through a menu', '↑ ↓ ← → (WASD still walks)', 'D-pad']
+    ['Equip · lock on the Spells page', 'F · L', `${pad('skill1')} · ${pad('skill2')}`],
+    ['Move through a menu', '↑ ↓ ← →', 'D-pad']
   ];
   return (
     <table class="vs-keys">
@@ -40,7 +41,7 @@ export function Controls() {
 
 const HOW_TO: [string, string][] = [
   ['Survive', 'Your spells cast themselves at whatever comes close. Move to stay out of reach, and pick up the gems monsters drop: they are experience.'],
-  ['Grow', 'Each level gives an upgrade card. Spells and runes drop from monsters, chests and bosses; equip them and socket runes in the spell panel.'],
+  ['Grow', 'Each level gives an upgrade card: passives in small steps, listed on the Party page of the game menu (Esc). Monsters far below your level give little experience, so move on to harder lands. Spells and runes drop from monsters, chests and bosses; equip them and socket runes on the Spells page.'],
   ['Explore', 'Regions get harder the further you go from the start. Roads lead between towns; caves, ruins and dungeons hold treasure and bosses.'],
   ['Towns', 'Healers revive and heal the party, merchants sell spells and runes, the elder gives the story quests and the board gives bounties.'],
   ['Build', 'Wood, stone and iron from trees, rocks and monsters build towers that cast spells for you, and docks with boats to cross the sea.'],
@@ -96,7 +97,7 @@ function Choice<T extends string | number>({ label, value, options, set }: { lab
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-/** The settings, in tabs: shared by the pause menu and Options on the title screen. */
+/** The settings, in tabs: shared by the game menu and Options on the title screen. */
 function SettingsTabs({ title }: { title: boolean }) {
   const [tab, setTabState] = useState<Tab>(loadTab);
   const [help, setHelp] = useState(false);
@@ -215,26 +216,11 @@ function SettingsTabs({ title }: { title: boolean }) {
   );
 }
 
-export function PauseMenu() {
-  const [quit, setQuit] = useState(false);
-  if (!ui.pauseOpen.value || !ui.game) return null;
-  const game = ui.game;
-  const close = () => game.ui.toggleSettings();
-  const askQuit = () => {
-    if (!quit) { setQuit(true); setTimeout(() => setQuit(false), 3500); return; }
-    game.quitToTitle();
-  };
+/** The Settings page of the game menu. */
+export function SettingsPage() {
   return (
-    <div class="vs-panel vs-pause hit">
-      <button class="vs-btn vs-x" onClick={close}><Icon name="close" /> ({glyph('menu')})</button>
-      <h2><Icon name="pause" /> Paused</h2>
-      <div class="sub">{onPad() ? 'D-pad to move, A to press, B to go back, LB and RB switch tabs.' : 'Arrow keys or the mouse to choose, Enter to press, Esc to go back.'}</div>
-      <button class="vs-btn big" onClick={close}><Icon name="play" /> Resume</button>
-      <div class="vs-acts vs-pacts">
-        <button class="vs-btn" onClick={() => (ui.slotsOpen.value = 'save')}><Icon name="save" /> Save game</button>
-        <button class="vs-btn" onClick={() => (ui.slotsOpen.value = 'load')}><Icon name="journal" /> Load game</button>
-        <button class={`vs-btn${quit ? ' warn' : ''}`} onClick={askQuit}><Icon name="door" /> {quit ? 'Quit to the title? Press again' : 'Quit to title'}</button>
-      </div>
+    <div class="vs-page vs-pause">
+      <h2><Icon name="settings" /> Settings</h2>
       <SettingsTabs title={false} />
     </div>
   );

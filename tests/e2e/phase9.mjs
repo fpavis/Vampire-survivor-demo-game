@@ -26,6 +26,17 @@ page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.te
 // THROTTLE=4 slows the CPU like a busy CI runner, to reproduce timing failures locally
 if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
 const ev = (fn, arg) => page.evaluate(fn, arg);
+// the game menu (Esc) on one of its pages; and the Load panel from its Save & Load page
+const openMenuOn = async (pg) => {
+  if (!(await ev(() => !!document.querySelector('.vs-menu')))) await page.keyboard.press('Escape');
+  await page.waitForSelector('.vs-menu', { timeout: 4000 });
+  await ev((p) => document.querySelector(`.vs-menu [data-page="${p}"]`).click(), pg);
+  await page.waitForFunction((p) => window.__dev.ui.menuPage.value === p, pg, { timeout: 4000 });
+};
+const openLoad = async () => {
+  await openMenuOn('save');
+  await ev(() => [...document.querySelectorAll('.vs-savep .vs-btn')].find((b) => /Load game/.test(b.innerText)).click());
+};
 const loop = (n) => ev((n) => { for (let i = 0; i < n; i++) window.game.gameLoop(1); }, n);
 // the panels refresh from the game loop, which runs slowly on a software GPU: wait for the state, not a fixed time
 const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 4000 }).then(() => true, () => false);
@@ -87,10 +98,9 @@ if (want('icons')) {
 
 // ---- settings: every option takes effect and is remembered
 if (want('settings')) {
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
+  await openMenuOn('settings');
   const tabs = await ev(() => [...document.querySelectorAll('.vs-pause .vs-tab')].map((t) => t.dataset.tab));
-  check('the pause menu has settings tabs', ['game', 'video', 'audio', 'controls', 'access', 'help'].every((t) => tabs.includes(t)), JSON.stringify(tabs));
+  check('the game menu has settings tabs', ['game', 'video', 'audio', 'controls', 'access', 'help'].every((t) => tabs.includes(t)), JSON.stringify(tabs));
   // every setting below is changed through the panel's own controls
   await ev(() => document.querySelector('.vs-pause [data-tab="video"]').click());
   await page.waitForTimeout(150);
@@ -152,9 +162,7 @@ if (want('slots')) {
     g.state.wallet.gold = 5555;
     await g.requestSave('manual', true, 'slot2');
   });
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-  await ev(() => [...document.querySelectorAll('.vs-pacts .vs-btn')].find((b) => /Load game/.test(b.innerText)).click());
+  await openLoad();
   await page.waitForSelector('.vs-slots [data-slot-id="slot2"]');
   await page.waitForTimeout(300);
   const card = await ev(() => { const c = document.querySelector('.vs-slots [data-slot-id="slot2"]'); return { text: c.innerText, thumb: !!c.querySelector('img'), backups: /Backups \(1\)/.test(c.innerText) }; });
@@ -178,7 +186,7 @@ if (want('slots')) {
   // break slot 2: it shows as unreadable and its backup still loads
   await ev(async () => { const st = window.game.store; if (st.kind === 'indexeddb') { const db = st.db; await new Promise((res) => { const t = db.transaction('saves', 'readwrite'); t.objectStore('saves').put(new Uint8Array([9, 9, 9]), 'slot2'); t.oncomplete = res; }); } else await st.save('slot2', { version: 99 }); });
   await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-  await ev(() => [...document.querySelectorAll('.vs-pacts .vs-btn')].find((b) => /Load game/.test(b.innerText)).click());
+  await openLoad();
   await page.waitForTimeout(600);
   const broken = await ev(() => document.querySelector('.vs-slots [data-slot-id="slot2"]').innerText);
   check('a corrupt save is reported, not loaded', /could not be read/.test(broken), broken.slice(0, 120));
@@ -189,8 +197,7 @@ if (want('slots')) {
   const restored = await ev(() => window.game.state.wallet.gold);
   check('the backup of a corrupt slot loads', restored === 4321, String(restored));
   // delete needs a second press
-  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-  await ev(() => [...document.querySelectorAll('.vs-pacts .vs-btn')].find((b) => /Load game/.test(b.innerText)).click());
+  await openLoad();
   await page.waitForTimeout(500);
   await ev(() => document.querySelector('.vs-slots [data-slot-id="slot3"] [data-act="delete"]').click());
   await page.waitForTimeout(100);
@@ -200,7 +207,7 @@ if (want('slots')) {
   const gone = await ev(async () => !(await window.game.store.load('slot3')));
   check('deleting a save asks for a second press', stillThere && gone, JSON.stringify({ stillThere, gone }));
   await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-  if (await ev(() => !!document.querySelector('.vs-pause'))) { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+  if (await ev(() => !!document.querySelector('.vs-menu'))) { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
 }
 
 // ---- journal: message log and statistics, kept in the save
@@ -434,9 +441,9 @@ if (want('feel')) {
   check('a gem flying in leaves a short trail', trail > 0, String(trail));
   await page.keyboard.press('j');
   await until(() => !!document.querySelector('.vs-journal'));
-  const anim = await ev(() => getComputedStyle(document.querySelector('.vs-journal')).animationName);
+  const anim = await ev(() => getComputedStyle(document.querySelector('.vs-menu')).animationName);
   await ev(() => document.documentElement.classList.add('vs-reduced'));
-  const reduced = await ev(() => getComputedStyle(document.querySelector('.vs-journal')).animationName);
+  const reduced = await ev(() => getComputedStyle(document.querySelector('.vs-menu')).animationName);
   await ev(() => document.documentElement.classList.remove('vs-reduced'));
   await page.keyboard.press('j');
   check('panels ease in, and not under reduced motion', anim === 'vs-panel-in' && reduced === 'none', JSON.stringify({ anim, reduced }));
@@ -697,11 +704,12 @@ if (want('vaults')) {
 
 // ---- title screen: Load, Options and Credits; quit to the title and continue
 if (want('front')) {
-  await page.keyboard.press('Escape');
+  await openMenuOn('party');
+  await ev(() => document.querySelector('.vs-menu [data-page="quit"]').click());
   await page.waitForTimeout(200);
-  await ev(() => [...document.querySelectorAll('.vs-pacts .vs-btn')].find((b) => /Quit to title/.test(b.innerText)).click());
-  await page.waitForTimeout(200);
-  await ev(() => [...document.querySelectorAll('.vs-pacts .vs-btn')].find((b) => /Quit to the title/.test(b.innerText)).click());
+  const ask = await ev(() => document.querySelector('.vs-menu [data-page="quit"]').innerText);
+  check('Quit to title asks for a second press', /Press again/.test(ask), ask);
+  await ev(() => document.querySelector('.vs-menu [data-page="quit"]').click());
   await page.waitForFunction(() => !window.game.state.player && window.game.input.menus.length > 0, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(800);
   const title = await ev(() => ({ items: window.game.input.menus[0]?.items().map((i) => i.btn.label.text), hud: window.game.ui.container.visible, version: document.querySelector('.vs-version')?.innerText || '' }));

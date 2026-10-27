@@ -1,9 +1,9 @@
 import { useEffect } from 'preact/hooks';
-import { Loadout } from './Loadout';
 import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
-import { BuildHud, BuildMenu, SailingHint, TowerPanel } from './Build';
-import { OptionsPanel, PauseMenu } from './Pause';
+import { BuildHud, SailingHint, TowerPanel } from './Build';
+import { OptionsPanel } from './Pause';
+import { GameMenu } from './Menu';
 import { SlotsPanel } from './Slots';
 import { CreditsPanel, TitleExtras } from './Front';
 import { RebindPanel } from './Rebind';
@@ -11,14 +11,10 @@ import { TipCard } from './Tips';
 import { WorldMap } from './WorldMap';
 import { DeathScreen, Ending, StoryCard } from './Story';
 import { Icon } from './Icon';
-import { setSettings } from '../app/settings';
-import { BoardPanel, Journal, Tracker } from './Quests';
-import { glyph, onPad, quickGlyph } from './hints';
+import { BoardPanel, Tracker } from './Quests';
+import { glyph, quickGlyph } from './hints';
 import { isTyping } from './nav';
-import { ui, PICK_KEYS, panelOpen } from './bridge';
-import { CARDS, PATHS } from '../core/hero/stats';
-import { RARITY } from '../core/config';
-import { hexCss, rarityColor } from '../core/access/palettes';
+import { ui, PICK_KEYS, menuOn, panelOpen, type MenuPage } from './bridge';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -27,10 +23,11 @@ function ActiveBar() {
   const keys = [glyph('skill1'), glyph('skill2'), glyph('skill3')];
   const mana = ui.mana.value, max = ui.maxMana.value;
   const w = ui.wallet.value;
-  const open = (p: 'spells' | 'journal' | 'build') => ui.game?.input.openPanel(p);
+  const open = (p: MenuPage) => ui.game?.input.openPanel(p);
   return (
     <div class="vs-bar hit vs-hud">
       <div class="vs-btns">
+        <button class="vs-btn vs-ico" onClick={() => ui.game?.ui.toggleMenu()} title="Game menu (Esc)" aria-label="Game menu"><Icon name="party" /></button>
         <button class="vs-btn vs-ico" onClick={() => open('spells')} title={`Spells and runes (${quickGlyph('spells')})`} aria-label="Spells and runes"><Icon name="backpack" /></button>
         <button class="vs-btn vs-ico" onClick={() => open('journal')} title={`Journal (${quickGlyph('journal')})`} aria-label="Journal"><Icon name="journal" /></button>
         <button class="vs-btn vs-ico" onClick={() => open('build')} title={`Build (${quickGlyph('build')})`} aria-label="Build"><Icon name="hammer" /></button>
@@ -66,36 +63,6 @@ function ActiveBar() {
   );
 }
 
-function CardsPanel() {
-  const cards = ui.cards.value;
-  const pending = ui.pending.value;
-  if (!ui.cardsOpen.value || !pending) return null;
-  const pick = (i: number) => ui.game?.pickCard(i);
-  return (
-    <div class="vs-panel vs-cards hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.cardsOpen.value = false)} aria-label="Close"><Icon name="close" /></button>
-      <h2>Level up! <span style={{ color: '#ffd84a' }}>{pending > 1 ? `×${pending} ready` : ''}</span></h2>
-      <div class="sub">{onPad() ? `The game keeps running. Choose with the D-pad and ${glyph('interact')}, close with ${glyph('cancel')}.` : `The game keeps running. Pick a card (1–3) or close this with U.`}</div>
-      {cards.map((c, i) => {
-        const def = CARDS[c.id], r = RARITY[Math.min(3, c.rarity)], path = PATHS[def.path];
-        return (
-          <button key={c.id} class="vs-card" style={{ '--rc': hexCss(rarityColor(ui.palette.value, Math.min(3, c.rarity))) }} onClick={() => pick(i)}>
-            <div class="ic"><Icon name={def.icon} /></div>
-            <div>
-              <div class="tg"><Icon name={path.icon} /> {path.name.toUpperCase()} · {def.mastery ? 'MASTERY' : r.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
-              <div class="nm">{def.name}</div>
-              {c.lines.map((l) => <div class="ln">{l}</div>)}
-            </div>
-            {!onPad() && <div class="kb">[{PICK_KEYS[i]}]</div>}
-          </button>
-        );
-      })}
-      <label class="vs-check"><input type="checkbox" checked={ui.autoPick.value} onChange={(e) => setSettings(ui.game, { autoPick: (e.target as HTMLInputElement).checked })} />
-        Auto-pick for me (favours your strongest path)</label>
-    </div>
-  );
-}
-
 function HoldBar() {
   const h = ui.hold.value;
   if (!h) return null;
@@ -109,9 +76,9 @@ function HoldBar() {
 
 function Pill() {
   const n = ui.pending.value;
-  if (!n || ui.cardsOpen.value || panelOpen()) return null;      // a panel open: it would sit on top of it
+  if (!n || panelOpen()) return null;      // a panel open: it would sit on top of it
   return (
-    <button class="vs-pill hit" onClick={() => (ui.cardsOpen.value = true)}>
+    <button class="vs-pill hit" onClick={() => ui.game?.ui.openMenu('upgrades')}>
       <Icon name="upgrade" /> {n} upgrade{n > 1 ? 's' : ''}<span class="long"> ready</span> · {quickGlyph('upgrades')}
     </button>
   );
@@ -136,20 +103,25 @@ export function App() {
   useEffect(() => { document.documentElement.classList.toggle('vs-modal', modal); }, [modal]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!ui.visible.value || ui.pauseOpen.value || ui.worldMap.value || isTyping(e.target)) return;
+      if (!ui.visible.value || ui.worldMap.value || isTyping(e.target)) return;
       const k = e.key.toLowerCase();
       const game = ui.game;
-      if (!game) return;
+      if (!game || !game.state.player || game.state.gameOver) return;
       const act = game.input.keys.actionFor(e.key);
-      if (act === 'upgrades') game.input.openPanel('upgrades');
-      else if (act === 'spells') game.input.openPanel('spells');
-      else if (act === 'journal') game.input.openPanel('journal');
-      else if (ui.cardsOpen.value && ui.pending.value && PICK_KEYS.includes(k)) game.pickCard(Number(k) - 1);
-      else if (PICK_KEYS.includes(k) && ui.loadoutOpen.value) game.spells.setView(Number(k) - 1);
-      else if (PICK_KEYS.includes(k)) game.party.switchTo(Number(k) - 1);
-      else if (act === 'build') game.input.openPanel('build');
+      // C, I, U, J, B: the game menu on that page (pressed again there, it closes)
+      if (act === 'party' || act === 'spells' || act === 'upgrades' || act === 'journal' || act === 'build') {
+        // a sub-panel on top of the menu (the rune picker, save slots, rebinding) keeps the keys
+        if (!ui.pauseOpen.value || !ui.slotsOpen.value) game.input.openPanel(act);
+        return;
+      }
+      if (ui.pauseOpen.value) {
+        if (menuOn('upgrades') && ui.pending.value && PICK_KEYS.includes(k)) game.pickCard(Number(k) - 1);
+        else if (menuOn('spells') && PICK_KEYS.includes(k)) game.spells.setView(Number(k) - 1);
+        else if (menuOn('spells') && act === 'nextHero') { e.preventDefault(); game.spells.cycleView(e.shiftKey ? -1 : 1); }
+        return;
+      }
+      if (PICK_KEYS.includes(k)) game.party.switchTo(Number(k) - 1);
       else if (k === 'enter' && game.towers.build) { e.preventDefault(); game.towers.confirmBuild(); }
-      else if (act === 'nextHero' && ui.loadoutOpen.value) { e.preventDefault(); game.spells.cycleView(e.shiftKey ? -1 : 1); }
       else if (act === 'nextHero') { e.preventDefault(); game.party.cycle(e.shiftKey ? -1 : 1); }
     };
     window.addEventListener('keydown', onKey);
@@ -177,20 +149,16 @@ export function App() {
         <DummyMeter />
         <TipCard />
       </div>
-      <CardsPanel />
-      <Loadout />
       <Healer />
       <Shop />
       <Inn />
       <Dialog />
       <BoardPanel />
-      <Journal />
-      <BuildMenu />
       <BuildHud />
       <TowerPanel />
       <SailingHint />
       <WorldMap />
-      <PauseMenu />
+      <GameMenu />
       <ActiveBar />
       <StoryCard />
       <DeathScreen />

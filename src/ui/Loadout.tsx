@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ui } from './bridge';
-import { glyph, onPad, quickGlyph } from './hints';
+import { glyph, onPad } from './hints';
 import { hexCss, rarityColor, rarityLetter } from '../core/access/palettes';
 import { applyDrop, beginDrag, checkDrop, configureDnd, dragging, type DropTarget, type Payload } from './dnd';
 import {
@@ -149,7 +149,8 @@ function SpellRow({ it, sel, onSel, assist }: { it: SpellItem; sel: boolean; onS
   );
 }
 
-export function Loadout() {
+/** The Spells page of the game menu: each hero's loadout, the spell bag and the runes. */
+export function SpellsPage() {
   ui.version.value;
   useDndWiring();
   const [selUid, setSel] = useState<string | null>(null);
@@ -176,16 +177,8 @@ export function Loadout() {
     panel.addEventListener('keydown', onKey);
     return () => { panel.removeEventListener('vs-pad', onPadEv); panel.removeEventListener('keydown', onKey); };
   }, [panel]);
-  const open = ui.loadoutOpen.value;
-  useEffect(() => {
-    if (open) return;
-    setPicker(null);
-    // closing the panel: what was new has been seen, and the view returns to the active hero
-    const sp = ui.game?.spells;
-    if (sp?.viewHero != null || sp?.spells?.some((s: SpellItem) => s.isNew) || sp?.newRunes?.size) { sp.clearNew(); sp.setView(null); }
-  }, [open]);
   const game = ui.game;
-  if (!open || !game) return null;
+  if (!game) return null;
   const sp = game.spells;
   const party = ui.party.value;
   const vi: number = sp.viewIndex();
@@ -290,11 +283,10 @@ export function Loadout() {
 
   return (
     <>
-    <div class="vs-panel vs-load hit" ref={setPanel}>
-      <button class="vs-btn vs-x" onClick={() => (ui.loadoutOpen.value = false)}><Icon name="close" /> ({quickGlyph('spells')})</button>
+    <div class="vs-page vs-load" ref={setPanel}>
       <h2>Spells &amp; Runes — {viewed?.name}{resting ? ' (resting)' : ''}
         <span class="vs-heroes">{party.heroes.map((h, i) => (
-          <button key={h.id} class={`vs-btn vs-hb${i === vi ? ' on' : ''}${i === party.active ? ' act' : ''}${h.dead ? ' down' : ''}`} tabIndex={-1} data-hero={i}
+          <button key={h.id} class={`vs-btn vs-hb${i === vi ? ' on' : ''}${i === party.active ? ' act' : ''}${h.dead ? ' down' : ''}`} data-skipfocus data-hero={i}
             title={i === party.active ? `${h.name} (active)` : `Show ${h.name}'s loadout${h.dead ? ' (down)' : ''}`} onClick={() => sp.setView(i)}><Icon name={h.icon} /></button>
         ))}</span>
       </h2>
@@ -455,7 +447,7 @@ function HintBar() {
           <span>{k(glyph('skill1'))} equip · unequip · socket</span>
           <span>{k(glyph('skill2'))} lock</span>
           <span>{k(glyph('skill3'))} favourite</span>
-          <span>{k(glyph('prevHero'))}{k(glyph('nextHero'))} show hero</span>
+          <span>{k(glyph('prevHero'))}{k(glyph('nextHero'))} pages</span>
           <span>{k(glyph('cancel'))} back</span>
         </>
       ) : (
@@ -464,8 +456,8 @@ function HintBar() {
           <span>{k('F')} equip · unequip · socket</span>
           <span>{k('L')} lock</span>
           <span>{k('V')} favourite</span>
-          <span>{k('Tab')} show hero</span>
-          <span>{k('Esc')} close</span>
+          <span>{k('Tab')} or {k('1')}–{k('3')} show hero</span>
+          <span>{k('Esc')} back</span>
           <span class="vs-hint-mouse">or drag with the mouse</span>
         </>
       )}

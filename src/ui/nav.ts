@@ -1,6 +1,7 @@
 // Focus navigation for the DOM panels, shared by keyboard (arrow keys), controller (d-pad) and mouse (hover).
 // The top-most open panel is the "scope": directions move focus between its buttons, confirm presses the focused
-// one, back closes the panel. Panels never pause the game, so movement keys and the left stick keep working.
+// one, back closes the panel. Town panels never pause the game, so movement keys and the left stick keep working;
+// the game menu does (the world waits under it).
 import { pickNeighbor, type Dir, type Rect } from '../core/input/gamepad';
 import { ui } from './bridge';
 
@@ -148,12 +149,17 @@ export function navAction(button: PadFace): boolean {
   return ev.defaultPrevented;
 }
 
-/** Panels that sit beside the action (level-up cards) let unhandled skill buttons through; the others do not. */
+/** Panels that sit beside the action (marked .vs-cards) let unhandled skill buttons through; the others do not. */
 export const navModal = () => { const s = navScope(); return !!s && !s.classList.contains('vs-cards'); };
 
-/** Step the tabs of the top panel (settings): LB / RB on a controller. */
+/** LB / RB on a controller: flip the game menu's pages, or step the tabs of the top panel (Options on the title). */
 export function navTab(dir: number): boolean {
   const scope = navScope();
+  if (scope?.classList.contains('vs-menu')) {
+    uiSound('uiMove');
+    scope.dispatchEvent(new CustomEvent<number>('vs-page', { detail: dir }));
+    return true;
+  }
   const tabs = scope?.querySelector('.vs-settings');
   if (!tabs) return false;
   uiSound('uiMove');

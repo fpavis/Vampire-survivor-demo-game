@@ -131,6 +131,76 @@ if (want('balance')) {
   await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; });
 }
 
+// ---- 11c: one game menu (Esc / Start) with the party's stats and passives, and every other screen as a page
+if (want('menu')) {
+  const EMOJI = /\p{Extended_Pictographic}/u;
+  await ev(() => {
+    const g = window.game, h = g.party.heroes;
+    g.ui.closeMenu();
+    g.state.picks = { might: 3, reach: 2, vitality: 1 }; g.state.pending = 0;
+    h[1].picks = { might: 4, armor: 2 }; h[1].dead = false;
+    h[2].picks = {}; h[2].dead = false;
+    g.recalcStats(); g.ensureCards();
+  });
+  await page.keyboard.press('c');
+  const opened = await until(() => !!document.querySelector('.vs-menu .vs-partyp'));
+  const st = await ev(() => ({ paused: window.game.state.paused, page: window.__dev.ui.menuPage.value }));
+  check('C opens the game menu on the Party page, and the game waits', opened && st.paused && st.page === 'party', JSON.stringify(st));
+  const cell = (stat, i) => ev(([stat, i]) => document.querySelector(`.vs-partyp [data-stat="${stat}"]`)?.children[i]?.innerText.trim(), [stat, i]);
+  const party = await ev(() => ({
+    pips: document.querySelectorAll('.vs-partyp [data-card="might"] .pips i.on').length,
+    reach: document.querySelectorAll('.vs-partyp [data-card="reach"] .pips i.on').length,
+    none: document.querySelector('.vs-partyp [data-card="crit"]')?.classList.contains('none'),
+    ranks: /6 ranks/i.test(document.querySelector('.vs-partyp')?.innerText || '')
+  }));
+  check('the Party page shows every passive with its ranks', party.pips === 3 && party.reach === 2 && party.none && party.ranks, JSON.stringify(party));
+  const might = [await cell('might', 1), await cell('might', 2), await cell('might', 3)];
+  const want = await ev(() => { const g = window.game; return { own: Math.round((g.state.picks.might * 0.08) * 100), total: Math.round((g.stats.might - 1) * 100) }; });
+  check('its stats match the hero\'s own cards and the party\'s auras', might[0] === `+${want.own}%` && might[1] === '+8%' && might[2] === `+${want.total}%` && want.total === 32, JSON.stringify({ might, want }));
+  check('...area from Reach and armour from a resting hero\'s aura', (await cell('area', 1)) === '+10%' && (await cell('armor', 2)) === '-2%', JSON.stringify([await cell('area', 1), await cell('armor', 2)]));
+  await ev(() => document.querySelector('.vs-partyp [data-hero="1"]').click());
+  await until(() => /resting/.test(document.querySelector('.vs-partyp .vs-phead')?.innerText || ''));
+  const rest = await ev(() => ({ head: [...document.querySelectorAll('.vs-partyp .vs-stats th')].map((t) => t.innerText), lend: document.querySelector('.vs-partyp [data-stat="might"]')?.children[2]?.innerText.trim(), make: !!document.querySelector('.vs-partyp [data-act="make-active"]') }));
+  check('a resting hero shows what they lend the party', rest.head.includes('Lends') && rest.lend === '+8%' && rest.make, JSON.stringify(rest));
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/menu-party.png` });
+  // every page renders, with no emoji anywhere
+  const pages = ['party', 'spells', 'upgrades', 'journal', 'build', 'save', 'settings'];
+  const seen = {};
+  for (const p of pages) {
+    await ev((p) => document.querySelector(`.vs-menu [data-page="${p}"]`).click(), p);
+    await until((p) => window.__dev.ui.menuPage.value === p && document.querySelector('.vs-mbody .vs-page'), p);
+    seen[p] = await ev(() => { const t = document.querySelector('.vs-menu').innerText; return { len: document.querySelector('.vs-mbody').innerText.length, emoji: (t.match(/\p{Extended_Pictographic}/gu) || []).join('') }; });
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/menu-${p}.png` });
+  }
+  check('every page of the menu renders', pages.every((p) => seen[p].len > 40), JSON.stringify(Object.fromEntries(pages.map((p) => [p, seen[p].len]))));
+  check('...and shows no emoji', pages.every((p) => !seen[p].emoji && !EMOJI.test(seen[p].emoji)), JSON.stringify(seen));
+  await ev(() => document.querySelector('.vs-menu [data-page="upgrades"]').click());
+  const empty = await ev(() => document.querySelector('.vs-upg')?.innerText || '');
+  check('Upgrades with none waiting says so and still lists the passives', /No upgrades waiting/.test(empty) && /ARCANE/.test(empty), empty.slice(0, 80));
+  // a page hotkey jumps; pressed on its own page it closes the menu and the game runs on
+  await page.keyboard.press('j');
+  await until(() => window.__dev.ui.menuPage.value === 'journal');
+  await page.keyboard.press('j');
+  const shut = await until(() => !document.querySelector('.vs-menu') && !window.game.state.paused);
+  check('J jumps to the journal, and again closes the menu', shut);
+  // Esc opens it again where it was left; the World map entry closes it and opens the map
+  await page.keyboard.press('Escape');
+  await until(() => !!document.querySelector('.vs-menu'));
+  const again = await ev(() => window.__dev.ui.menuPage.value);
+  await ev(() => document.querySelector('.vs-menu [data-page="map"]').click());
+  const map = await until(() => !document.querySelector('.vs-menu') && !!window.__dev.ui.worldMap.value);
+  check('Esc reopens the menu on its last page; World map swaps it for the map', again === 'journal' && map, again);
+  await page.keyboard.press('Escape');
+  await until(() => !window.__dev.ui.worldMap.value && !window.game.state.paused);
+  // the upgrades pill opens the menu on Upgrades
+  await ev(() => { const g = window.game; g.state.pending = 2; g.ensureCards(); g.state.nextLevel = 1e12; });
+  await until(() => !!document.querySelector('.vs-pill'));
+  await page.click('.vs-pill', { force: true });      // it pulses: never "stable" for a normal click
+  const pill = await until(() => window.__dev.ui.menuPage.value === 'upgrades' && document.querySelectorAll('.vs-menu .vs-card').length === 3);
+  check('the upgrades pill opens the Upgrades page with three cards', pill);
+  await ev(() => { const g = window.game; g.state.pending = 0; g.ensureCards(); g.ui.closeMenu(); });
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');

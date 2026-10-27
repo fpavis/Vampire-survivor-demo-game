@@ -76,7 +76,7 @@ export class TipSystem {
 
   private blocked() {
     const g = this.game;
-    return panelOpen() || uiBridge.cardsOpen.value || g.busy || g.state.gameOver || !!g.ui.mapOverlay;
+    return panelOpen() || g.busy || g.state.gameOver || !!g.ui.mapOverlay;
   }
 
   private check(cond: TipCondition): boolean {

@@ -1,4 +1,4 @@
-// A small frame-rate readout (F3 or the pause menu): frames per second, simulation time per frame and draw calls.
+// A small frame-rate readout (F3 or the video settings): frames per second, simulation time per frame and draw calls.
 // Draw calls are counted by wrapping the WebGL draw functions only while the overlay is shown.
 
 export class PerfOverlay {

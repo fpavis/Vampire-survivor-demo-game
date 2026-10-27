@@ -215,24 +215,22 @@ export class InputSystem {
         return navBack();
     }
 
-    /** Esc: back out of things, otherwise open or close the pause menu */
+    /** Esc: back out of things (a sub-panel, the menu itself), otherwise open the game menu */
     escape() {
         const g = this.game;
         if (!g.state.player || g.state.gameOver) return false;
         if (this.back()) return true;
         if (g.ui.mapOverlay) { g.ui.toggleMap(g); return true; }
-        g.ui.toggleSettings();
+        g.ui.toggleMenu();
         return true;
     }
 
+    /** A page hotkey (I, U, J, B, C or the d-pad): the game menu opens on that page, or closes when it is there. */
     openPanel(name) {
-        const g = this.game, b = uiBridge;
-        if (name === 'spells') b.loadoutOpen.value = !b.loadoutOpen.value;
-        else if (name === 'upgrades') b.cardsOpen.value = !b.cardsOpen.value && b.pending.value > 0;
-        else if (name === 'journal') b.journalOpen.value = !b.journalOpen.value;
-        else if (name === 'build') {
-            if (g.mode === 'overworld' && !g.boat) { if (g.towers.build) g.towers.cancelBuild(); else b.buildMenuOpen.value = !b.buildMenuOpen.value; }
-        }
+        const g = this.game;
+        if (name === 'build' && g.towers.build) { g.towers.cancelBuild(); return; }
+        if (uiBridge.worldMap.value || g.busy) return;
+        g.ui.toggleMenu(name);
     }
 
     dispatch(f) {
@@ -275,15 +273,20 @@ export class InputSystem {
             }
             return;
         }
-        if (has('menu')) { g.ui.toggleSettings(); return; }
-        // the pause menu, and the ending (which pauses the game), take the d-pad and the face buttons
+        if (has('menu')) { g.ui.toggleMenu(); return; }
+        // the game menu, and the ending (which pauses the game), take the d-pad and the face buttons
         if (uiBridge.pauseOpen.value || uiBridge.ending.value) {
             const dir = f.stick || DIRS.find((d) => has(d));
             if (dir) navMove(dir);
             if (has('interact')) navConfirm();
-            if (has('cancel')) navBack() || g.ui.toggleSettings();
+            if (has('cancel')) navBack() || g.ui.closeMenu();
+            // LB / RB flip the menu's pages; X, Y and RT act on the focused item (equip, lock, favourite)
             if (has('prevHero')) navTab(-1);
             if (has('nextHero')) navTab(1);
+            if (has('skill1')) navAction('x');
+            if (has('skill2')) navAction('y');
+            if (has('skill3')) navAction('rt');
+            if (has('map') && uiBridge.pauseOpen.value) { g.ui.closeMenu(); g.toggleMap(); }
             return;
         }
         if (s.paused) return;
@@ -295,10 +298,8 @@ export class InputSystem {
             if (navActive() && (navAction(face) || navModal())) continue;
             g.spells.cast(slot);
         }
-        // with the spell panel open the shoulder buttons show another hero's loadout instead of switching
-        const heroes = uiBridge.loadoutOpen.value ? (d) => g.spells.cycleView(d) : (d) => g.party.cycle(d);
-        if (has('prevHero')) heroes(-1);
-        if (has('nextHero')) heroes(1);
+        if (has('prevHero')) g.party.cycle(-1);
+        if (has('nextHero')) g.party.cycle(1);
         if (has('map')) g.toggleMap();
         if (has('cancel')) this.back() || g.tips.dismiss();
         if (has('interact')) {

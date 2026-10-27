@@ -169,16 +169,21 @@ await tap(B.X);
 const bag1 = await ev(() => window.game.spells.runes.length);
 check('X on a rune sockets it into the selected spell', bag1 === bag0 - 1, `${bag0} -> ${bag1}`);
 
-// RB switches the hero shown in the loadout
-const h0 = await ev(() => window.game.party.active);
+// A on a hero's portrait at the top of the page shows that hero's loadout; RB and LB flip the menu's pages
 const title0 = await ev(() => document.querySelector('.vs-load h2').innerText);
-await ev(() => { window.game.party.cdUntil = 0; });
-await tap(B.RB);
+await ev(() => document.querySelector('.vs-load [data-hero="1"]')?.focus());
+await tap(B.A);
 await page.waitForFunction((t0) => document.querySelector('.vs-load h2').innerText.split('\n')[0] !== t0, title0.split('\n')[0], { timeout: 4000 }).catch(() => {});
 const title1 = await ev(() => document.querySelector('.vs-load h2').innerText);
-check('RB switches the hero whose loadout is shown', title0.split('\n')[0] !== title1.split('\n')[0], JSON.stringify({ title0, title1, h0 }));
+check('A on a hero portrait shows that hero\'s loadout', title0.split('\n')[0] !== title1.split('\n')[0] && /Brann/.test(title1), JSON.stringify({ title0, title1 }));
+await tap(B.RB);
+const pg1 = await ev(() => window.__dev.ui.menuPage.value);
+await tap(B.LB);
+const pg2 = await ev(() => window.__dev.ui.menuPage.value);
+check('RB and LB flip to the next page and back', pg1 === 'upgrades' && pg2 === 'spells', `${pg1} ${pg2}`);
+await page.waitForSelector('.vs-load', { timeout: 4000 });
 await tap(B.B);
-check('B closes the loadout', !(await ev(() => !!document.querySelector('.vs-load'))));
+check('B closes the menu', !(await ev(() => !!document.querySelector('.vs-load') || !!document.querySelector('.vs-menu'))));
 
 // ---- 3. monsters: tags only where they matter
 const tags = await ev(() => {

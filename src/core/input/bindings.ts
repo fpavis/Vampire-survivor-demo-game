@@ -4,21 +4,21 @@
 export type KeyAction =
   | 'up' | 'down' | 'left' | 'right'
   | 'skill1' | 'skill2' | 'skill3' | 'interact' | 'map'
-  | 'spells' | 'upgrades' | 'journal' | 'build' | 'nextHero';
+  | 'spells' | 'upgrades' | 'journal' | 'build' | 'party' | 'nextHero';
 
 export const KEY_ACTIONS: { id: KeyAction; label: string }[] = [
   { id: 'up', label: 'Move up' }, { id: 'down', label: 'Move down' }, { id: 'left', label: 'Move left' }, { id: 'right', label: 'Move right' },
   { id: 'interact', label: 'Interact · talk · enter' }, { id: 'skill1', label: 'Skill 1 (Dash …)' }, { id: 'skill2', label: 'Skill 2' },
   { id: 'skill3', label: 'Skill 3' }, { id: 'nextHero', label: 'Next hero' }, { id: 'map', label: 'World map' },
   { id: 'spells', label: 'Spells and runes' }, { id: 'upgrades', label: 'Level-up cards' }, { id: 'journal', label: 'Journal' },
-  { id: 'build', label: 'Build menu' }
+  { id: 'build', label: 'Build menu' }, { id: 'party', label: 'Party and stats' }
 ];
 
 /** Defaults: the first key is the one shown in hints and the one a player rebinds; arrows stay as a second way to walk. */
 export const KEY_DEFAULTS: Record<KeyAction, string[]> = {
   up: ['w', 'arrowup'], down: ['s', 'arrowdown'], left: ['a', 'arrowleft'], right: ['d', 'arrowright'],
   skill1: [' '], skill2: ['q'], skill3: ['r'], interact: ['e'], map: ['m'],
-  spells: ['i'], upgrades: ['u'], journal: ['j'], build: ['b'], nextHero: ['tab']
+  spells: ['i'], upgrades: ['u'], journal: ['j'], build: ['b'], party: ['c'], nextHero: ['tab']
 };
 
 /** Keys a player may not take for themselves: menus, pause and the number keys that pick cards and heroes. */

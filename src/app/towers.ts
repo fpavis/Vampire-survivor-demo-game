@@ -115,7 +115,7 @@ export class TowerSystem {
         sprite.zIndex = 1e7;
         g.objectLayer.addChild(sprite);
         this.build = { kind, tx: 0, ty: 0, valid: false, reason: '', plan: null, ghost, sprite, last: '' };
-        uiBridge.buildMenuOpen.value = false;
+        g.ui.closeMenu();          // placing happens in the world: the menu steps aside
         this.updateBuild();
         g.audio.play('equip');
     }

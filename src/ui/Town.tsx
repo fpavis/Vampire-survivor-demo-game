@@ -40,7 +40,7 @@ export function Shop() {
           );
         })}
       </div>
-      <div class="sub" style={{ marginTop: '8px' }}>Tip: drop unwanted spells and runes into the salvage slot in your spell panel (I) to turn them into gold.</div>
+      <div class="sub" style={{ marginTop: '8px' }}>Tip: drop unwanted spells and runes into the salvage slot on the Spells page (I) to turn them into gold.</div>
     </div>
   );
 }

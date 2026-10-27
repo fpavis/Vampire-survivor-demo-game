@@ -25,6 +25,13 @@ let page = await context.newPage();
 const watch = (pg) => { pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); }); };
 watch(page);
 const ev = (fn, arg) => page.evaluate(fn, arg);
+// the game menu (Esc) on its Settings page
+const openSettings = async (pg) => {
+  await pg.keyboard.press('Escape');
+  await pg.waitForSelector('.vs-menu', { timeout: 4000 });
+  await pg.evaluate(() => document.querySelector('.vs-menu [data-page="settings"]').click());
+  await pg.waitForSelector('.vs-pause', { timeout: 4000 });
+};
 const loop = (n) => ev((n) => { for (let i = 0; i < n; i++) window.game.gameLoop(1); }, n);
 
 await page.goto(`http://localhost:${PORT}/`);
@@ -97,12 +104,11 @@ if (want('audio')) {
   await ev(() => { window.game.audio.setVolume('music', 0.25); window.game.audio.setMuted(false); });
   const prefs = await ev(() => JSON.parse(localStorage.getItem('vs.audio.v1') || '{}'));
   check('volumes are remembered', Math.abs(prefs.music - 0.25) < 1e-6, JSON.stringify(prefs));
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
+  await openSettings(page);
   await ev(() => document.querySelector('.vs-pause [data-tab="audio"]').click());
   await page.waitForTimeout(150);
   const sliders = await ev(() => [...document.querySelectorAll('.vs-pause .vs-row span')].map((x) => x.innerText));
-  check('the pause menu has volume sliders', ['Master volume', 'Music', 'Effects'].every((l) => sliders.includes(l)), JSON.stringify(sliders));
+  check('the settings have volume sliders', ['Master volume', 'Music', 'Effects'].every((l) => sliders.includes(l)), JSON.stringify(sliders));
   await page.keyboard.press('Escape');
 }
 
@@ -232,12 +238,11 @@ if (want('spells')) {
 // ---- accessibility and rebinding
 if (want('access')) {
   const before = await ev(() => parseFloat(getComputedStyle(document.querySelector('.vs-wallet')).fontSize));
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
+  await openSettings(page);
   const tabLabels = async (tab) => { await ev((t) => document.querySelector(`.vs-pause [data-tab="${t}"]`).click(), tab); await page.waitForTimeout(150); return ev(() => [...document.querySelectorAll('.vs-pause .vs-tabbody .vs-btn, .vs-pause .vs-tabbody .vs-row span')].map((b) => b.innerText)); };
   const rebindLabels = await tabLabels('controls');
   const labels = await tabLabels('access');
-  check('the pause menu offers text size, colours, reduced motion and rebinding',
+  check('the settings offer text size, colours, reduced motion and rebinding',
     labels.includes('Text size') && labels.some((t) => /Colours/.test(t)) && labels.some((t) => /Reduced motion/.test(t)) && rebindLabels.some((t) => /Rebind/.test(t)), JSON.stringify({ labels, rebindLabels }));
   const applied = await ev(() => {
     const btn = [...document.querySelectorAll('.vs-pause .vs-btn')];
@@ -265,8 +270,7 @@ if (want('access')) {
   check('a strong monster is tagged with a shape and the palette colour', /^▲ Lv/.test(cues.label || '') && (cues.fill === 0xf0e442 || cues.fill === '#f0e442'), JSON.stringify(cues));
 
   // rebind the first skill to X with the keyboard, through the panel
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
+  await openSettings(page);
   await ev(() => document.querySelector('.vs-pause [data-tab="controls"]').click());
   await page.waitForTimeout(150);
   await ev(() => [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Rebind/.test(b.innerText)).click());
@@ -333,9 +337,8 @@ if (want('tips')) {
   check('seen tips are saved and not shown again', saved.tips.includes('welcome') && saved.tips.includes('upgrade') && loaded.seen.includes('welcome') && !!loaded.card && loaded.card !== 'welcome' && loaded.card !== 'upgrade', JSON.stringify({ saved, loaded }));
   check('discovered regions are saved', saved.regions.every((id) => loaded.regions.includes(id)) && loaded.regions.includes(saved.far), JSON.stringify({ saved, loaded }));
 
-  // tips can be switched off from the pause menu
-  await p2.keyboard.press('Escape');
-  await p2.waitForTimeout(200);
+  // tips can be switched off from the settings
+  await openSettings(p2);
   await p2.evaluate(() => document.querySelector('.vs-pause [data-tab="help"]').click());
   await p2.waitForTimeout(150);
   const off = await p2.evaluate(() => {

@@ -49,7 +49,7 @@ const realTap = async (...btns) => {
   await pad();
   await page.waitForFunction(() => window.game.input.frame.held.size === 0, null, { timeout: 8000 });
 };
-const focusInfo = () => ev(() => { const a = document.activeElement; return a && a !== document.body ? { cls: a.className, tag: a.tagName, text: (a.innerText || '').slice(0, 40), type: a.type || '', inPanel: !!a.closest('.vs-panel') } : null; });
+const focusInfo = () => ev(() => { const a = document.activeElement; return a && a !== document.body ? { cls: a.className, tag: a.tagName, text: (a.innerText || '').slice(0, 40), type: a.type || '', inPanel: !!a.closest('.vs-panel'), inPage: !!a.closest('.vs-mbody') } : null; });
 const focusSettled = () => page.waitForFunction(() => { const a = document.activeElement; return !!a && a !== document.body && !!a.closest('.vs-panel'); }, null, { timeout: 4000 });
 const device = () => ev(() => document.documentElement.dataset.input);
 
@@ -119,45 +119,58 @@ await tap(B.LB);
 const hero0 = await ev(() => window.game.party.active);
 check('RB and LB switch heroes', hero1 === 1 && hero0 === 0, `${hero1} ${hero0}`);
 
-// ---- 4. level-up cards with the d-pad
+// ---- 4. level-up cards with the d-pad: the game menu opens on its Upgrades page
 await ev(() => { const g = window.game; g.state.nextLevel = 20; g.state.experience = 20; g.checkLevelUp(); g.state.nextLevel = 1e12; });
 await tap(B.DOWN);
-await page.waitForSelector('.vs-cards', { timeout: 3000 });
+await page.waitForSelector('.vs-menu .vs-cards', { timeout: 3000 });
 await focusSettled();
 const c0 = await focusInfo();
-check('opening the cards focuses a card, not the close button', c0 && /vs-card/.test(c0.cls), JSON.stringify(c0));
-await tap(B.DOWN);
+check('the d-pad down opens the upgrades page with a card focused', c0 && /vs-card/.test(c0.cls) && (await ev(() => window.game.state.paused)), JSON.stringify(c0));
+await tap(B.RIGHT);
 const c1 = await focusInfo();
 check('the d-pad moves to the next card', c1 && /vs-card/.test(c1.cls) && c1.text !== c0.text, JSON.stringify({ c0, c1 }));
-await tap(B.UP);
+await tap(B.LEFT);
 const c2 = await focusInfo();
 check('...and back', c2 && c2.text === c0.text, JSON.stringify(c2));
 await tap(B.A);
-const picked = await ev(() => ({ pending: window.game.state.pending, open: !!document.querySelector('.vs-cards') }));
-check('A picks the focused card', picked.pending === 0 && !picked.open, JSON.stringify(picked));
+const picked = await ev(() => ({ pending: window.game.state.pending, cards: !!document.querySelector('.vs-cards') }));
+check('A picks the focused card', picked.pending === 0 && !picked.cards, JSON.stringify(picked));
+await tap(B.B);
+const shut = await ev(() => ({ menu: !!document.querySelector('.vs-menu'), paused: window.game.state.paused }));
+check('B closes the menu and the game runs again', !shut.menu && !shut.paused, JSON.stringify(shut));
 
-// ---- 5. the spell panel: open, navigate, back
+// ---- 5. the spells page: open, navigate, back
 await tap(B.UP);
 await page.waitForSelector('.vs-load', { timeout: 3000 });
 await focusSettled();
 const l0 = await focusInfo();
-check('the d-pad up opens the spell panel and focuses inside it', l0 && l0.inPanel && l0.tag !== 'INPUT', JSON.stringify(l0));
+check('the d-pad up opens the spells page and focuses inside it', l0 && l0.inPanel && l0.tag !== 'INPUT' && l0.inPage, JSON.stringify(l0));
 const seen = new Set([l0.text + l0.cls]);
 for (const b of [B.DOWN, B.DOWN, B.RIGHT, B.DOWN]) { await tap(b); const f = await focusInfo(); if (f) seen.add(f.text + f.cls); }
-check('moving around the panel visits different elements', seen.size >= 3, String(seen.size));
+check('moving around the page visits different elements', seen.size >= 3, String(seen.size));
 await tap(B.B);
-check('B closes the panel', !(await ev(() => !!document.querySelector('.vs-load'))));
+check('B closes the menu', !(await ev(() => !!document.querySelector('.vs-menu'))));
 
-// ---- 6. the pause menu
+// ---- 6. the game menu: Start, the page list, LB / RB, the settings
 await tap(B.START);
-await page.waitForSelector('.vs-pause', { timeout: 3000 });
+await page.waitForSelector('.vs-menu', { timeout: 3000 });
 await focusSettled();
-const paused = await ev(() => ({ paused: window.game.state.paused, focus: document.activeElement && document.activeElement.innerText }));
-check('Start pauses and focuses the menu', paused.paused && /Resume/.test(paused.focus || ''), JSON.stringify(paused));
+const paused = await ev(() => ({ paused: window.game.state.paused, page: window.__dev.ui.menuPage.value, inPage: !!document.activeElement.closest('.vs-mbody') }));
+check('Start pauses and opens the menu on the page it was left on', paused.paused && paused.page === 'spells' && paused.inPage, JSON.stringify(paused));
+const pageNow = () => ev(() => window.__dev.ui.menuPage.value);
+await tap(B.RB);
+const p1 = await pageNow();
+await tap(B.LB); await tap(B.LB);
+const p2 = await pageNow();
+check('RB and LB flip the menu\'s pages', p1 === 'upgrades' && p2 === 'party', `${p1} ${p2}`);
+for (let i = 0; i < 6; i++) await tap(B.RB);
+check('...all the way round to the settings', (await pageNow()) === 'settings', await pageNow());
+await focusSettled();
+const sf0 = await focusInfo();
 await pad({ axes: [0, 1, 0, 0] }); await step(1); await pad(); await step(1);
 const stickNav = await focusInfo();
-check('the stick moves through the pause menu', stickNav && !/Resume/.test(stickNav.text), JSON.stringify(stickNav));
-await ev(() => document.querySelector('.vs-pause [data-tab="audio"]').click());
+check('the stick moves through the menu', stickNav && sf0 && stickNav.text !== sf0.text, JSON.stringify({ sf0, stickNav }));
+await ev(() => { const t = document.querySelector('.vs-pause [data-tab="audio"]'); t.click(); t.focus(); });
 await step(2);
 let reached = null;
 for (let i = 0; i < 12; i++) { const f = await focusInfo(); if (f && /Sound/.test(f.text)) { reached = f; break; } await tap(B.DOWN); }
@@ -166,11 +179,10 @@ await tap(B.A);
 const m1 = await ev(() => document.activeElement.innerText);
 check('A presses the focused button (sound toggles)', reached && m0 !== m1, `${m0} -> ${m1}`);
 await tap(B.A);
-await tap(B.RB);
+await ev(() => { const t = document.querySelector('.vs-pause [data-tab="controls"]'); t.click(); t.focus(); });
 await step(2);
-check('RB steps to the next settings tab', await ev(() => document.querySelector('.vs-pause .vs-tab.on')?.dataset.tab === 'controls'), await ev(() => document.querySelector('.vs-pause .vs-tab.on')?.dataset.tab));
 let slider = null;
-for (let i = 0; i < 20; i++) {
+for (let i = 0; i < 24; i++) {
   const f = await ev(() => { const a = document.activeElement; return a && a.type === 'range' && /dead zone/i.test(a.closest('label')?.innerText || '') ? { type: 'range' } : null; });
   if (f) { slider = f; break; }
   await tap(B.DOWN);
@@ -182,23 +194,32 @@ check('left and right adjust the focused slider', slider && dz1 > dz0, `${dz0} -
 const saved = await ev(() => JSON.parse(localStorage.getItem('vs.input.v1') || '{}'));
 check('the dead zone setting is remembered', Math.abs(saved.deadzone - dz1) < 0.001, JSON.stringify(saved));
 await tap(B.B);
-const closed = await ev(() => ({ paused: window.game.state.paused, panel: !!document.querySelector('.vs-pause') }));
-check('B closes the pause menu and the game runs again', !closed.paused && !closed.panel, JSON.stringify(closed));
+const closed = await ev(() => ({ paused: window.game.state.paused, panel: !!document.querySelector('.vs-menu') }));
+check('B closes the game menu and the game runs again', !closed.paused && !closed.panel, JSON.stringify(closed));
 await tap(B.START); await tap(B.START);
-check('Start toggles the pause menu', !(await ev(() => window.game.state.paused)));
+check('Start toggles the game menu', !(await ev(() => window.game.state.paused)));
 
-// ---- 7. keyboard: Esc backs out in order, arrows move through panels, typing is left alone
+// ---- 7. keyboard: Esc backs out in order, hotkeys jump between pages, arrows move, typing is left alone
+await page.keyboard.press('i');
+await page.waitForSelector('.vs-load');
+await page.keyboard.press('j');
+await page.waitForSelector('.vs-journal');
+const jumped = await ev(() => ({ load: !!document.querySelector('.vs-load'), page: window.__dev.ui.menuPage.value }));
+check('a page hotkey with the menu open jumps to that page', !jumped.load && jumped.page === 'journal', JSON.stringify(jumped));
+await page.keyboard.press('j');
+await page.waitForTimeout(80);
+check('...and pressed again on its own page, closes the menu', !(await ev(() => !!document.querySelector('.vs-menu'))));
 await page.keyboard.press('i');
 await page.waitForSelector('.vs-load');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(80);
-const esc1 = await ev(() => ({ load: !!document.querySelector('.vs-load'), pause: !!document.querySelector('.vs-pause') }));
-check('Esc closes an open panel first', !esc1.load && !esc1.pause, JSON.stringify(esc1));
+const esc1 = await ev(() => ({ load: !!document.querySelector('.vs-load'), menu: !!document.querySelector('.vs-menu') }));
+check('Esc closes the menu', !esc1.load && !esc1.menu, JSON.stringify(esc1));
 await page.keyboard.press('Escape');
-await page.waitForSelector('.vs-pause');
+await page.waitForSelector('.vs-menu');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(80);
-check('Esc with nothing open opens the pause menu, and closes it again', !(await ev(() => !!document.querySelector('.vs-pause'))));
+check('Esc with nothing open opens the game menu, and closes it again', !(await ev(() => !!document.querySelector('.vs-menu'))));
 
 await ev(() => { const g = window.game; g.state.nextLevel = 20; g.state.experience = 600; g.checkLevelUp(); g.state.nextLevel = 1e12; });   // several picks waiting
 const pend0 = await ev(() => window.game.state.pending);
@@ -206,26 +227,25 @@ await page.keyboard.press('u');
 await page.waitForSelector('.vs-cards');
 await focusSettled();
 const k0 = await focusInfo();
-await page.keyboard.press('ArrowDown');
+await page.keyboard.press('ArrowRight');
 const k1 = await focusInfo();
 const keysDown = await ev(() => Object.keys(window.game.state.keys).filter((k) => window.game.state.keys[k]));
-check('arrow keys move through a panel instead of walking', k0 && k1 && k1.text !== k0.text && !keysDown.includes('ArrowDown'), JSON.stringify({ k0, k1, keysDown }));
-let walked = 0;
-for (const key of ['d', 'a', 's', 'w']) {                       // whichever way is open in this world
-  const p0 = await ev(() => ({ x: window.game.state.player.wx, y: window.game.state.player.wy }));
-  await page.keyboard.down(key); await ev(() => { for (let i = 0; i < 25; i++) window.game.gameLoop(1); }); await page.keyboard.up(key);
-  const p1 = await ev(() => ({ x: window.game.state.player.wx, y: window.game.state.player.wy }));
-  walked = Math.max(walked, Math.hypot(p1.x - p0.x, p1.y - p0.y));
-  if (walked > 15) break;
-}
-check('WASD still walks while a panel is open', walked > 15, String(walked));
+check('arrow keys move through the menu instead of walking', k0 && k1 && k1.text !== k0.text && !keysDown.includes('arrowright'), JSON.stringify({ k0, k1, keysDown }));
+const p0 = await ev(() => ({ x: window.game.state.player.wx, y: window.game.state.player.wy }));
+await page.keyboard.down('d'); await ev(() => { for (let i = 0; i < 25; i++) window.game.gameLoop(1); }); await page.keyboard.up('d');
+const pw = await ev(() => ({ x: window.game.state.player.wx, y: window.game.state.player.wy }));
+check('the world waits while the menu is open', Math.hypot(pw.x - p0.x, pw.y - p0.y) < 0.01, JSON.stringify({ p0, pw }));
 await page.keyboard.press('Enter');
 await page.waitForTimeout(100);
 const k2 = await ev(() => window.game.state.pending);
 check('Enter presses the focused card', pend0 >= 2 && k2 === pend0 - 1, `${pend0} -> ${k2}`);
-if (await ev(() => !!document.querySelector('.vs-cards'))) await page.keyboard.press('Escape');
+await page.keyboard.press('2');
+await page.waitForTimeout(100);
+const k3 = await ev(() => window.game.state.pending);
+check('a number key picks a card on the upgrades page', k3 === k2 - 1, `${k2} -> ${k3}`);
+if (await ev(() => !!document.querySelector('.vs-menu'))) await page.keyboard.press('Escape');
 await ev(() => { window.game.state.pending = 0; window.game.ensureCards(); });
-check('Esc closed the cards without opening the pause menu', !(await ev(() => !!document.querySelector('.vs-pause'))));
+check('Esc closed the menu', !(await ev(() => !!document.querySelector('.vs-menu'))));
 
 // typing in the search box must not trigger hotkeys
 await ev(() => { const g = window.game; g.spells.timers = {}; g.spells.mana.value = g.stats.maxMana; });
@@ -262,7 +282,7 @@ const unequipped = await ev(() => { const g = window.game; const nova = g.spells
 check('...and unequipped again', unequipped);
 await page.keyboard.press('Escape');
 await ev(() => { document.activeElement && document.activeElement.blur(); });
-if (await ev(() => !!document.querySelector('.vs-pause'))) await page.keyboard.press('Escape');
+if (await ev(() => !!document.querySelector('.vs-menu'))) await page.keyboard.press('Escape');
 await page.waitForTimeout(80);
 
 // ---- 8. build mode with the pad
@@ -279,10 +299,10 @@ await tap(B.LEFT);
 await page.waitForSelector('.vs-build', { timeout: 3000 });
 await focusSettled();
 const bf = await focusInfo();
-check('the d-pad left opens the build menu with a Place button focused', bf && /Place/.test(bf.text), JSON.stringify(bf));
+check('the d-pad left opens the build page with a Place button focused', bf && /Place/.test(bf.text), JSON.stringify(bf));
 await tap(B.A);
 const placing = await ev(() => { const b = window.game.towers.build; return b && { kind: b.kind }; });
-check('A on a structure starts placing it', placing && placing.kind === 'spire', JSON.stringify(placing));
+check('A on a structure starts placing it (the menu steps aside)', placing && placing.kind === 'spire' && !(await ev(() => !!document.querySelector('.vs-menu') || window.game.state.paused)), JSON.stringify(placing));
 await ev((s) => { window.goTo((s.tx - 2.9) * 48, (s.ty + 0.5) * 48); window.game.lastMove = { x: 1, y: 0 }; for (let i = 0; i < 4; i++) window.game.gameLoop(1); }, spot);
 const ghost = await ev(() => { const b = window.game.towers.build; return b && { tx: b.tx, ty: b.ty, valid: b.valid }; });
 check('with a pad the ghost sits ahead of the hero', ghost && ghost.valid && ghost.tx === spot.tx && ghost.ty === spot.ty, JSON.stringify(ghost));

@@ -37,7 +37,7 @@ export const TIPS: Tip[] = [
   { id: 'gems', icon: 'gem', priority: 60, trigger: { cond: 'xp' },
     text: 'Gems are experience: walk over them to collect them.' },
   { id: 'upgrade', icon: 'upgrade', priority: 90, trigger: { cond: 'pending' },
-    text: 'Level up! Press {upgrades} to pick an upgrade card. The game keeps running while you choose.' },
+    text: 'Level up! Press {upgrades} to pick an upgrade card: the game menu opens and the world waits while you choose.' },
   { id: 'hurt', icon: 'heart', priority: 80, trigger: { cond: 'hurt' },
     text: 'Monsters hurt on contact. Keep moving; hearts they drop heal you.' },
   { id: 'skill', icon: 'spell-dash', priority: 50, trigger: { cond: 'skill' },

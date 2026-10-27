@@ -386,12 +386,77 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-pick small{font-size:12px;color:var(--c-soft)}
 .vs-pick small.pv{color:var(--c-good)}
 
+/* the game menu (Esc / Start): the page list on the left, the page on the right, over the paused game */
+.vs-panel.vs-menu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1060px,calc(100vw - 24px));height:min(720px,calc(100vh - 24px));display:grid;grid-template-columns:186px minmax(0,1fr);gap:14px;padding:12px;z-index:20}
+.vs-menu>.vs-x{position:absolute;right:10px;top:10px;z-index:3}
+.vs-mnav{display:flex;flex-direction:column;gap:4px;min-height:0;overflow:auto;padding-right:10px;border-right:1px solid var(--c-line)}
+.vs-mtitle{font-family:var(--font-display);font-size:18px;font-weight:700;color:#f3e6c4;display:flex;align-items:center;gap:8px;margin:2px 0 8px}
+.vs-btn.vs-mp{justify-content:flex-start;width:100%;flex:none;font-size:14px;padding:8px 10px}
+.vs-btn.vs-mp .ml{flex:1;text-align:left}
+.vs-btn.vs-mp kbd{font:inherit;font-size:10px;color:var(--c-muted);border:1px solid var(--c-line-2);border-radius:4px;padding:0 5px}
+.vs-btn.vs-mp.on{border-color:var(--c-gold-deep);background:linear-gradient(rgba(74,58,22,.65),rgba(32,26,12,.65));color:#fff3cf}
+.vs-btn.vs-mp.warn{border-color:var(--c-bad);color:var(--c-bad)}
+.vs-badge{font-style:normal;font-size:11px;font-weight:800;background:var(--c-gold);color:#241a00;border-radius:999px;padding:0 6px}
+.vs-mhint{margin-top:auto;font-size:11px;color:var(--c-muted);padding-top:8px}
+.vs-mbody{min-width:0;min-height:0;overflow:auto;padding:2px 4px 0 0}
+.vs-menu .vs-page{position:static;left:auto;top:auto;right:auto;bottom:auto;transform:none;width:auto;max-height:none;overflow:visible;z-index:auto;animation:none}
+.vs-menu .vs-page>h2{margin:0 76px 6px 0;flex-wrap:wrap}
+.vs-menu .vs-hintbar{bottom:0;margin:10px 0 0;border-radius:10px}
+.vs-menu .vs-cards{width:auto;max-height:none;overflow:visible;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin:6px 0}
+.vs-menu .vs-card{margin:0}
+.vs-note{font-size:12px;color:var(--c-soft);background:rgba(60,48,20,.35);border:1px solid #6a5420;border-radius:8px;padding:6px 8px;margin:6px 0;display:flex;gap:6px;align-items:center}
+.vs-savep .vs-acts .vs-btn.big{font-size:15px;padding:10px 16px}
+/* the Party page: who the hero is, every stat with the party's auras, and every passive */
+.vs-phead{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px;border:2px solid var(--hc);border-radius:12px;background:var(--c-panel);margin:6px 0 4px}
+.vs-phead .pi{font-size:46px;text-align:center;color:var(--hc)}
+.vs-phead .nm{font-family:var(--font-display);font-size:20px;font-weight:700;color:#f3e6c4}
+.vs-phead .lv{font-size:12px;color:var(--c-muted);margin-bottom:4px}
+.vs-phead .acts{display:flex;flex-direction:column;gap:6px}
+.vs-pbar{position:relative;height:15px;border-radius:7px;background:rgba(8,12,24,.8);border:1px solid var(--c-line-2);overflow:hidden;margin-top:3px;max-width:420px}
+.vs-pbar>i{position:absolute;inset:0 auto 0 0}
+.vs-pbar.xp>i{background:linear-gradient(#ffe27a,#c99a1e)}
+.vs-pbar.hp>i{background:linear-gradient(#ff7a8a,#b8323f)}
+.vs-pbar.mp>i{background:linear-gradient(#6ab8ff,#2f77d6)}
+.vs-pbar>b{position:absolute;inset:0;text-align:center;font-size:10.5px;line-height:13px;text-shadow:0 1px 2px #000}
+.vs-pcols{display:grid;grid-template-columns:minmax(250px,.9fr) minmax(0,1.2fr);gap:16px}
+@media(max-width:780px){.vs-pcols{grid-template-columns:1fr}}
+.vs-stats{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.vs-stats th{text-align:right;color:var(--c-dim);font-size:10px;letter-spacing:1px;padding:3px 6px;border-bottom:1px solid var(--c-line)}
+.vs-stats th:first-child,.vs-stats td:first-child{text-align:left}
+.vs-stats td{text-align:right;padding:3px 6px;border-bottom:1px solid rgba(46,58,98,.5)}
+.vs-stats td.au{color:var(--c-good)}
+.vs-stats tr.grp td{color:var(--c-dim);font-size:10px;letter-spacing:1px;text-transform:uppercase;padding-top:9px;border-bottom:0}
+.vs-pspells{display:flex;flex-wrap:wrap;gap:6px}
+.vs-pspell{display:inline-flex;align-items:center;gap:5px;background:var(--c-panel);border:1px solid var(--c-line-2);border-radius:8px;padding:3px 8px;font-size:12px}
+.vs-pspell small{color:var(--c-muted)}
+.vs-passives{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:2px 16px}
+.vs-ppath .vs-sec{color:var(--pc);display:flex;align-items:center;gap:6px}
+.vs-ppath .vs-sec small{margin-left:auto;color:var(--c-muted);font-weight:600;letter-spacing:0}
+.vs-sec small{font-weight:600;letter-spacing:0;color:var(--c-muted)}
+.vs-pcard{display:grid;grid-template-columns:22px 86px auto minmax(0,1fr);align-items:center;gap:6px;font-size:12px;padding:2px 0}
+.vs-pcard .ic{font-size:18px;text-align:center}
+.vs-pcard.none{opacity:.5}
+.vs-pcard .pips{display:inline-flex;gap:2px}
+.vs-pcard .pips i{width:6px;height:11px;border-radius:2px;background:#2a3150;border:1px solid var(--c-line-2)}
+.vs-pcard .pips i.on{background:var(--pc);border-color:var(--pc)}
+.vs-pcard .pips b{color:var(--c-gold);font-size:12px}
+.vs-pcard.max .nm{color:var(--c-gold)}
+.vs-pcard .v{color:var(--c-soft);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 /* left HUD column: sits under the canvas health panel and spell slots (ui.ts sets --hud-top) */
 .vs-left{position:absolute;left:12px;top:var(--hud-top,190px);display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-height:calc((100vh - var(--hud-top,190px) - 12px) / var(--hs,1));transform:scale(var(--hs,1));transform-origin:top left}
 
 /* small screens: phones and small windows */
 @media (max-width:899px),(max-height:599px){
   html.vs-modal #ui-root .vs-hud{display:none}
+  .vs-panel.vs-menu{width:calc(100vw - 8px);height:calc(100vh - 8px);grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);gap:8px;padding:8px}
+  .vs-menu>.vs-x{position:static;grid-column:2;grid-row:1;align-self:start}
+  .vs-mnav{grid-column:1;grid-row:1;flex-direction:row;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--c-line);padding:0 0 6px}
+  .vs-mbody{grid-column:1 / -1;grid-row:2}
+  .vs-menu .vs-page>h2{margin-right:0}
+  .vs-mtitle,.vs-mhint{display:none}
+  .vs-btn.vs-mp{width:auto;padding:6px 8px;font-size:12px}
+  .vs-btn.vs-mp kbd{display:none}
   .vs-panel{padding:10px;border-radius:12px}
   .vs-load,.vs-build,.vs-tpanel,.vs-shop,.vs-journal,.vs-board,.vs-pause,.vs-heal,.vs-inn,.vs-slots,.vs-credits{width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}
   .vs-dialog{bottom:8px;max-height:calc(100vh - 16px);overflow:auto}

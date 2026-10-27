@@ -532,7 +532,7 @@ class Game {
         window.addEventListener('blur', () => {
             gameState.keys = {};
             // leaving the window pauses the game (setting)
-            if (settings.pauseOnBlur && gameState.player && !gameState.gameOver && !uiBridge.pauseOpen.value && !this.busy) this.ui.toggleSettings();
+            if (settings.pauseOnBlur && gameState.player && !gameState.gameOver && !uiBridge.pauseOpen.value && !this.busy) this.ui.openMenu();
         });
 
         this.app.stage.eventMode = 'static';
@@ -600,7 +600,6 @@ class Game {
         this.dungeons.reset();
         this.closeNpcPanels();
         uiBridge.towerPanel.value = null;
-        uiBridge.buildMenuOpen.value = false;
     }
 
     clearEntities() {
@@ -741,7 +740,6 @@ class Game {
         uiBridge.visible.value = true;
         uiBridge.muted.value = this.audio.muted;
         uiBridge.cards.value = [];
-        uiBridge.cardsOpen.value = false;
         uiBridge.pending.value = gameState.pending;
         this.party.publish();
         this.closeNpcPanels();
@@ -798,7 +796,7 @@ class Game {
         if (this.codex && discover(this.codex[kind], id)) uiBridge.version.value++;
     }
 
-    /** Start the given save in place of the running session (Load from the pause menu or the title). */
+    /** Start the given save in place of the running session (Load from the game menu or the title). */
     loadSave(data) {
         uiBridge.pauseOpen.value = false;
         uiBridge.slotsOpen.value = null;
@@ -2145,7 +2143,7 @@ class Game {
     ensureCards() {
         const s = this.state;
         uiBridge.pending.value = s.pending;
-        if (s.pending <= 0) { uiBridge.cards.value = []; uiBridge.cardsOpen.value = false; return; }
+        if (s.pending <= 0) { uiBridge.cards.value = []; return; }
         if (!uiBridge.cards.value.length) uiBridge.cards.value = offerCards(s.picks, Math.random, 3);
         if (uiBridge.autoPick.value) this.autoPickCards();
     }
@@ -2171,7 +2169,6 @@ class Game {
         uiBridge.picks.value = { ...s.picks };
         uiBridge.cards.value = [];
         if (s.pending > 0) uiBridge.cards.value = offerCards(s.picks, Math.random, 3);
-        else uiBridge.cardsOpen.value = false;
         uiBridge.pending.value = s.pending;
         this.ui.shown.slots = '';
         this.requestSave('pick', true);

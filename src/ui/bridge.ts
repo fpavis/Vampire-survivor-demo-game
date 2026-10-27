@@ -38,6 +38,10 @@ export interface ActiveSlotView {
 
 export interface LogEntry { t: number; text: string; icon: string; big: boolean }
 
+/** The pages of the game menu (Esc / Start), in the order of its page list. */
+export type MenuPage = 'party' | 'spells' | 'upgrades' | 'journal' | 'build' | 'save' | 'settings';
+export const MENU_PAGES: MenuPage[] = ['party', 'spells', 'upgrades', 'journal', 'build', 'save', 'settings'];
+
 /** Everything the DOM UI reads. The game pushes into these signals a few times per second. */
 export const ui = {
   visible: signal(false),
@@ -46,15 +50,12 @@ export const ui = {
   active: signal<(ActiveSlotView | null)[]>([null, null, null]),
   pending: signal(0),
   cards: signal<OfferedCard[]>([]),
-  cardsOpen: signal(false),
   picks: signal<Record<string, number>>({}),
   autoPick: signal(false),
-  loadoutOpen: signal(false),
   version: signal(0),
   safe: signal(true),
   party: signal<{ active: number; cd: number; heroes: HeroView[] }>({ active: 0, cd: 0, heroes: [] }),
   healerOpen: signal(false),
-  buildMenuOpen: signal(false),
   build: signal<{ kind: string; name: string; icon: string; valid: boolean; reason: string; cost: { gold: number; wood: number; stone: number; iron: number } } | null>(null),
   towerPanel: signal<string | null>(null),
   worldMap: signal<{ mode: 'view' | 'travel'; from?: string | null } | null>(null),   // the full-screen world map
@@ -65,7 +66,6 @@ export const ui = {
   dialog: signal<{ speaker: string; icon: string; text: string; choices?: { text: string; index: number }[]; last?: boolean; script?: boolean } | null>(null),
   quests: signal<QuestsView | null>(null),
   tracker: signal<QuestView | null>(null),
-  journalOpen: signal(false),
   board: signal<BoardView | null>(null),
   boardOpen: signal(false),
   innCost: signal(0),
@@ -77,7 +77,9 @@ export const ui = {
   device: signal<InputDevice>('mouse'),
   padKind: signal<PadKind>('xbox'),
   padName: signal(''),
-  pauseOpen: signal(false),
+  pauseOpen: signal(false),                   // the game menu is open (the game is paused under it)
+  menuPage: signal<MenuPage>('party'),        // its page, kept between openings
+  menuSeq: signal(0),                         // bumps on every opening or page jump, so the page can take focus
   vibration: signal(true),
   deadzone: signal(0.2),
   textScale: signal(1),
@@ -105,9 +107,11 @@ export const ui = {
 
 /** Panels that take the screen: on small screens the HUD steps aside while one is open, and tips wait. */
 export const panelOpen = () =>
-  ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
-  ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value ||
+  ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value || !!ui.towerPanel.value ||
   ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value || !!ui.slotsOpen.value || ui.optionsOpen.value || ui.creditsOpen.value ||
   !!ui.death.value || !!ui.ending.value || !!ui.worldMap.value;
 
 export const PICK_KEYS = ['1', '2', '3'];
+
+/** The game menu is open on this page. */
+export const menuOn = (page: MenuPage) => ui.pauseOpen.value && ui.menuPage.value === page;
