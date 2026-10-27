@@ -52,6 +52,8 @@ import { engage } from '../core/ai/ai';
 import { installDevTools } from './devtools';
 import { InputSystem } from './input';
 import { DungeonSystem } from './dungeons';
+import { TravelSystem } from './travel';
+import { townNodeId } from '../core/world/travel';
 import { QuestSystem } from './quests';
 import { TipSystem } from './tips';
 import { TrainingDummy } from './dummy';
@@ -112,6 +114,7 @@ class Game {
         this.towers = new TowerSystem(this);
         this.sea = new SeaSystem(this);
         this.dungeons = new DungeonSystem(this);
+        this.travel = new TravelSystem(this);
         this.world.extraPois = (cx, cy) => this.dungeons.poisForChunk(cx, cy);   // plateau and island entrances
         this.floor = 0;
         this.boat = null;           // { dockId } while sailing
@@ -577,7 +580,6 @@ class Game {
         this.dungeons.reset();
         this.closeNpcPanels();
         uiBridge.towerPanel.value = null;
-        uiBridge.waypointOpen.value = null;
         uiBridge.buildMenuOpen.value = false;
     }
 
@@ -1391,7 +1393,7 @@ class Game {
             this.interiorCandidates((t, x, y, r) => consider(t, x, y, r));
         }
         this.target = target;
-        if ((uiBridge.towerPanel.value || uiBridge.waypointOpen.value) && (!target || target.kind !== 'tower')) { uiBridge.towerPanel.value = null; uiBridge.waypointOpen.value = null; }
+        if (uiBridge.towerPanel.value && (!target || target.kind !== 'tower')) uiBridge.towerPanel.value = null;
         const open = uiBridge.healerOpen.value ? 'healer' : uiBridge.shopOpen.value ? 'merchant' : uiBridge.innOpen.value ? 'innkeeper' : uiBridge.boardOpen.value ? 'board' : uiBridge.dialog.value ? (uiBridge.dialog.value.script ? 'elder' : 'npc') : null;
         if (open && (!target || target.kind !== open)) this.closeNpcPanels();
         this.ui.setPrompt(target ? target.text : null);
@@ -1409,6 +1411,7 @@ class Game {
         const src = this.interior;
         if (src.fountain) add({ kind: 'fountain', text: this.fountainReady() ? '[E]  Drink from the fountain' : 'The fountain is recharging…' }, src.fountain.x, src.fountain.y + 20, 96, 170);
         if (src.altar) add({ kind: 'altar', text: this.interiorState.altarUsed ? 'The altar is quiet' : '[E]  Pray at the altar' }, src.altar.x, src.altar.y + 20, 80, 170);
+        if (src.services && src.services.teleporter) add({ kind: 'teleporter', text: '[E]  Use the teleporter' }, src.services.teleporter.x, src.services.teleporter.y, 90, 130);
         if (this.dungeons.portal) add({ kind: 'portal', text: '[E]  Step through the portal to the entrance' }, this.dungeons.portal.x, this.dungeons.portal.y, 80, 130);
         if (src.floor > 0) add({ kind: 'up', text: '[E]  Climb back up' }, src.exit.x, src.exit.y, 74, 150);
         else add({ kind: 'exit', text: `[E]  Leave ${this.interiorName}` }, src.exit.x, src.exit.y, 74, 150);
@@ -1472,6 +1475,7 @@ class Game {
         switch (t.kind) {
             case 'enter': this.enterPlace(t.poi); break;
             case 'exit': case 'portal': this.exitPlace(); break;
+            case 'teleporter': this.travel.open(townNodeId(this.interiorPoi.id)); break;
             case 'up': this.changeFloor(-1); break;
             case 'down': if (t.sealed) { this.audio.play('deny'); this.ui.toast('Defeat the guardians first: the seal holds until they fall'); } else this.changeFloor(1); break;
             case 'chest': this.openChest(t.it); break;
@@ -1512,26 +1516,34 @@ class Game {
         this.state.pointerDown = false;
         this.state.keys = {};
         this.ui.fade(1, 0.09, () => {
-            const s = this.state;
-            const p = s.player;
-            // gems lying on the ground wait where they fell: nothing is lost, and nothing is granted just for walking in
-            this.gemStash = this.mode === 'overworld' ? { poiId: poi.id, gems: s.gems.map((g) => ({ x: g.wx, y: g.wy, value: g.value, kind: g.kind })) } : null;
-            this.clearWorldEntities();
-            this.popRuntime.clearActive();
-            this.clearOverworldDisplays();
-
-            if (!this.visited[poi.id]) this.audio.stinger('stingDiscover');      // the first time inside a place
-            this.visited[poi.id] = this.visited[poi.id] || { opened: [], cleared: false, altarUsed: false };
-            // visited towns become respawn points
-            if (poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id)) {
-                this.session.cities.push({ id: poi.id, name: poi.name, ex: poi.ex, ey: poi.ey });
-            }
-            if (poi.type === 'city') this.session.lastCity = poi.id;
-            this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type, dungeon: poi.dungeon ? poi.dungeon.realm : null, group: poi.group });
-            this.loadFloor(poi, 0, 'start');
-            this.requestSave('place', true);
+            this.arriveAt(poi, 'start');
             this.ui.fade(0, 0.06, () => { this.busy = false; this.checkLevelUp(); });
         });
+    }
+
+    /** Put the party inside a place, at its gate or (towns) on its teleporter. The screen is already dark. */
+    arriveAt(poi, arrive = 'start') {
+        const s = this.state;
+        // gems lying on the ground wait where they fell: nothing is lost, and nothing is granted just for walking in
+        this.gemStash = this.mode === 'overworld' ? { poiId: poi.id, gems: s.gems.map((g) => ({ x: g.wx, y: g.wy, value: g.value, kind: g.kind })) } : null;
+        this.clearWorldEntities();
+        this.popRuntime.clearActive();
+        this.clearOverworldDisplays();
+
+        if (!this.visited[poi.id]) this.audio.stinger('stingDiscover');      // the first time inside a place
+        this.visited[poi.id] = this.visited[poi.id] || { opened: [], cleared: false, altarUsed: false };
+        // visited towns become respawn points, and their teleporters join the travel network
+        const attuned = poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id);
+        if (attuned) this.session.cities.push({ id: poi.id, name: poi.name, ex: poi.ex, ey: poi.ey });
+        if (poi.type === 'city') this.session.lastCity = poi.id;
+        this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type, dungeon: poi.dungeon ? poi.dungeon.realm : null, group: poi.group });
+        this.loadFloor(poi, 0, arrive);
+        if (attuned && this.interior.services) {
+            const tp = this.interior.services.teleporter;
+            this.fx.pillar(tp.x, tp.y, 0xffd070, 50, 50, 200);
+            this.ui.toast('Teleporter attuned: travel here from any teleporter or waypoint', 'teleporter');
+        }
+        this.requestSave('place', true);
     }
 
     /** Build floor `floor` of a place and put the party on it (the screen is already faded out). */
@@ -1556,7 +1568,8 @@ class Game {
         this.ambience.clear();
         this.ambience.setRegion(poi.type);
 
-        const from = arrive === 'end' && src.stairsDown ? { x: src.stairsDown.x, y: src.stairsDown.y + 1.5 * T } : src.start;
+        const from = arrive === 'end' && src.stairsDown ? { x: src.stairsDown.x, y: src.stairsDown.y + 1.5 * T }
+            : arrive === 'teleporter' && src.services ? { x: src.services.teleporter.x, y: src.services.teleporter.y + 1.2 * T } : src.start;
         const spot = this.world.findFree(from.x, from.y, p.radius + 2);
         p.wx = spot.x; p.wy = spot.y;
         this.cam.x = p.wx; this.cam.y = p.wy;
@@ -1624,6 +1637,7 @@ class Game {
             // each town's own layout says where its people stand (all of them proven reachable from the gate)
             const sv = src.services;
             for (const k of ['healer', 'merchant', 'innkeeper', 'elder']) this.spawnNpc(k, sv[k].x, sv[k].y);
+            this.map.markers.push({ tx: sv.teleporter.x / T, ty: sv.teleporter.y / T, icon: 'teleporter' });
             this.spawnBoard(sv.board.x, sv.board.y);
             this.dummy.spawn(sv.dummy.x, sv.dummy.y);
         } else if (poi.type === 'city' && src.fountain) {
@@ -1942,23 +1956,28 @@ class Game {
         this.state.pointerDown = false;
         this.state.keys = {};
         this.ui.fade(1, 0.09, () => {
-            const s = this.state;
-            let banked = 0;
-            s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
-            if (banked > 0) { this.addXp(banked); this.ui.toast(`Gathered the gems you left behind: +${Math.round(banked * this.stats.growth)} XP`); }
-            const poi = this.interiorPoi;
-            this.events.emit('PlaceLeft', { id: poi.id });
-            this.applyOverworld(poi.ex, poi.ey + 34);
-            // the gems that were on the ground outside are still there
-            const stash = this.gemStash;
-            this.gemStash = null;
-            if (stash && stash.poiId === poi.id) for (const d of stash.gems) this.dropGem(d.x, d.y, d.value, d.kind);
+            this.leavePlaceNow();
             this.requestSave('place', true);
             this.ui.fade(0, 0.06, () => {
                 this.busy = false;
                 this.checkLevelUp();
             });
         });
+    }
+
+    /** Step out of the place the party is in, to its entrance on the overworld. The screen is already dark. */
+    leavePlaceNow() {
+        const s = this.state;
+        let banked = 0;
+        s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
+        if (banked > 0) { this.addXp(banked); this.ui.toast(`Gathered the gems you left behind: +${Math.round(banked * this.stats.growth)} XP`); }
+        const poi = this.interiorPoi;
+        this.events.emit('PlaceLeft', { id: poi.id });
+        this.applyOverworld(poi.ex, poi.ey + 34);
+        // the gems that were on the ground outside are still there
+        const stash = this.gemStash;
+        this.gemStash = null;
+        if (stash && stash.poiId === poi.id) for (const d of stash.gems) this.dropGem(d.x, d.y, d.value, d.kind);
     }
 
     // ---------------------------------------------------------------- gems

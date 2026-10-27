@@ -231,7 +231,7 @@ const arrived = await ev(({ b, gold0 }) => {
   return { d: Math.hypot(p.wx - c.x, p.wy - c.y), paid: gold0 - g.state.wallet.gold };
 }, { b: recB.id, gold0: trav.gold0 });
 check('the waypoint is the interaction target', trav.tgt === 'tower', JSON.stringify(trav));
-check('travelling lands the hero at the other waypoint for a fare', trav.ok && arrived.d < 160 && arrived.paid > 0, JSON.stringify(arrived));
+check('travelling between two waypoints is free and lands the hero at the other one', trav.ok && arrived.d < 160 && arrived.paid === 0, JSON.stringify(arrived));
 
 // ---- 7. climbing tower opens a plateau
 const climbSpot = await ev(() => window.findSpot('climb', 20));

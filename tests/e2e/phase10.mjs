@@ -480,6 +480,100 @@ if (want('town')) {
   check('in every town the healer, merchant, inn, elder, board, fountain, altar, dummy and gate can be walked up to and used', bad.length === 0, bad.join(' '));
 }
 
+// ---- 10e: town teleporters and the party's waypoints make one travel network
+if (want('travel')) {
+  const fresh = await ev(() => { const g = window.game; return window.__dev.tools.nearestPlaces('city', 10).filter((q) => !g.session.cities.some((c) => c.id === q.id)).slice(0, 2); });
+  check('two towns not yet visited are near', fresh.length === 2, String(fresh.length));
+  const [A, B] = fresh;
+  const node = (id) => `town:${id}`;
+  const setGold = (n) => ev((n) => { const g = window.game; g.state.wallet.gold = n; window.__dev.ui.wallet.value = { ...g.state.wallet }; }, n);
+  const inTown = (id) => until((id) => !window.game.busy && window.game.mode === 'interior' && window.game.interiorPoi && window.game.interiorPoi.id === id, id, 20000);
+  // walking into a town attunes its teleporter
+  await ev((q) => window.game.enterPlace(q), A);
+  await inTown(A.id);
+  const att = await ev((id) => { const g = window.game; return { listed: g.session.cities.some((c) => c.id === id), log: window.__dev.ui.log.value.some((l) => /Teleporter attuned/.test(l.text)), node: !!g.travel.node(`town:${id}`) }; }, A.id);
+  check('entering a town attunes its teleporter', att.listed && att.log && att.node, JSON.stringify(att));
+  await ev(() => window.game.exitPlace()); await outside();
+  await ev((q) => window.game.enterPlace(q), B); await inTown(B.id);
+  await ev(() => window.game.exitPlace()); await outside();
+  await ev((q) => window.game.enterPlace(q), A); await inTown(A.id);
+  // E at the teleporter opens the map in travel mode
+  const use = await ev(() => {
+    const g = window.game, tp = g.interior.services.teleporter, p = g.state.player;
+    for (const c of g.critters.list) { c.wx = c.tx = tp.x; c.wy = c.ty = tp.y - 9999; c.home = { x: c.wx, y: c.wy, r: 5 }; c.wait = 9999; }
+    p.wx = tp.x; p.wy = tp.y + 30; g.updateInteraction();
+    const kind = g.target && g.target.kind;
+    g.interact();
+    return { kind };
+  });
+  await until(() => document.querySelectorAll('.vs-worldmap.travel .dest').length > 0);
+  const listing = await ev(() => ({ mode: window.__dev.ui.worldMap.value && window.__dev.ui.worldMap.value.mode, towns: document.querySelectorAll('.vs-worldmap .dest.town').length, title: document.querySelector('.vs-worldmap h2').innerText }));
+  check('the teleporter opens the map in travel mode, listing the destinations', use.kind === 'teleporter' && listing.mode === 'travel' && listing.towns >= 1, JSON.stringify({ use, listing }));
+  // pick the other town in the list, see the fare, travel
+  await setGold(5000);
+  const fare = await ev(([a, b]) => window.game.travel.from(a).find((d) => d.node.id === b).fare, [node(A.id), node(B.id)]);
+  await page.click(`.vs-worldmap [data-dest="${node(B.id)}"]`);
+  await until(() => !!document.querySelector('.vs-worldmap .confirm .go'));
+  const bar = await ev(() => document.querySelector('.vs-worldmap .confirm').innerText);
+  await page.click('.vs-worldmap .confirm .go');
+  await inTown(B.id);
+  const landed = await ev(() => { const g = window.game, tp = g.interior.services.teleporter, p = g.state.player; return { d: Math.round(Math.hypot(p.wx - tp.x, p.wy - tp.y)), gold: g.state.wallet.gold, map: !!window.__dev.ui.worldMap.value }; });
+  check('town to town costs the fare and lands on the other town\'s teleporter', fare > 0 && bar.includes(String(fare)) && 5000 - landed.gold === fare && landed.d < 100 && !landed.map, JSON.stringify({ fare, bar, landed }));
+  // without the fare: the Travel button is off and the trip is refused
+  await setGold(0);
+  await ev((id) => window.game.travel.open(id), node(B.id));
+  await until(() => document.querySelectorAll('.vs-worldmap.travel .dest').length > 0);
+  await page.click(`.vs-worldmap [data-dest="${node(A.id)}"]`);
+  await until(() => !!document.querySelector('.vs-worldmap .confirm .go'));
+  const poor = await ev(([b, a]) => { const g = window.game; return { disabled: document.querySelector('.vs-worldmap .confirm .go').disabled, ok: g.travel.go(b, a), here: g.interiorPoi.id, busy: g.busy }; }, [node(B.id), node(A.id)]);
+  await page.keyboard.press('Escape');
+  await until(() => !window.__dev.ui.worldMap.value);
+  check('without the fare the trip is refused', poor.disabled && !poor.ok && poor.here === B.id && !poor.busy, JSON.stringify(poor));
+  // two waypoints of the party's own, near the start
+  await ev(() => window.game.exitPlace()); await outside();
+  await goTo(0, 0);
+  const wps = await ev(() => {
+    const g = window.game, { newTower } = window.__dev.towersApi;
+    const spot = (minR) => { for (let r = minR; r < 520; r += 2) for (let a = 0; a < 6.28; a += 0.05) { const tx = Math.round(Math.cos(a) * r), ty = Math.round(Math.sin(a) * r); if (g.towers.check('waypoint', tx, ty).ok) return { tx, ty }; } return null; };
+    const build = (s) => { const rec = newTower('waypoint', s.tx, s.ty); g.towers.recs.push(rec); g.towers.rebuildWorld(true, rec); const w = g.state.wallet; w.gold = w.wood = w.stone = w.iron = 99999; g.towers.deliver(rec); return rec.id; };
+    return [build(spot(30)), build(spot(80))];
+  });
+  await setGold(500);
+  const w2w = await ev(([a, b]) => { const g = window.game; return { fare: g.travel.from(a).find((d) => d.node.id === b).fare, ok: g.travel.go(a, b) }; }, wps);
+  await until(() => !window.game.busy);
+  const wpAt = await ev((b) => { const g = window.game, r = g.towers.byId(b), p = g.state.player; return { d: Math.round(Math.hypot(p.wx - (r.tx + 0.5) * 48, p.wy - (r.ty + 0.5) * 48)), gold: g.state.wallet.gold, mode: g.mode }; }, wps[1]);
+  check('waypoint to waypoint is free', w2w.ok && w2w.fare === 0 && wpAt.gold === 500 && wpAt.d < 160 && wpAt.mode === 'overworld', JSON.stringify({ w2w, wpAt }));
+  // a waypoint to a town is paid, and from the town back out to a waypoint too
+  await setGold(5000);
+  const w2t = await ev(([b, a]) => { const g = window.game; const fare = g.travel.from(b).find((d) => d.node.id === a).fare; return { fare, ok: g.travel.go(b, a) }; }, [wps[1], node(A.id)]);
+  await inTown(A.id);
+  const tAt = await ev(() => { const g = window.game, tp = g.interior.services.teleporter, p = g.state.player; return { d: Math.round(Math.hypot(p.wx - tp.x, p.wy - tp.y)), gold: g.state.wallet.gold }; });
+  check('a waypoint to a town is paid and lands on its teleporter', w2t.ok && w2t.fare > 0 && 5000 - tAt.gold === w2t.fare && tAt.d < 100, JSON.stringify({ w2t, tAt }));
+  const t2w = await ev(([a, w]) => { const g = window.game, g0 = g.state.wallet.gold; const fare = g.travel.from(a).find((d) => d.node.id === w).fare; return { fare, g0, ok: g.travel.go(a, w) }; }, [node(A.id), wps[0]]);
+  await until(() => !window.game.busy && window.game.mode === 'overworld', undefined, 20000);
+  const owAt = await ev((w) => { const g = window.game, r = g.towers.byId(w), p = g.state.player; return { d: Math.round(Math.hypot(p.wx - (r.tx + 0.5) * 48, p.wy - (r.ty + 0.5) * 48)), gold: g.state.wallet.gold }; }, wps[0]);
+  check('a town out to a waypoint is paid and leaves the town', t2w.ok && t2w.fare > 0 && t2w.g0 - owAt.gold === t2w.fare && owAt.d < 160, JSON.stringify({ t2w, owAt }));
+  // a waypoint's own E opens the same travel map
+  const wpUse = await ev((w) => {
+    const g = window.game, r = g.towers.byId(w), p = g.state.player;
+    p.wx = (r.tx + 0.5) * 48; p.wy = (r.ty + 0.5) * 48 + 70; g.gameLoop(1); g.updateInteraction();
+    const kind = g.target && g.target.kind; g.interact();
+    return { kind, map: window.__dev.ui.worldMap.value };
+  }, wps[0]);
+  await page.keyboard.press('Escape');
+  await until(() => !window.__dev.ui.worldMap.value);
+  check('using a waypoint opens the travel map too', wpUse.kind === 'tower' && wpUse.map && wpUse.map.mode === 'travel' && wpUse.map.from === wps[0], JSON.stringify(wpUse));
+  // attuned teleporters are kept in the save
+  await ev(async () => { await window.game.requestSave('test', true); });
+  await page.reload();
+  await page.waitForFunction(() => !!window.game && window.game.titleReady);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.game.state.player && window.__dev, null, { timeout: 15000 });
+  await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; });
+  const kept = await ev(([a, b, w]) => { const t = window.game.travel; return { a: !!t.node(a), b: !!t.node(b), w: !!t.node(w) }; }, [node(A.id), node(B.id), wps[0]]);
+  check('attuned teleporters and waypoints are still in the network after a reload', kept.a && kept.b && kept.w, JSON.stringify(kept));
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 process.kill(-preview.pid);

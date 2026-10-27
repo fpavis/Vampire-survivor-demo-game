@@ -3,7 +3,7 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { BIOME } from '../core/world/biomes';
 import {
-    DIRS, SPIRE_RANGE, TOWER_DEFS, WARD_RADIUS, boatSpot, checkPlacement, deposit, editMap, fareBetween, isFunded, newTower,
+    DIRS, SPIRE_RANGE, TOWER_DEFS, WARD_RADIUS, boatSpot, checkPlacement, deposit, editMap, isFunded, newTower,
     plateauDecor, progressOf, remaining, stageOf, totalOf, towerEdits
 } from '../core/world/towers';
 import { TEMPLATES } from '../core/spells/spells';
@@ -228,7 +228,7 @@ export class TowerSystem {
         const r = t.rec, def = TOWER_DEFS[r.kind];
         if (t.act === 'recall') { g.sea.recall(r); return; }
         if (r.kind === 'spire') { uiBridge.towerPanel.value = r.id; g.audio.play('equip'); }
-        else if (r.kind === 'waypoint') { uiBridge.waypointOpen.value = r.id; g.audio.play('equip'); }
+        else if (r.kind === 'waypoint') g.travel.open(r.id);
         else uiBridge.dialog.value = { speaker: def.name, icon: def.icon, text: def.blurb };
     }
 
@@ -301,34 +301,22 @@ export class TowerSystem {
     // -------------------------------------------------------------- waypoints
     waypoints() { return this.builtOf('waypoint'); }
 
-    travel(fromId, toId) {
-        const g = this.game;
-        const a = this.byId(fromId), b = this.byId(toId);
-        if (!a || !b || g.busy || g.boat) return false;
-        const fare = fareBetween(a, b);
-        if (g.state.wallet.gold < fare) { g.ui.toast(`The fare is ${fare} gold`); g.audio.play('deny'); return false; }
-        g.state.wallet.gold -= fare;
-        uiBridge.wallet.value = { ...g.state.wallet };
-        uiBridge.waypointOpen.value = null;
-        g.busy = true;
-        g.ui.fade(1, 0.1, () => {
-            const p = g.state.player;
-            const c = centreOf(b);
-            const spot = g.world.findFree(c.x, c.y + T * 1.6, p.radius + 2);
-            p.wx = spot.x; p.wy = spot.y;
-            g.cam.x = p.wx; g.cam.y = p.wy;
-            g.clearWorldEntities();
-            g.popRuntime.clearActive();
-            g.sites.clearDisplays();
-            g.lastFogTx = null;
-            g.world.update(g.cam.x, g.cam.y, g.viewW, g.viewH, true);
-            g.flow.centerTx = NaN;
-            g.fx.pillar(p.wx, p.wy, 0xb06af0, 60, 60, 220);
-            g.audio.play('warp');
-            g.requestSave('travel', true);
-            g.ui.fade(0, 0.07, () => { g.busy = false; });
-        });
-        return true;
+    /** Travel from one node of the network (waypoint or town teleporter) to another: see app/travel. */
+    travel(fromId, toId) { return this.game.travel.go(fromId, toId); }
+
+    /** Put the party beside waypoint `rec`, on the overworld (the screen is already dark). */
+    arriveAt(rec) {
+        const g = this.game, p = g.state.player;
+        const c = centreOf(rec);
+        const spot = g.world.findFree(c.x, c.y + T * 1.6, p.radius + 2);
+        p.wx = spot.x; p.wy = spot.y;
+        g.cam.x = p.wx; g.cam.y = p.wy;
+        g.clearWorldEntities();
+        g.popRuntime.clearActive();
+        g.sites.clearDisplays();
+        g.lastFogTx = null;
+        g.world.update(g.cam.x, g.cam.y, g.viewW, g.viewH, true);
+        g.flow.centerTx = NaN;
     }
 
     // ------------------------------------------------------------------ update

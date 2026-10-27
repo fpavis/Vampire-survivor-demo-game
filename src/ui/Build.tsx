@@ -1,7 +1,7 @@
 import { ui } from './bridge';
 import { glyph, onPad, quickGlyph } from './hints';
 import { Icon } from './Icon';
-import { TOWER_DEFS, TOWER_KINDS, fareBetween, totalOf } from '../core/world/towers';
+import { TOWER_DEFS, TOWER_KINDS, totalOf } from '../core/world/towers';
 import { CORE_INFO, TEMPLATES, describeSpell, resolveSpell } from '../core/spells/spells';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -82,35 +82,6 @@ export function TowerPanel() {
       <div class="vs-sec">SPARE SPELLS IN YOUR BAG</div>
       {!cands.length && <div class="vs-empty">No spare auto-cast spells. Unequip one from a hero, or find another.</div>}
       {cands.map((s: any) => row(s, armed ? 'Swap in' : 'Arm', () => { game.towers.arm(id, s.uid); ui.version.value++; }))}
-    </div>
-  );
-}
-
-export function WaypointPanel() {
-  const id = ui.waypointOpen.value;
-  if (!id || !ui.game) return null;
-  const game = ui.game;
-  const here = game.towers.byId(id);
-  if (!here) return null;
-  const others = game.towers.waypoints().filter((w: any) => w.id !== id);
-  const gold = ui.wallet.value.gold;
-  return (
-    <div class="vs-panel vs-tpanel hit">
-      <button class="vs-btn vs-x" onClick={() => (ui.waypointOpen.value = null)} aria-label="Close"><Icon name="close" /></button>
-      <h2><Icon name="tower-waypoint" /> Waypoint</h2>
-      <div class="sub">Step through to another waypoint you have built. <Icon name="res-gold" /> You have {gold}.</div>
-      {!others.length && <div class="vs-empty">This is your only waypoint. Build another somewhere far away to link them.</div>}
-      {others.map((w: any) => {
-        const fare = fareBetween(here, w);
-        const dist = Math.round(Math.hypot(w.tx - here.tx, w.ty - here.ty));
-        return (
-          <div key={w.id} class="vs-good" style={{ '--gc': '#b06af0' }}>
-            <span class="ic"><Icon name="tower-waypoint" /></span>
-            <span class="tx"><b>Waypoint at {w.tx}, {w.ty}</b><small>{dist} tiles away</small></span>
-            <button class="vs-btn" disabled={gold < fare} onClick={() => game.towers.travel(id, w.id)}><Icon name="res-gold" /> {fare}</button>
-          </div>
-        );
-      })}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'preact/hooks';
 import { Loadout } from './Loadout';
 import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
-import { BuildHud, BuildMenu, SailingHint, TowerPanel, WaypointPanel } from './Build';
+import { BuildHud, BuildMenu, SailingHint, TowerPanel } from './Build';
 import { OptionsPanel, PauseMenu } from './Pause';
 import { SlotsPanel } from './Slots';
 import { CreditsPanel, TitleExtras } from './Front';
@@ -187,7 +187,6 @@ export function App() {
       <BuildMenu />
       <BuildHud />
       <TowerPanel />
-      <WaypointPanel />
       <SailingHint />
       <WorldMap />
       <PauseMenu />

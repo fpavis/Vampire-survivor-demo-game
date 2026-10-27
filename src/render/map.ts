@@ -6,7 +6,8 @@ import { drawIcon } from './icons';
 import { FONT_UI, FONT_DISPLAY } from '../ui/fonts';
 
 const ROAD = SURFACE_NUM.road;
-const MARKER_NAMES = { chest: 'Treasure', door: 'Exit', 'stairs-up': 'Stairs up', 'stairs-down': 'Stairs down', lair: 'The boss', lock: 'Sealed vault', 'vault-gate': 'Open vault', 'vault-key': 'Vault key', lever: 'Lever', plate: 'Pressure plate' };
+const MARKER_NAMES = { chest: 'Treasure', door: 'Exit', 'stairs-up': 'Stairs up', 'stairs-down': 'Stairs down', lair: 'The boss', lock: 'Sealed vault', 'vault-gate': 'Open vault', 'vault-key': 'Vault key', lever: 'Lever', plate: 'Pressure plate',
+    healer: 'Healer', merchant: 'Merchant', innkeeper: 'Inn', elder: 'Elder', board: 'Bounty board', dummy: 'Training dummy', teleporter: 'Teleporter' };
 
 const CT = WORLD_CONFIG.chunkTiles;
 const T = WORLD_CONFIG.tile;
@@ -110,17 +111,18 @@ export class MapView {
 
     discoveredPois() { return [...this.pois.values()]; }
 
-    // Draw into any 2d canvas, centred on a tile position
+    // Draw into any 2d canvas, centred on a tile position (opts.mode: draw that map instead of the current one)
     render(canvas, centerTx, centerTy, ppt, opts = {}) {
         const ctx = canvas.getContext('2d');
         const w = canvas.width, h = canvas.height;
         ctx.imageSmoothingEnabled = false;
         ctx.fillStyle = '#05070c';
         ctx.fillRect(0, 0, w, h);
-        const map = this.maps[this.mode];
+        const mode = opts.mode || this.mode;      // travel looks over the overworld even from inside a town
+        const map = this.maps[mode];
         const cs = CT * ppt;
         const ox = w / 2 - centerTx * ppt, oy = h / 2 - centerTy * ppt;
-        if (this.mode === 'overworld' && ppt <= 2) {
+        if (mode === 'overworld' && ppt <= 2) {
             // zoomed far out: draw composited blocks of 8x8 chunks instead of thousands of small thumbnails
             const ss = cs * SUPER;
             const sx0 = Math.floor(-ox / ss), sx1 = Math.floor((w - ox) / ss), sy0 = Math.floor(-oy / ss), sy1 = Math.floor((h - oy) / ss);
@@ -141,7 +143,7 @@ export class MapView {
         ctx.textBaseline = 'middle';
         const iconSize = opts.big ? 22 : 13;
         ctx.font = `${iconSize}px sans-serif`;
-        if (this.mode === 'overworld') {
+        if (mode === 'overworld') {
             for (const p of this.pois.values()) {
                 const x = ox + p.tx * ppt, y = oy + p.ty * ppt;
                 if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
@@ -167,7 +169,7 @@ export class MapView {
                 }
             }
         }
-        if (this.mode === 'overworld') {
+        if (mode === 'overworld') {
             for (const l of this.lairs.values()) {
                 if (this.lairDefeated(l.id)) continue;
                 const x = ox + l.tx * ppt, y = oy + l.ty * ppt;
@@ -185,7 +187,7 @@ export class MapView {
                 }
             }
         }
-        if (this.mode === 'overworld') {
+        if (mode === 'overworld') {
             for (const st of this.siteList.values()) {
                 const done = this.siteState(st.id) === 'done';
                 if (st.kind === 'trigger' && done) continue;
@@ -208,7 +210,7 @@ export class MapView {
                 }
             }
         }
-        if (this.mode === 'overworld' && opts.big) {
+        if (mode === 'overworld' && opts.big) {
             // region names, written large and faint across the land
             ctx.save();
             for (const r of this.regions()) {
@@ -231,7 +233,7 @@ export class MapView {
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.font = `${iconSize}px sans-serif`;
         }
-        if (this.mode === 'overworld') {
+        if (mode === 'overworld') {
             for (const ex of this.extras()) {
                 const x = ox + ex.tx * ppt, y = oy + ex.ty * ppt;
                 if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
@@ -247,7 +249,7 @@ export class MapView {
                 }
             }
         }
-        for (const m of this.markers) {
+        for (const m of mode === this.mode ? this.markers : []) {
             const x = ox + m.tx * ppt, y = oy + m.ty * ppt;
             drawIcon(ctx, m.icon, x, y, iconSize);
         }
@@ -271,9 +273,9 @@ export class MapView {
     }
 
     /** Everything on the map that has a name, for the world map's hover and selection. */
-    marks() {
+    marks(mode = this.mode) {
         const out = [];
-        if (this.mode !== 'overworld') {
+        if (mode !== 'overworld') {
             for (const m of this.markers) out.push({ tx: m.tx, ty: m.ty, label: MARKER_NAMES[m.icon] || '', detail: '' });
             return out.filter((m) => m.label);
         }

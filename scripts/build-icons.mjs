@@ -76,7 +76,7 @@ const MANIFEST = {
   'place-cave': ['gi:cave-entrance', 0xb09070], 'place-ruins': ['gi:greek-temple', 0xd8d0c0], 'place-town': ['gi:village', 0xe8c87a],
   dungeon: ['gi:dungeon-gate', 0xb9a5ff],
   'tower-spire': ['gi:stone-tower', 0x7ab4ff], 'tower-ward': ['gi:obelisk', 0xf3c75a], 'tower-beacon': ['gi:fire-bowl', 0xff9a4a],
-  'tower-waypoint': ['gi:portal', 0xb06af0], 'tower-climb': ['gi:mountain-climbing', 0xa8a090], 'tower-bridge': ['gi:stone-bridge', 0xc8a060],
+  teleporter: ['gi:teleport', 0xffd070], 'tower-waypoint': ['gi:portal', 0xb06af0], 'tower-climb': ['gi:mountain-climbing', 0xa8a090], 'tower-bridge': ['gi:stone-bridge', 0xc8a060],
   'tower-dock': ['gi:anchor', 0x6ab8d8], site: ['gi:crane', 0xffd070],
   'res-gold': ['gi:two-coins', 0xffd84a], 'res-wood': ['gi:wood-pile', 0xc8915a], 'res-stone': ['gi:stone-block', 0xb4bcc8], 'res-iron': ['gi:metal-bar', 0x9aa8b8]
 };

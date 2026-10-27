@@ -342,6 +342,20 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-worldmap .legend{display:flex;flex-wrap:wrap;gap:4px 14px}
 .vs-worldmap .legend span{display:inline-flex;align-items:center;gap:5px}
 .vs-worldmap .legend .vs-icon{width:16px;height:16px}
+.vs-worldmap.travel .dests{position:absolute;top:8px;right:8px;bottom:8px;width:min(270px,45%);overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:6px;border-radius:10px;background:rgba(8,12,22,.86);border:1px solid var(--c-line-2)}
+.vs-worldmap .dest{display:flex;align-items:center;gap:8px;text-align:left;justify-content:flex-start;padding:6px 8px}
+.vs-worldmap .dest .tx{display:flex;flex-direction:column;min-width:0}
+.vs-worldmap .dest .tx b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vs-worldmap .dest small{color:var(--c-muted);font-size:11px}
+.vs-worldmap .dest.town .vs-icon{color:#ffd070}
+.vs-worldmap .dest.waypoint .vs-icon{color:#c48af5}
+.vs-worldmap .dest.on{outline:2px solid currentColor;outline-offset:-2px}
+.vs-worldmap .dest.town.on{color:#ffe7a8}
+.vs-worldmap .dest.waypoint.on{color:#e2c8ff}
+.vs-worldmap .confirm{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--c-line-2);background:rgba(20,26,40,.9)}
+.vs-worldmap .confirm em{color:#ff9a8a;font-style:normal}
+.vs-worldmap .confirm .vs-icon{width:16px;height:16px;vertical-align:-3px}
+@media (max-width:620px){.vs-worldmap.travel .dests{top:auto;left:8px;width:auto;max-height:40%}}
 .vs-death .box{width:min(440px,100%);text-align:center}
 .vs-death h1{font-family:var(--font-display);font-weight:700;font-size:clamp(40px,8vw,64px);letter-spacing:3px;color:#ff7a6a;margin:0;text-shadow:0 3px 18px rgba(160,10,10,.6)}
 .vs-death .sub{font-size:14px;color:var(--c-soft);margin:4px 0 16px}

@@ -57,7 +57,6 @@ export const ui = {
   buildMenuOpen: signal(false),
   build: signal<{ kind: string; name: string; icon: string; valid: boolean; reason: string; cost: { gold: number; wood: number; stone: number; iron: number } } | null>(null),
   towerPanel: signal<string | null>(null),
-  waypointOpen: signal<string | null>(null),
   worldMap: signal<{ mode: 'view' | 'travel'; from?: string | null } | null>(null),   // the full-screen world map
   sailing: signal(false),
   shopOpen: signal(false),
@@ -107,7 +106,7 @@ export const ui = {
 /** Panels that take the screen: on small screens the HUD steps aside while one is open, and tips wait. */
 export const panelOpen = () =>
   ui.loadoutOpen.value || ui.healerOpen.value || ui.shopOpen.value || ui.innOpen.value || ui.boardOpen.value ||
-  ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value || !!ui.waypointOpen.value ||
+  ui.journalOpen.value || ui.buildMenuOpen.value || !!ui.towerPanel.value ||
   ui.pauseOpen.value || ui.rebindOpen.value || !!ui.dialog.value || !!ui.slotsOpen.value || ui.optionsOpen.value || ui.creditsOpen.value ||
   !!ui.death.value || !!ui.ending.value || !!ui.worldMap.value;
 
