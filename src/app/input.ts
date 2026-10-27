@@ -111,6 +111,14 @@ export class InputSystem {
                 return;
             }
             if (isTyping(e.target)) { if (e.key !== 'Escape') e.stopImmediatePropagation(); return; }
+            // a story scene takes the keys: Enter, Space or E reads on, Esc skips it
+            if (g.story && g.story.current) {
+                const k = e.key.toLowerCase();
+                if (k === 'enter' || k === ' ' || k === 'e') g.story.advance();
+                else if (k === 'escape') g.story.endScene();
+                e.preventDefault(); e.stopImmediatePropagation();
+                return;
+            }
             const dir = ARROW_DIR[e.key];
             if (dir && navWantsArrows()) { e.preventDefault(); e.stopImmediatePropagation(); navMove(dir); }
         }, true);
@@ -271,6 +279,12 @@ export class InputSystem {
                 const dir = DIRS.find((d) => has(d));
                 if (dir && c.step && uiBridge.worldMap.value && uiBridge.worldMap.value.mode === 'travel') c.step(dir === 'up' || dir === 'left' ? -1 : 1);
             }
+            return;
+        }
+        // a story scene: A reads on, B or Start skips it
+        if (g.story.current) {
+            if (has('interact')) g.story.advance();
+            else if (has('cancel') || has('menu')) g.story.endScene();
             return;
         }
         if (has('menu')) { g.ui.toggleMenu(); return; }

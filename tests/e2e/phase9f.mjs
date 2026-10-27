@@ -461,6 +461,75 @@ if (want('rumour')) {
   await leave();
 }
 
+// ---- 9f.3: a demon lord speaks in a scene (bars, portrait, typed lines, the camera on it); cards only on request
+if (want('scene')) {
+  await goOut();
+  await ev(() => window.__dev.setSettings({ storyScenes: 'full' }));
+  const intro = await ev(() => {
+    const g = window.game, p = g.state.player;
+    const e = g.makeEnemy('SLIME', p.wx + 300, p.wy + 40, {});
+    e.introduced = true; e.lord = 'field'; e.health = e.maxHealth = 1e9;
+    window.__lord = e;
+    const cam0 = Math.hypot(g.cam.x - e.wx, g.cam.y - e.wy);
+    g.story.bossIntro(e);
+    const at = { x: e.wx, y: e.wy };
+    for (let i = 0; i < 4; i++) g.gameLoop(1);
+    const early = window.__dev.ui.scene.value.shown;
+    for (let i = 0; i < 36; i++) g.gameLoop(1);
+    const sc = window.__dev.ui.scene.value;
+    return { paused: g.state.paused, sc, early, held: Math.round(Math.hypot(e.wx - at.x, e.wy - at.y)), cam0: Math.round(cam0), cam1: Math.round(Math.hypot(g.cam.x - e.wx, g.cam.y - e.wy)) };
+  });
+  check('a demon lord noticing the party plays a scene, and the world holds', !!intro.sc && intro.paused && intro.held === 0 && intro.sc.speaker === 'Morwen' && intro.sc.count === 2, JSON.stringify({ ...intro, sc: intro.sc && { ...intro.sc, portrait: !!intro.sc.portrait } }));
+  check('...its line typed out a little at a time', !!intro.sc && intro.early > 0 && intro.early < intro.sc.shown && intro.sc.shown <= intro.sc.text.length, JSON.stringify(intro.sc && [intro.early, intro.sc.shown, intro.sc.text.length]));
+  check('...and the camera turns to it', intro.cam1 < intro.cam0 * 0.6, JSON.stringify([intro.cam0, intro.cam1]));
+  const dom = await until(() => !!document.querySelector('.vs-scene .bar.top') && !!document.querySelector('.vs-scene .bar.bottom') && /^data:image/.test(document.querySelector('.vs-scene .pic img')?.src || '') && /Morwen/.test(document.querySelector('.vs-scene .who')?.innerText || ''));
+  check('...letterbox bars, the lord\'s portrait and name on screen', dom);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/scene-lord.png` });
+  await ev(() => { window.game.story.current.shown = 5; window.game.story.publishScene(); });     // as if still typing
+  await page.keyboard.press('Enter');
+  const full = await ev(() => { const s = window.__dev.ui.scene.value; return s && s.index === 0 && s.shown === s.text.length; });
+  check('Enter shows the whole line first', full);
+  await page.keyboard.press('Enter');
+  const second = await ev(() => window.__dev.ui.scene.value?.index);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  const after = await ev(() => ({ scene: !!window.__dev.ui.scene.value, paused: window.game.state.paused, dom: !!document.querySelector('.vs-scene') }));
+  check('...then the next line, and the scene ends and play resumes', second === 1 && !after.scene && !after.paused, JSON.stringify({ second, ...after }));
+  await until(() => !document.querySelector('.vs-scene'));
+  const fall = await ev(() => {
+    const g = window.game, e = window.__lord;
+    g.story.victory(e);
+    const s = window.__dev.ui.scene.value;
+    return { lines: s && s.count, who: s && s.speaker, paused: g.state.paused };
+  });
+  check('when the lord falls it has last words before the narrator closes the chapter', fall.lines === 2 && fall.who === 'Morwen' && fall.paused, JSON.stringify(fall));
+  await ev(() => window.game.story.advance());
+  await ev(() => window.game.story.advance());
+  const narr = await until(() => !!document.querySelector('.vs-scene.narrator') && /harvest will come in/.test(document.querySelector('.vs-scene')?.innerText || ''));
+  check('...the narrator speaks without a portrait', narr);
+  await page.keyboard.press('Escape');
+  const skipped = await ev(() => ({ scene: !!window.__dev.ui.scene.value, paused: window.game.state.paused, menu: window.__dev.ui.pauseOpen.value }));
+  check('Esc skips the rest of a scene (and does not open the menu)', !skipped.scene && !skipped.paused && !skipped.menu, JSON.stringify(skipped));
+  // the Elder's interlude, the first time in a town after a chapter closes
+  const [town] = await ev(() => window.__dev.tools.nearestPlaces('city', 1));
+  await ev(() => { const q = window.game.quests.state; if (!q.done.includes('m0_omen')) q.done.push('m0_omen'); delete q.flags['interlude.ch0']; });
+  await enter(town);
+  const inter = await until(() => /The Elder/.test(document.querySelector('.vs-scene .who')?.innerText || '') && /travellers cleared the roads/.test(document.querySelector('.vs-scene')?.innerText || ''));
+  check('back in town after a chapter closes, the Elder has a word', inter);
+  await page.keyboard.press('Escape');
+  await leave();
+  await enter(town);
+  const once = await ev(() => { for (let i = 0; i < 10; i++) window.game.gameLoop(1); return { scene: !!window.__dev.ui.scene.value, flag: !!window.game.quests.state.flags['interlude.ch0'] }; });
+  check('...once', !once.scene && once.flag, JSON.stringify(once));
+  await leave();
+  // cards only: a card over play instead, and nothing holds
+  await ev(() => window.__dev.setSettings({ storyScenes: 'cards' }));
+  const cards = await ev(() => { const g = window.game; g.story.bossIntro(window.__lord); return { scene: !!window.__dev.ui.scene.value, paused: g.state.paused }; });
+  const card = await until(() => /Morwen/.test(document.querySelector('[data-card="boss"]')?.innerText || ''));
+  check('"Story scenes: Cards only" shows the card instead and play goes on', card && !cards.scene && !cards.paused, JSON.stringify(cards));
+  await ev(() => { const e = window.__lord; e.dead = true; e.silent = true; window.game.reap(); window.__dev.setSettings({ storyScenes: 'full' }); });
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');

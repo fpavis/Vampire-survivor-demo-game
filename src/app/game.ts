@@ -928,6 +928,8 @@ class Game {
         }
         // keep the fade animation running during scene changes
         if (this.busy) { this.ui.updateExtras(this, rawDelta); this.world.animate(rawDelta); return; }
+        // a story scene holds the world; only its lines and the camera move
+        if (this.story.current) { this.story.updateScene(rawDelta); this.world.animate(rawDelta); return; }
         if (s.levelUp || s.paused) return;
         // hit-stop: the action holds for a moment after a crit or a big kill
         if (this.hitStop > 0) { this.hitStop = Math.max(0, this.hitStop - 1); return; }

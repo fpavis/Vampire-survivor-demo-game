@@ -155,6 +155,7 @@ function SettingsTabs({ title }: { title: boolean }) {
             <Slider label="Minimap opacity" min={0.4} max={1} step={0.05} value={s.minimapOpacity} fmt={pct} onInput={(v) => set({ minimapOpacity: v })} />
             <Choice label="Monster health bars" value={s.healthBars} options={[['hurt', 'When hurt'], ['always', 'Always'], ['off', 'Off']]} set={(v) => set({ healthBars: v })} />
             <Toggle label="Quest tracker" on={s.tracker} set={(v) => set({ tracker: v })} icon="journal" />
+            <Choice label="Story scenes" value={s.storyScenes} options={[['full', 'Full (the game holds while they speak)'], ['cards', 'Cards only (play goes on)']]} set={(v) => set({ storyScenes: v })} />
           </>
         )}
         {tab === 'audio' && (

@@ -1,6 +1,6 @@
 // The story framework, as data: chapters, demon lords, the main quest chain and the elder's dialogue.
 // Locations are never written here; objectives name a region and "the nearest dungeon" and the seeded world supplies it.
-// The writing is a placeholder skeleton: replace the text, keep the structure.
+// The lords' own words, the Elder's interludes between chapters and the epilogue are in ending.ts.
 import { canStart, isActive, isDone, isReady, prerequisitesMet, type QuestDef, type QuestState } from '../quest/quests';
 import type { Cond, DialogueScript, Effect } from './dialogue';
 
@@ -175,7 +175,7 @@ export const DIALOGUES: Record<string, DialogueScript> = {
   'elder.epilogue': { id: 'elder.epilogue', start: 'n0', nodes: { n0: { speaker: E, icon: 'elder', text: 'The song is sung, and you are in it. Go where you like. The light will keep.' } } },
   'elder.offer': offer('elder.offer', 'current', ['{quest.title}. {quest.summary}']),
   'elder.hint': { id: 'elder.hint', start: 'n0', nodes: { n0: { speaker: E, icon: 'elder', text: '{quest.title}: {quest.hint}' } } },
-  'elder.turnin': turnIn('elder.turnin', 'current', ['You have done it. Well done.']),
+  'elder.turnin': turnIn('elder.turnin', 'current', ['It is done, and done well. The towns will sleep easier tonight.']),
 
   'm0.turnin': turnIn('m0.turnin', 'm0_omen', [
     'A dozen already? You are quicker than you look. The beasts are the demons\' doing, but they are only the first wave.',

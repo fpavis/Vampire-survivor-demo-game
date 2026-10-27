@@ -32,6 +32,7 @@ export interface Settings {
   minimapOpacity: number;       // 0.4 .. 1
   healthBars: HealthBars;
   tracker: boolean;
+  storyScenes: 'full' | 'cards';  // a lord's words and the Elder's interludes as scenes, or as a card over play
   // controls
   clickToMove: boolean;
   aimAtCursor: boolean;
@@ -44,7 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoPick: false, confirmSalvage: false, pauseOnBlur: true,
   quality: 'high', renderScale: 1, fpsCap: 0, zoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
   artStyle: 'pixel', pixelSize: 2, postFx: 'none', colorGrade: 'none',
-  hudScale: 1, minimap: 'medium', minimapOpacity: 1, healthBars: 'hurt', tracker: true,
+  hudScale: 1, minimap: 'medium', minimapOpacity: 1, healthBars: 'hurt', tracker: true, storyScenes: 'full',
   clickToMove: false, aimAtCursor: false, mouseInteract: false
 };
 
@@ -77,6 +78,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     minimapOpacity: num(r.minimapOpacity, d.minimapOpacity, 0.4, 1),
     healthBars: pick(r.healthBars, ['hurt', 'always', 'off'] as const, d.healthBars),
     tracker: bool(r.tracker, d.tracker),
+    storyScenes: pick(r.storyScenes, ['full', 'cards'] as const, d.storyScenes),
     clickToMove: bool(r.clickToMove, d.clickToMove),
     aimAtCursor: bool(r.aimAtCursor, d.aimAtCursor),
     mouseInteract: bool(r.mouseInteract, d.mouseInteract)

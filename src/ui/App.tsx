@@ -9,7 +9,7 @@ import { CreditsPanel, TitleExtras } from './Front';
 import { RebindPanel } from './Rebind';
 import { TipCard } from './Tips';
 import { WorldMap } from './WorldMap';
-import { DeathScreen, Ending, StoryCard } from './Story';
+import { DeathScreen, Ending, Scene, StoryCard } from './Story';
 import { Icon } from './Icon';
 import { BoardPanel, Tracker } from './Quests';
 import { glyph, quickGlyph } from './hints';
@@ -170,6 +170,7 @@ export function App() {
       <GameMenu />
       <ActiveBar />
       <StoryCard />
+      <Scene />
       <DeathScreen />
       <Ending />
       {front}

@@ -1,6 +1,6 @@
 // The story's big moments as data: what a boss card says, the line spoken when a demon lord falls, the epilogue and
 // the closing roll of the run. Pure; the runtime (app/story.ts) shows them.
-import { DEMON_LORDS, SOVEREIGN, lordOf } from './story';
+import { CHAPTERS, DEMON_LORDS, SOVEREIGN, lordOf } from './story';
 import { GROUP_INFO } from '../world/biomes';
 
 /** The line that closes each lord's chapter when they fall. */
@@ -12,6 +12,67 @@ export const LORD_FALL: Record<string, string> = {
   mountain: 'The mountain is only a mountain again.',
   sovereign: 'The sky clears for the first time since spring.'
 };
+
+/** What each lord says on first seeing the party: the lines of its scene, in order. */
+export const LORD_INTRO: Record<string, string[]> = {
+  field: ['So the Elder found some heroes. How small you are.', 'Every field you crossed is hollow underneath. Come down and see what grows here.'],
+  forest: ['You smell of smoke and axes.', 'These woods were mine before your towns had names. They will be mine after.'],
+  desert: ['Kneel, and the sand will be gentle with you.', 'No? Then you will be buried standing, like all the others.'],
+  shore: ['Hush. Listen to the water.', 'It has carried every ship that defied me to the bottom. It is patient. So am I.'],
+  mountain: ['You climbed all this way to die somewhere high.', 'Good. The mountain likes a view.'],
+  sovereign: ['Five thrones, emptied by a handful of travellers.', 'I never needed lords. I need only the sky, and the sky is mine.']
+};
+
+/** A lord's last words, before the line that closes its chapter (LORD_FALL). */
+export const LORD_LAST: Record<string, string> = {
+  field: 'The harvest... was never going to be mine...',
+  forest: 'Cut me down, and I grow back. Slower, this time...',
+  desert: 'The sand remembers. It will remember you.',
+  shore: 'The tide... turns...',
+  mountain: 'A mountain does not fall. It only... settles.',
+  sovereign: 'Then hold the sky, little ones. See how long it lets you.'
+};
+
+/** The Elder's word on the first visit to a town after a chapter closes (the last one leads into the ending). */
+export const INTERLUDES: Record<string, string> = {
+  ch0: 'Word travels fast between the towns. They say travellers cleared the roads. They are saying your names, or trying to.',
+  ch1: 'The fields were sown again this week. Old Hesk wept into his seed bag. Do not tell him I told you.',
+  ch2: 'The woodcutters went into the Whispering Woods today and came out again, every one of them. That has not happened in a year.',
+  ch3: 'A caravan crossed the dunes without losing a single camel. The merchants call it a miracle. I call it you.',
+  ch4: 'The fishing boats are out. Some of them even caught fish.',
+  ch5: 'Look up tonight. The peaks are clear for the first time since spring, and above them something is waiting.',
+  ch6: 'It is over. Sit with me a while, and I will tell you how the song ends.'
+};
+
+/** One line of a scene: who speaks it (no speaker: the narrator), and what they say. */
+export interface SceneLine { speaker: string; title: string; text: string; lord: string | null }
+
+/** A lord or the Sovereign by id: name, title and the key of its lines. */
+function speakerOf(lord: string): { name: string; title: string; key: string } | null {
+  if (lord === SOVEREIGN.id) return { name: SOVEREIGN.name, title: SOVEREIGN.title, key: 'sovereign' };
+  const l = DEMON_LORDS.find((x) => x.id === lord);
+  return l ? { name: l.name, title: l.title, key: l.group } : null;
+}
+
+/** A lord noticing the party, in its own words. */
+export function lordIntroScene(lord: string): SceneLine[] {
+  const who = speakerOf(lord);
+  return who ? (LORD_INTRO[who.key] ?? []).map((text) => ({ speaker: who.name, title: who.title, text, lord })) : [];
+}
+
+/** A lord falling: its last words, then the narrator closes the chapter. */
+export function lordFallScene(lord: string): SceneLine[] {
+  const who = speakerOf(lord);
+  if (!who) return [];
+  return [{ speaker: who.name, title: who.title, text: LORD_LAST[who.key], lord }, { speaker: '', title: '', text: LORD_FALL[who.key], lord: null }];
+}
+
+/** The chapter whose interlude the Elder should tell now: the latest one closed and not yet told (null if none). */
+export function interludeDue(done: (quest: string) => boolean, told: (chapter: string) => boolean): string | null {
+  let due: string | null = null;
+  for (const ch of CHAPTERS) if (ch.id !== 'ch6' && done(ch.quest) && !told(ch.id)) due = ch.id;
+  return due;
+}
 
 export const EPILOGUE: string[] = [
   'Azrathul is gone, and the sky has forgotten him already.',

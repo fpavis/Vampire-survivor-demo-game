@@ -26,6 +26,8 @@ await page.goto(`http://localhost:${PORT}/`);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
+await page.waitForFunction(() => window.__dev);
+await page.evaluate(() => window.__dev.setSettings({ storyScenes: 'cards' }));   // lords speak in cards here: scenes hold play (phase9f checks them)
 await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; g.popRuntime.population = null; for (const e of [...g.state.enemies]) e.dead = true; g.reap(); });
 
 const installHelpers = () => {

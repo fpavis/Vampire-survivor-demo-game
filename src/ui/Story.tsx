@@ -20,6 +20,29 @@ export function StoryCard() {
   );
 }
 
+/** A story scene: letterbox bars, the speaker's portrait (or icon) and name, the line typed out. Click to read on. */
+export function Scene() {
+  const sc = ui.scene.value;
+  if (!sc) return null;
+  const done = sc.shown >= sc.text.length;
+  const narrator = !sc.speaker;
+  return (
+    <div class={`vs-scene hit${narrator ? ' narrator' : ''}`} role="dialog" aria-label={sc.speaker || 'Story'} data-scene={sc.id} onClick={() => ui.game?.story.advance()}>
+      <i class="bar top" /><i class="bar bottom" />
+      <div class="vs-scene-box">
+        {!narrator && (
+          <span class="pic">{sc.portrait ? <img src={sc.portrait} alt="" /> : <Icon name={sc.icon} />}</span>
+        )}
+        <div class="tx">
+          {!narrator && <div class="who"><b>{sc.speaker}</b>{sc.title && <small>{sc.title}</small>}</div>}
+          <p aria-live="polite">{sc.text.slice(0, sc.shown)}<span class="rest">{sc.text.slice(sc.shown)}</span></p>
+          <div class="hint">{done ? (sc.index + 1 < sc.count ? 'Continue' : 'Close') : 'Show all'} <Icon name="play" /> <small>Esc skips</small></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The ending: the epilogue, what the run amounted to and the credits, rolling up the screen. */
 export function Ending() {
   const e = ui.ending.value;

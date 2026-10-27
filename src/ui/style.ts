@@ -330,6 +330,24 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-story-card .t{font-family:var(--font-display);font-size:clamp(15px,2.2vw,20px);color:#e8cf8a;margin-top:2px}
 .vs-story-card .x{font-size:14px;font-style:italic;color:var(--c-soft);margin-top:8px;text-wrap:balance}
 .vs-story-card.wake{align-items:flex-end;padding-bottom:20vh}
+/* a story scene: the bars close in, the speaker's card sits low between them, the line types out */
+.vs-scene{position:fixed;inset:0;z-index:31;display:flex;align-items:flex-end;justify-content:center;padding-bottom:calc(14vh + 10px);cursor:pointer}
+.vs-scene .bar{position:fixed;left:0;right:0;height:13vh;background:#000;animation:vs-bar-in .45s ease-out both}
+.vs-scene .bar.top{top:0}
+.vs-scene .bar.bottom{bottom:0}
+.vs-scene-box{display:flex;gap:14px;align-items:flex-start;width:min(760px,calc(100vw - 32px));padding:14px 18px;background:rgba(8,10,20,.9);border:2px solid #5a3a3a;border-radius:12px;animation:vs-card-in .5s cubic-bezier(.2,.8,.3,1) both}
+.vs-scene .pic{flex:0 0 auto;width:84px;height:84px;display:flex;align-items:center;justify-content:center;background:#1a1222;border:2px solid #8a5a4a;border-radius:10px;overflow:hidden;font-size:44px;color:#f3e6c4}
+.vs-scene .pic img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+.vs-scene .tx{flex:1;min-width:0}
+.vs-scene .who{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.vs-scene .who b{font-family:var(--font-display);font-size:22px;letter-spacing:1px;color:#ff9a86}
+.vs-scene .who small{font-family:var(--font-display);font-size:14px;color:#e8cf8a}
+.vs-scene p{margin:6px 0 4px;font-size:17px;line-height:1.45;color:var(--c-text);min-height:2.9em}
+.vs-scene p .rest{visibility:hidden}
+.vs-scene .hint{font-size:12px;color:var(--c-muted);text-align:right}
+.vs-scene .hint small{margin-left:8px}
+.vs-scene.narrator .vs-scene-box{border-color:#6a5a2a;justify-content:center;text-align:center}
+.vs-scene.narrator p{font-style:italic;color:#f3e6c4}
 .vs-story-card.wake .n{font-size:clamp(22px,3.6vw,32px)}
 .vs-panel.vs-ending{position:fixed;inset:0;border:0;border-radius:0;z-index:40;display:flex;flex-direction:column;align-items:center;padding:16px;background:radial-gradient(ellipse at 50% 40%,rgba(30,26,48,.94),rgba(4,4,10,.98))}
 .vs-ending .vs-x{position:absolute;top:12px;right:16px}

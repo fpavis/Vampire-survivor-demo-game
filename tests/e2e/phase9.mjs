@@ -478,6 +478,7 @@ if (want('sound')) {
 }
 
 if (want('story')) {
+  await ev(() => window.__dev.setSettings({ storyScenes: 'cards' }));      // the cards (phase9f checks the scenes)
   await ev(() => { const g = window.game; for (const e of [...g.state.enemies]) e.dead = true; g.reap(); g.spawnBoss(); for (let i = 0; i < 3; i++) g.gameLoop(1); });
   const boss = await until(() => !!document.querySelector('[data-card="boss"] .n'));
   const bossText = await ev(() => document.querySelector('.vs-story-card')?.innerText || '');
