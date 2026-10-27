@@ -130,7 +130,7 @@ export function installDevTools(game: any): void {
       const open = game.towers.recs.filter((r: any) => !r.built).sort((a: any, b: any) => Math.hypot(a.tx * 48 - p.wx, a.ty * 48 - p.wy) - Math.hypot(b.tx * 48 - p.wx, b.ty * 48 - p.wy));
       const todo = all ? open : open.slice(0, 1);
       if (!todo.length) { game.ui.toast('No construction site'); return 0; }
-      for (const rec of todo) { rec.delivered = { ...towersApi.TOWER_DEFS[rec.kind as keyof typeof towersApi.TOWER_DEFS].cost }; game.towers.complete(rec); }
+      for (const rec of todo) { rec.delivered = towersApi.towerCost(rec); game.towers.complete(rec); }
       return todo.length;
     },
     /** the nearest discovered-or-not places of a kind: towns ('city') or dungeons */
@@ -236,7 +236,7 @@ export function installDevTools(game: any): void {
     if (!b) { game.ui.toast('No corrupted land within reach'); return; }
     const p = game.state.player; p.wx = b.x; p.wy = b.y; game.cam.x = b.x; game.cam.y = b.y; game.lastFogTx = null;
   });
-  for (const kind of ['warband', 'swarm', 'hunters']) button(spawn, `Event: ${kind}`, () => { if (ready() && game.mode === 'overworld') game.worldEvents.start(kind); });
+  for (const kind of ['warband', 'swarm', 'hunters', 'siege']) button(spawn, `Event: ${kind}`, () => { if (ready() && game.mode === 'overworld' && !game.worldEvents.start(kind) && kind === 'siege') game.ui.toast('A siege needs one of your spires, obelisks or beacons nearby'); });
   button(spawn, 'Respawn all camps', () => { game.session.clearedCamps = {}; game.ui.toast('Camps will respawn'); });
   button(spawn, 'Kill all nearby', () => { for (const e of [...game.state.enemies]) if (!e.dead) game.damageEnemy(e, 1e9, { noCrit: true }); });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EVENT_DEFS, EVENT_KINDS, eventAllowed, eventSpawns, nextEventDelay, pickEvent, type EventContext } from '../src/core/world/worldEvents';
+import { EVENT_DEFS, EVENT_KINDS, SIEGE_CHANCE, eventAllowed, eventSpawns, nextEventDelay, pickEvent, siegeSpawns, type EventContext } from '../src/core/world/worldEvents';
 import { makeRng } from '../src/core/world/noise';
 
 describe('overworld events', () => {
@@ -49,5 +49,28 @@ describe('overworld events', () => {
     expect(eventAllowed({ ...ok, engaged: 12 })).toBe(false);
     expect(eventAllowed({ ...ok, bossNear: true })).toBe(false);
     expect(eventAllowed({ ...ok, safe: true })).toBe(false);
+  });
+
+  it('lay siege only near one of the party\'s towers, about one time in three', () => {
+    const r = makeRng(5);
+    let sieges = 0;
+    for (let i = 0; i < 2000; i++) expect(pickEvent(r)).not.toBe('siege');
+    for (let i = 0; i < 2000; i++) if (pickEvent(r, true) === 'siege') sieges++;
+    expect(sieges / 2000).toBeGreaterThan(SIEGE_CHANCE - 0.05);
+    expect(sieges / 2000).toBeLessThan(SIEGE_CHANCE + 0.05);
+  });
+
+  it('gather besiegers all round the tower, close in', () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const s = siegeSpawns(makeRng(seed), 48);
+      const def = EVENT_DEFS.siege;
+      expect(s.length).toBeGreaterThanOrEqual(def.count[0]);
+      expect(s.length).toBeLessThanOrEqual(def.count[1]);
+      expect(s.filter((m) => m.elite)).toHaveLength(def.elites);
+      for (const m of s) { const d = Math.hypot(m.dx, m.dy); expect(d).toBeGreaterThanOrEqual(48 * 2.5 - 1e-6); expect(d).toBeLessThanOrEqual(48 * 5 + 1e-6); }
+      // all round: the four quarters each hold someone
+      const quarters = new Set(s.map((m) => Math.floor(((Math.atan2(m.dy, m.dx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 2))));
+      expect(quarters.size).toBe(4);
+    }
   });
 });

@@ -40,6 +40,8 @@ export interface TowerSave {
   delivered: { gold: number; wood: number; stone: number; iron: number };
   built: boolean;
   spell: string | null;
+  level?: number;                  // spire, ward and beacon: 1..3 (missing means 1)
+  claimed?: boolean;               // laid on claimed ground (it cost a quarter less)
 }
 
 export interface FloorState {

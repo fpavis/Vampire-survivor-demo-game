@@ -3,8 +3,8 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { BIOME } from '../core/world/biomes';
 import {
-    DIRS, SPIRE_RANGE, TOWER_DEFS, WARD_RADIUS, boatSpot, checkPlacement, deposit, editMap, isFunded, newTower,
-    plateauDecor, progressOf, remaining, stageOf, totalOf, towerEdits
+    CLAIMED_DISCOUNT, DIRS, TOWER_DEFS, UPGRADABLE, boatSpot, canUpgrade, checkPlacement, deposit, editMap, isFunded, levelOf, newTower,
+    plateauDecor, progressOf, remaining, stageOf, totalOf, towerCost, towerEdits, towerPower, upgrade, upgradeCost
 } from '../core/world/towers';
 import { TEMPLATES } from '../core/spells/spells';
 import { ui as uiBridge } from '../ui/bridge';
@@ -29,13 +29,16 @@ export class TowerSystem {
 
     // ------------------------------------------------------------- persistence
     serialize() {
-        return this.recs.map((r) => ({ id: r.id, kind: r.kind, tx: r.tx, ty: r.ty, dir: r.dir, len: r.len, delivered: { ...r.delivered }, built: r.built, spell: r.spell }));
+        return this.recs.map((r) => ({
+            id: r.id, kind: r.kind, tx: r.tx, ty: r.ty, dir: r.dir, len: r.len, delivered: { ...r.delivered }, built: r.built, spell: r.spell,
+            ...(levelOf(r) > 1 ? { level: levelOf(r) } : {}), ...(r.claimed ? { claimed: true } : {})
+        }));
     }
 
     load(saved) {
         this.cancelBuild();
         this.clearDisplays();
-        this.recs = (saved || []).map((r) => ({ ...r, delivered: { gold: 0, wood: 0, stone: 0, iron: 0, ...r.delivered } }));
+        this.recs = (saved || []).map((r) => ({ ...r, delivered: { gold: 0, wood: 0, stone: 0, iron: 0, ...r.delivered }, siege: null }));
         this.rebuildWorld(false);
     }
 
@@ -176,7 +179,8 @@ export class TowerSystem {
             const base = this.baseOf(b.kind, tx, ty, b.plan ? b.plan.dir : 0);
             b.sprite.position.set(base.x, base.y * TILT);
             b.sprite.tint = col;
-            uiBridge.build.value = { kind: b.kind, name: def.name, icon: def.icon, valid: b.valid, reason: b.reason, cost: { ...def.cost } };
+            const claimed = this.claimedAt(tx, ty);
+            uiBridge.build.value = { kind: b.kind, name: def.name, icon: def.icon, valid: b.valid, reason: b.reason, cost: towerCost({ kind: b.kind, claimed }), claimed };
         }
     }
 
@@ -185,13 +189,15 @@ export class TowerSystem {
         if (!b) return false;
         if (!b.valid) { this.game.ui.toast(b.reason || 'Cannot build here'); this.game.audio.play('deny'); return false; }
         const rec = newTower(b.kind, b.tx, b.ty, b.plan || undefined);
+        if (this.claimedAt(b.tx, b.ty)) rec.claimed = true;
+        rec.siege = null;
         this.recs.push(rec);
         this.cancelBuild();
         this.rebuildWorld(true, rec);
         const g = this.game;
         g.audio.play('place');
         g.fx.burst((rec.tx + 0.5) * T, (rec.ty + 0.5) * T, 20, 0xffe27a, 18, 3, { size: 0.9, life: 28, glow: true });
-        g.ui.toast(`Construction site laid: ${TOWER_DEFS[rec.kind].name}. Bring ${costText(TOWER_DEFS[rec.kind].cost)} and press E`);
+        g.ui.toast(`Construction site laid: ${TOWER_DEFS[rec.kind].name}${rec.claimed ? ' on claimed ground' : ''}. Bring ${costText(towerCost(rec))} and press E`);
         g.map.dirty = true;
         g.requestSave('build', true);
         return true;
@@ -214,11 +220,12 @@ export class TowerSystem {
         if (!r) return null;
         const def = TOWER_DEFS[r.kind];
         if (!r.built) {
-            const need = remaining(def.cost, r.delivered);
+            const need = remaining(towerCost(r), r.delivered);
             return { kind: 'site', rec: r, text: `[E]  Deliver materials · ${Math.round(progressOf(r) * 100)}%  ·  needs ${costText(need)}` };
         }
         if (r.kind === 'dock') return this.game.sea.canRecall(r) ? { kind: 'tower', act: 'recall', rec: r, text: '[E]  Recall your boat' } : null;
-        const text = { spire: '[E]  Arm the Spire', waypoint: '[E]  Use the Waypoint', beacon: '[E]  Read the plaque', ward: '[E]  Read the plaque', climb: '[E]  Read the plaque', bridge: '[E]  Read the plaque' }[r.kind];
+        if (UPGRADABLE.includes(r.kind)) return { kind: 'tower', rec: r, text: r.siege ? `[E]  ${def.name} · silenced by the siege` : `[E]  Tend the ${def.name} · Lv ${levelOf(r)}` };
+        const text = { waypoint: '[E]  Use the Waypoint', climb: '[E]  Read the plaque', bridge: '[E]  Read the plaque' }[r.kind];
         return text ? { kind: 'tower', rec: r, text } : null;
     }
 
@@ -227,7 +234,7 @@ export class TowerSystem {
         if (t.kind === 'site') return this.deliver(t.rec);
         const r = t.rec, def = TOWER_DEFS[r.kind];
         if (t.act === 'recall') { g.sea.recall(r); return; }
-        if (r.kind === 'spire') { uiBridge.towerPanel.value = r.id; g.audio.play('equip'); }
+        if (UPGRADABLE.includes(r.kind)) { uiBridge.towerPanel.value = r.id; g.audio.play('equip'); }
         else if (r.kind === 'waypoint') g.travel.open(r.id);
         else uiBridge.dialog.value = { speaker: def.name, icon: def.icon, text: def.blurb };
     }
@@ -239,7 +246,7 @@ export class TowerSystem {
         const given = deposit(rec, w);
         const sum = totalOf(given);
         if (!sum) {
-            g.ui.toast(`You carry none of what it needs: ${costText(remaining(TOWER_DEFS[rec.kind].cost, rec.delivered))}`);
+            g.ui.toast(`You carry none of what it needs: ${costText(remaining(towerCost(rec), rec.delivered))}`);
             g.audio.play('deny');
             return;
         }
@@ -267,13 +274,40 @@ export class TowerSystem {
         g.ui.banner(`${def.name.toUpperCase()} COMPLETE`, def.color);
         g.audio.play('fanfare');
         g.events.emit('TowerBuilt', { kind: rec.kind, id: rec.id });
-        if (rec.kind === 'beacon') g.fog.revealCircle(rec.tx, rec.ty, 44);
+        if (rec.kind === 'beacon') g.fog.revealCircle(rec.tx, rec.ty, towerPower(levelOf(rec)).reveal);
         if (rec.kind === 'climb') { const pc = { tx: rec.tx + DIRS[rec.dir][0] * rec.len, ty: rec.ty + DIRS[rec.dir][1] * rec.len }; g.fog.revealCircle(pc.tx, pc.ty, 14); }
         if (rec.kind === 'waypoint' || rec.kind === 'dock') g.fog.revealCircle(rec.tx, rec.ty, 12);
         if (rec.kind === 'dock') { g.session.boats[rec.id] = boatSpot(rec); g.sea.refresh(); }
         g.syncMap();
         g.map.dirty = true;
         g.requestSave('tower', true);
+    }
+
+    /** Is this tile on ground the party has claimed (the calm round a claimed flag)? Towers there cost less. */
+    claimedAt(tx, ty) {
+        const s = this.game.sites;
+        return !!(s && s.safeAt((tx + 0.5) * T, (ty + 0.5) * T));
+    }
+
+    // ---------------------------------------------------------------- levels
+    /** Raise a spire, ward or beacon one level, paid from the wallet at once. */
+    upgrade(recId) {
+        const g = this.game, rec = this.byId(recId);
+        if (!rec || !canUpgrade(rec)) return false;
+        const res = upgrade(rec, g.state.wallet);
+        if (!res) return false;
+        if ('missing' in res) { g.ui.toast(`Raising it needs ${costText(res.missing)} more`, 'hammer'); g.audio.play('deny'); return false; }
+        uiBridge.wallet.value = { ...g.state.wallet };
+        const def = TOWER_DEFS[rec.kind], c = centreOf(rec);
+        g.fx.pillar(c.x, c.y, def.color, 80, 90, 300);
+        g.fx.shockwave(c.x, c.y, 200, def.color, 30, 7);
+        g.audio.play('fanfare');
+        g.ui.banner(`${def.name.toUpperCase()} RAISED TO LEVEL ${res.level}`, def.color, def.icon);
+        if (rec.kind === 'beacon') { g.fog.revealCircle(rec.tx, rec.ty, towerPower(res.level).reveal); g.syncMap(); g.map.dirty = true; }
+        g.events.emit('TowerUpgraded', { kind: rec.kind, id: rec.id, level: res.level });
+        uiBridge.version.value++;
+        g.requestSave('tower', true);
+        return true;
     }
 
     // ----------------------------------------------------------------- spire
@@ -340,6 +374,7 @@ export class TowerSystem {
             const d2 = (c.x - p.wx) ** 2 + (c.y - p.wy) ** 2;
             if (d2 > NEAR * NEAR) { const gr = this.shown.get(r.id); if (gr) { gr.destroy(); this.shown.delete(r.id); } continue; }
             if (!r.built) continue;
+            if (r.siege) { this.drawSiege(r, c, t); continue; }      // silenced until the besiegers are beaten
             if (r.kind === 'ward') this.updateWard(r, c, delta, t, d2);
             else if (r.kind === 'spire') this.updateSpire(r, c, delta);
             else if (r.kind === 'waypoint') this.drawRing(r, c, t, 0xb06af0, 54);
@@ -361,9 +396,23 @@ export class TowerSystem {
         gr.lineStyle(1.5, color, a * 0.8); gr.drawCircle(c.x, c.y + T * 0.3, R - 8);
     }
 
+    /** A besieged tower: a broken red ring flickers round it, and it does nothing. */
+    drawSiege(rec, c, t) {
+        const gr = this.ground(rec);
+        gr.clear();
+        const a = 0.35 + 0.3 * Math.abs(Math.sin(t * 0.13));
+        for (let k = 0; k < 10; k++) {
+            const a0 = (k / 10) * Math.PI * 2 + t * 0.004;
+            gr.lineStyle(3, 0xff4a3a, a);
+            gr.arc(c.x, c.y + T * 0.3, 58, a0, a0 + 0.38);
+        }
+        gr.lineStyle(0);
+    }
+
     updateWard(rec, c, delta, t, d2) {
         const g = this.game;
-        const R = WARD_RADIUS;
+        const pw = towerPower(levelOf(rec));
+        const R = pw.radius;
         const gr = this.ground(rec);
         gr.clear();
         const pulse = 0.5 + 0.5 * Math.sin(t * 0.04);
@@ -385,7 +434,7 @@ export class TowerSystem {
             if (d > R - 24 && ((t | 0) % 6) === 0) g.fx.burst(e.wx, e.wy, 14, 0xffe27a, 2, 1.2, { size: 0.6, life: 14, glow: true });
         }
         const s = g.state;
-        if (d2 < R * R && s.health < s.maxHealth) s.health = Math.min(s.maxHealth, s.health + 1.5 * delta / 60);
+        if (d2 < R * R && s.health < s.maxHealth) s.health = Math.min(s.maxHealth, s.health + pw.heal * delta / 60);
     }
 
     updateSpire(rec, c, delta) {

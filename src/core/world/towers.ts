@@ -57,6 +57,8 @@ export interface TowerRec {
   delivered: Cost;
   built: boolean;
   spell: string | null;              // spell uid armed in a spire
+  level?: number;                    // 1..3 (spire, ward and beacon can be raised); missing means 1
+  claimed?: boolean;                 // laid inside a claimed zone: it costs a quarter less
 }
 
 export const DIRS: [number, number][] = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -1]];
@@ -68,9 +70,14 @@ export function newTower(kind: TowerKind, tx: number, ty: number, plan?: { dir: 
 // -------------------------------------------------------------------- construction
 export const remaining = (cost: Cost, d: Cost): Cost => ({ gold: Math.max(0, cost.gold - d.gold), wood: Math.max(0, cost.wood - d.wood), stone: Math.max(0, cost.stone - d.stone), iron: Math.max(0, cost.iron - d.iron) });
 export const totalOf = (c: Cost) => c.gold + c.wood + c.stone + c.iron;
-export const isFunded = (rec: TowerRec) => totalOf(remaining(TOWER_DEFS[rec.kind].cost, rec.delivered)) === 0;
+const scaleCost = (c: Cost, k: number): Cost => ({ gold: Math.round(c.gold * k), wood: Math.round(c.wood * k), stone: Math.round(c.stone * k), iron: Math.round(c.iron * k) });
+/** Ground the party has claimed is safe to build on: towers there cost this much of the usual. */
+export const CLAIMED_DISCOUNT = 0.75;
+/** What this tower's site needs in all (a quarter less on claimed ground). */
+export const towerCost = (rec: Pick<TowerRec, 'kind' | 'claimed'>): Cost => (rec.claimed ? scaleCost(TOWER_DEFS[rec.kind].cost, CLAIMED_DISCOUNT) : { ...TOWER_DEFS[rec.kind].cost });
+export const isFunded = (rec: TowerRec) => totalOf(remaining(towerCost(rec), rec.delivered)) === 0;
 export const progressOf = (rec: TowerRec): number => {
-  const cost = TOWER_DEFS[rec.kind].cost;
+  const cost = towerCost(rec);
   const need = totalOf(cost);
   return need ? Math.min(1, totalOf(rec.delivered) / need) : 1;
 };
@@ -79,7 +86,7 @@ export const stageOf = (rec: TowerRec) => Math.min(3, Math.floor(progressOf(rec)
 
 /** Moves as much of the missing material as the wallet holds into the site. Returns what was handed over. */
 export function deposit(rec: TowerRec, wallet: Cost): Cost {
-  const need = remaining(TOWER_DEFS[rec.kind].cost, rec.delivered);
+  const need = remaining(towerCost(rec), rec.delivered);
   const given = emptyCost();
   for (const r of RES) {
     const n = Math.min(need[r], Math.max(0, Math.floor(wallet[r])));
@@ -89,6 +96,42 @@ export function deposit(rec: TowerRec, wallet: Cost): Cost {
   }
   return given;
 }
+
+// -------------------------------------------------------------------- levels
+/** Towers that can be raised, and how far. Bridges, docks, stairs and waypoints are what they are. */
+export const UPGRADABLE: TowerKind[] = ['spire', 'ward', 'beacon'];
+export const MAX_TOWER_LEVEL = 3;
+export const levelOf = (rec: Pick<TowerRec, 'level'>) => Math.max(1, Math.min(MAX_TOWER_LEVEL, rec.level ?? 1));
+export const canUpgrade = (rec: TowerRec) => rec.built && UPGRADABLE.includes(rec.kind) && levelOf(rec) < MAX_TOWER_LEVEL;
+/** What raising a tower to `toLevel` costs: 60% of building it for level 2, as much again for level 3. */
+export function upgradeCost(kind: TowerKind, toLevel: number): Cost {
+  return scaleCost(TOWER_DEFS[kind].cost, toLevel >= 3 ? 1 : 0.6);
+}
+/** Pays an upgrade from the wallet, all or nothing. Returns the new level, or null with what is missing. */
+export function upgrade(rec: TowerRec, wallet: Cost): { level: number } | { missing: Cost } | null {
+  if (!canUpgrade(rec)) return null;
+  const cost = upgradeCost(rec.kind, levelOf(rec) + 1);
+  const missing = remaining(cost, wallet);
+  if (totalOf(missing)) return { missing };
+  for (const r of RES) wallet[r] -= cost[r];
+  rec.level = levelOf(rec) + 1;
+  return { level: rec.level };
+}
+
+export interface TowerPower {
+  damage: number;      // spire: damage multiplier
+  cooldown: number;    // spire: cooldown multiplier
+  radius: number;      // ward: dome radius (world units)
+  heal: number;        // ward: health per second inside
+  reveal: number;      // beacon: tiles revealed around it
+}
+const POWER: Record<number, TowerPower> = {
+  1: { damage: 1, cooldown: 1, radius: 7 * T, heal: 1.5, reveal: 44 },
+  2: { damage: 1.4, cooldown: 0.85, radius: 8.5 * T, heal: 2.5, reveal: 60 },
+  3: { damage: 1.9, cooldown: 0.7, radius: 10 * T, heal: 3.5, reveal: 76 }
+};
+/** How strong a tower is at a level (each kind reads the fields it uses). */
+export const towerPower = (level: number): TowerPower => POWER[Math.max(1, Math.min(MAX_TOWER_LEVEL, Math.round(level)))];
 
 // -------------------------------------------------------------------- placement
 export interface PlaceEnv {
@@ -260,7 +303,7 @@ export function editMap(towers: TowerRec[]): Map<string, number> {
 // ------------------------------------------------------------------ waypoints and sea
 export const fareBetween = (a: { tx: number; ty: number }, b: { tx: number; ty: number }) => Math.round(12 + Math.hypot(a.tx - b.tx, a.ty - b.ty) * 0.45);
 
-export const WARD_RADIUS = 7 * T;
+export const WARD_RADIUS = 7 * T;               // at level 1 (see towerPower)
 export const SPIRE_RANGE = 540;
 export const BOAT_SPEED = 1.35;
 

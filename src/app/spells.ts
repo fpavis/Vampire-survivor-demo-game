@@ -2,6 +2,7 @@
 import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { EntityManager } from '../render/entities';
+import { levelOf, towerPower } from '../core/world/towers';
 import { addSpellXp, heroScaled, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES } from '../core/spells/spells';
 import { spendMana, regenMana } from '../core/hero/stats';
 import { buildHero } from '../render/heroArt';
@@ -921,13 +922,14 @@ export class SpellSystem {
         }
     }
 
-    /** a tower casts a spell from its own position, on its own cooldown, with no hero bonuses */
+    /** a tower casts a spell from its own position, on its own cooldown, with no hero bonuses (but its own level's) */
     towerFire(rec, item, origin, delta) {
         const key = 'tw' + rec.id;
         this.timers[key] = (this.timers[key] ?? 30) - delta;
         if (this.timers[key] > 0) return;
         const r = { ...this.resolved(item, true), srcKind: 'tower' };
-        this.srcMult = 1;
+        const pw = towerPower(levelOf(rec));
+        this.srcMult = pw.damage;
         let fired = false;
         switch (r.tpl.expr) {
             case 'bolt': fired = this.fireBolt(r, origin); break;
@@ -939,7 +941,7 @@ export class SpellSystem {
             case 'cloud': fired = this.fireCloud(r, origin); break;
         }
         this.srcMult = null;
-        this.timers[key] = fired ? msToFrames(r.p.cooldown) : 0;
+        this.timers[key] = fired ? msToFrames(r.p.cooldown) * pw.cooldown : 0;
     }
 
     // light emitted by spells for the light map (caves, ruins, dark regions)

@@ -3,7 +3,8 @@ import { BIOME, isSolidBiome, isWaterBiome } from '../src/core/world/biomes';
 import { OverworldSource } from '../src/core/world/terrain';
 import {
   DIRS, TOWER_DEFS, TOWER_KINDS, boatBlocked, buildKit, boatSpot, cacheForCell, checkPlacement, deposit, editMap, emptyCost, fareBetween,
-  isFunded, newTower, planBridge, planClimb, plateauCentre, plateauDecor, progressOf, remaining, stageOf, towerEdits, type PlaceEnv, type TowerRec
+  isFunded, newTower, planBridge, planClimb, plateauCentre, plateauDecor, progressOf, remaining, stageOf, towerEdits, type PlaceEnv, type TowerRec,
+  CLAIMED_DISCOUNT, MAX_TOWER_LEVEL, UPGRADABLE, canUpgrade, levelOf, towerCost, towerPower, totalOf, upgrade, upgradeCost
 } from '../src/core/world/towers';
 
 const src = new OverworldSource(2024);
@@ -213,5 +214,61 @@ describe('island caches', () => {
     }
     expect(n).toBeGreaterThanOrEqual(1);
     expect(n).toBeLessThan(150);
+  });
+});
+
+describe('tower levels and claimed ground', () => {
+  it('a site on claimed ground costs a quarter less, and is funded and built on that', () => {
+    for (const k of TOWER_KINDS) {
+      const full = towerCost({ kind: k }), cheap = towerCost({ kind: k, claimed: true });
+      expect(totalOf(cheap)).toBeLessThan(totalOf(full));
+      expect(Math.abs(totalOf(cheap) - totalOf(full) * CLAIMED_DISCOUNT)).toBeLessThanOrEqual(4);
+      const rec = { ...newTower(k, 0, 0), claimed: true };
+      const wallet = { ...cheap };
+      deposit(rec, wallet);
+      expect(isFunded(rec)).toBe(true);
+      expect(totalOf(wallet)).toBe(0);
+      expect(progressOf(rec)).toBe(1);
+    }
+  });
+
+  it('spires, obelisks and beacons rise to level 3, nothing else rises at all', () => {
+    expect(UPGRADABLE.sort()).toEqual(['beacon', 'spire', 'ward']);
+    for (const k of TOWER_KINDS) {
+      const rec = { ...newTower(k, 0, 0), built: true };
+      expect(levelOf(rec)).toBe(1);
+      expect(canUpgrade(rec)).toBe(UPGRADABLE.includes(k));
+    }
+    const rec = { ...newTower('spire', 0, 0), built: true };
+    const wallet = buildKit(5);
+    expect(upgrade(rec, wallet)).toEqual({ level: 2 });
+    expect(upgrade(rec, wallet)).toEqual({ level: 3 });
+    expect(upgrade(rec, wallet)).toBeNull();
+    expect(levelOf(rec)).toBe(MAX_TOWER_LEVEL);
+    // a site under construction cannot be raised
+    expect(canUpgrade(newTower('ward', 0, 0))).toBe(false);
+  });
+
+  it('an upgrade is paid all at once, or not at all', () => {
+    const rec = { ...newTower('ward', 0, 0), built: true };
+    const cost = upgradeCost('ward', 2);
+    const poor = { ...cost, stone: cost.stone - 1 };
+    const res = upgrade(rec, poor);
+    expect(res).toEqual({ missing: { gold: 0, wood: 0, stone: 1, iron: 0 } });
+    expect(poor.gold).toBe(cost.gold);                 // nothing was taken
+    expect(levelOf(rec)).toBe(1);
+    expect(totalOf(upgradeCost('ward', 3))).toBeGreaterThan(totalOf(upgradeCost('ward', 2)));
+  });
+
+  it('every level is stronger than the one before', () => {
+    for (let l = 2; l <= MAX_TOWER_LEVEL; l++) {
+      const a = towerPower(l - 1), b = towerPower(l);
+      expect(b.damage).toBeGreaterThan(a.damage);
+      expect(b.cooldown).toBeLessThan(a.cooldown);
+      expect(b.radius).toBeGreaterThan(a.radius);
+      expect(b.heal).toBeGreaterThan(a.heal);
+      expect(b.reveal).toBeGreaterThan(a.reveal);
+    }
+    expect(towerPower(9)).toEqual(towerPower(MAX_TOWER_LEVEL));
   });
 });

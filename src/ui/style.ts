@@ -73,6 +73,18 @@ export const CSS = `
 .vs-good .cost{font-weight:700;color:#ff9a8a}
 .vs-good .cost .ok{color:var(--c-good)}
 .vs-tpanel{left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-tlv{display:inline-flex;gap:3px;margin-left:8px}
+.vs-tlv i{width:9px;height:9px;border-radius:50%;border:1px solid var(--c-gold-deep);background:transparent}
+.vs-tlv i.on{background:var(--c-gold)}
+.vs-tup{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0}
+.vs-tup>div{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border:1px solid var(--c-line);border-radius:8px;background:var(--c-panel);font-size:12px}
+.vs-tup>div.nx{border-color:var(--c-gold-deep)}
+.vs-tup small{color:var(--c-soft);font-size:11.5px}
+.vs-tpanel .vs-acts{align-items:center}
+.vs-tpanel .cost{display:inline-flex;gap:6px;font-size:12px;margin-right:auto}
+.vs-tpanel .cost .ok{color:var(--c-good)}
+.vs-tpanel .cost .no{color:var(--c-bad)}
+.vs-sub2{font-size:12px;color:var(--c-muted);margin:10px 0 2px}
 .vs-buildhud{position:absolute;top:104px;left:50%;transform:translateX(-50%);width:min(420px,calc(100vw - 32px));text-align:center;padding:8px 12px;border-radius:12px;background:rgba(10,14,26,.9);border:2px solid #5aff8a;text-shadow:0 1px 3px #000}
 .vs-buildhud.bad{border-color:#ff5a4a}
 .vs-buildhud .t{font-weight:700;font-size:15px}

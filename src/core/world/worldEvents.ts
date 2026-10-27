@@ -1,8 +1,9 @@
 // Random overworld events: now and then a group of monsters comes looking for the party, so the road is never
-// quite predictable. Pure: when the next one is due, which kind, where its members appear, and when one may not
-// happen at all. The runtime (app/worldEvents.ts) spawns them, warns the player and pays the reward.
+// quite predictable, or lays siege to one of the party's towers nearby. Pure: when the next one is due, which
+// kind, where its members appear, and when one may not happen at all. The runtime (app/worldEvents.ts) spawns
+// them, warns the player and pays the reward.
 
-export type WorldEventKind = 'warband' | 'swarm' | 'hunters';
+export type WorldEventKind = 'warband' | 'swarm' | 'hunters' | 'siege';
 
 export interface WorldEventDef {
   name: string;               // for the log
@@ -16,9 +17,15 @@ export interface WorldEventDef {
 export const EVENT_DEFS: Record<WorldEventKind, WorldEventDef> = {
   warband: { name: 'A warband', banner: 'A WARBAND APPROACHES', count: [6, 9], elites: 1, waves: 1, spread: 0.55 },
   swarm: { name: 'A swarm', banner: 'A SWARM IS COMING', count: [10, 14], elites: 0, waves: 2, spread: 0.7 },
-  hunters: { name: 'Hunters', banner: 'YOU ARE BEING HUNTED', count: [3, 3], elites: 3, waves: 1, spread: 0.9 }
+  hunters: { name: 'Hunters', banner: 'YOU ARE BEING HUNTED', count: [3, 3], elites: 3, waves: 1, spread: 0.9 },
+  // a siege gathers round one of the party's towers and silences it until the besiegers are beaten
+  siege: { name: 'A siege', banner: 'UNDER SIEGE', count: [6, 9], elites: 1, waves: 1, spread: Math.PI * 2 }
 };
-export const EVENT_KINDS = Object.keys(EVENT_DEFS) as WorldEventKind[];
+/** The events that come looking for the party (a siege comes for a tower instead). */
+export const EVENT_KINDS: WorldEventKind[] = ['warband', 'swarm', 'hunters'];
+/** A tower this close to the party (world units) can be besieged; one in three events near one is a siege. */
+export const SIEGE_REACH = 1400;
+export const SIEGE_CHANCE = 0.35;
 
 /** Seconds of overworld play between events: 2.5 to 4.5 minutes, a third of that in corrupted lands (never under 1 minute). */
 export function nextEventDelay(rand: () => number, corrupt: boolean): number {
@@ -26,10 +33,25 @@ export function nextEventDelay(rand: () => number, corrupt: boolean): number {
   return Math.max(60, corrupt ? t / 3 : t);
 }
 
-/** Which kind of event: warbands are the most common, hunters the rarest. */
-export function pickEvent(rand: () => number): WorldEventKind {
+/** Which kind of event: warbands are the most common, hunters the rarest; a siege only with a tower near. */
+export function pickEvent(rand: () => number, towerNear = false): WorldEventKind {
+  if (towerNear && rand() < SIEGE_CHANCE) return 'siege';
   const r = rand();
   return r < 0.42 ? 'warband' : r < 0.77 ? 'swarm' : 'hunters';
+}
+
+/** Where the besiegers stand, relative to the tower's centre: all round it, 2.5 to 5 tiles out. */
+export function siegeSpawns(rand: () => number, tile: number): EventSpawn[] {
+  const def = EVENT_DEFS.siege;
+  const n = def.count[0] + Math.floor(rand() * (def.count[1] - def.count[0] + 1));
+  const a0 = rand() * Math.PI * 2;
+  const out: EventSpawn[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * Math.PI * 2 + (rand() - 0.5) * 0.4;
+    const r = tile * (2.5 + rand() * 2.5);
+    out.push({ dx: Math.cos(a) * r, dy: Math.sin(a) * r, wave: 0, elite: i < def.elites });
+  }
+  return out;
 }
 
 export interface EventSpawn { dx: number; dy: number; wave: number; elite: boolean }

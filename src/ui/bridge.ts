@@ -56,7 +56,7 @@ export const ui = {
   safe: signal(true),
   party: signal<{ active: number; cd: number; heroes: HeroView[] }>({ active: 0, cd: 0, heroes: [] }),
   healerOpen: signal(false),
-  build: signal<{ kind: string; name: string; icon: string; valid: boolean; reason: string; cost: { gold: number; wood: number; stone: number; iron: number } } | null>(null),
+  build: signal<{ kind: string; name: string; icon: string; valid: boolean; reason: string; cost: { gold: number; wood: number; stone: number; iron: number }; claimed?: boolean } | null>(null),
   towerPanel: signal<string | null>(null),
   worldMap: signal<{ mode: 'view' | 'travel'; from?: string | null } | null>(null),   // the full-screen world map
   sailing: signal(false),
