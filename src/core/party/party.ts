@@ -1,12 +1,13 @@
 // Party rules (pure). A party is always three heroes, with no classes: a hero is whatever its cards and loadout make it.
-import { CARDS, computeStats, type HeroStats, type Picks } from '../hero/stats';
+import { computeStats, ranksTaken, type HeroStats, type Picks } from '../hero/stats';
 import { xpForLevel } from '../config';
+import { xpLevelFactor } from '../hero/progression';
 
 export const PARTY_SIZE = 3;
 export const SWITCH_COOLDOWN_FRAMES = 150;      // 2.5 s
 export const BENCH_XP_SHARE = 0.5;
 export const BENCH_REGEN = { health: 0.012, mana: 0.5 };   // fraction of max health per second / mana multiplier of base regen
-export const AURA_STRENGTH = 0.5;
+export const AURA_STRENGTH = 0.25;      // Phase 11: was 0.5, two full benches made the active hero far too strong
 export const RESPAWN_HEALTH = 0.4;
 
 export interface HeroDef { id: string; name: string; icon: string; color: number; tint: number; starter: { auto: string[]; active: string[] } }
@@ -41,14 +42,18 @@ export function newHero(def: HeroDef, auto: string[], active: (string | null)[])
 export const defOf = (id: string): HeroDef => HERO_DEFS.find((d) => d.id === id) ?? HERO_DEFS[0];
 
 /** Fraction of a bench hero's own bonuses that is shared with the active hero. */
-export interface Aura { might: number; speed: number; regen: number; armor: number; manaRegen: number; cooldown: number; magnet: number; growth: number }
+export interface Aura {
+  might: number; speed: number; regen: number; armor: number; manaRegen: number; cooldown: number; magnet: number; growth: number;
+  area: number; duration: number; luck: number; gold: number;
+}
 
 export function auraOf(s: HeroStats): Aura {
   const k = AURA_STRENGTH;
   return {
     might: (s.might - 1) * k, speed: (s.speed - 1) * k, regen: s.regen * k, armor: s.armor * k,
     manaRegen: (s.manaRegen - computeStats({}).manaRegen) * k, cooldown: (1 - s.cooldown) * k,
-    magnet: (s.magnet - 1) * k, growth: (s.growth - 1) * k
+    magnet: (s.magnet - 1) * k, growth: (s.growth - 1) * k,
+    area: (s.area - 1) * k, duration: (s.duration - 1) * k, luck: (s.luck - 1) * k, gold: (s.gold - 1) * k
   };
 }
 
@@ -62,6 +67,7 @@ export function partyStats(heroes: HeroState[], active: number): HeroStats {
     out.might += a.might; out.speed += a.speed; out.regen += a.regen; out.armor = Math.min(0.6, out.armor + a.armor);
     out.manaRegen += a.manaRegen; out.cooldown = Math.max(0.4, out.cooldown - a.cooldown);
     out.magnet += a.magnet; out.growth += a.growth;
+    out.area += a.area; out.duration += a.duration; out.luck += a.luck; out.gold += a.gold;
   });
   return out;
 }
@@ -126,9 +132,9 @@ export function benchTick(h: HeroState, deltaFrames: number) {
   h.mana = Math.min(st.maxMana, h.mana + st.manaRegen * BENCH_REGEN.mana * (deltaFrames / 60) * 2);
 }
 
-/** XP for a bench hero (no card/level side effects; caller levels them). */
-export function benchXp(h: HeroState, value: number): number {
-  return value * BENCH_XP_SHARE * computeStats(h.picks).growth;
+/** XP for a bench hero (no card/level side effects; caller levels them), weighed by its level against the source's. */
+export function benchXp(h: HeroState, value: number, sourceLevel?: number | null): number {
+  return value * BENCH_XP_SHARE * computeStats(h.picks).growth * xpLevelFactor(h.level, sourceLevel);
 }
 
 /** Processes level-ups for any hero. Returns levels gained. */
@@ -138,4 +144,4 @@ export function levelHero(h: HeroState): number {
   return n;
 }
 
-export const cardLevels = (h: HeroState) => Object.entries(h.picks).filter(([id]) => CARDS[id]).reduce((a, [, n]) => a + n, 0);
+export const cardLevels = (h: HeroState) => ranksTaken(h.picks);

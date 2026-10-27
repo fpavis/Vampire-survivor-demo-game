@@ -22,7 +22,8 @@ describe('party', () => {
     expect(withAura.might).toBeGreaterThan(none.might);
     expect(withAura.speed).toBeGreaterThan(none.speed);
     expect(withAura.maxHealth).toBe(none.maxHealth);        // never from auras
-    expect(auraOf(computeStats({ might: 4 })).might).toBeCloseTo(0.3);
+    expect(auraOf(computeStats({ might: 4 })).might).toBeCloseTo(0.08);     // a quarter of +32%
+    expect(auraOf(computeStats({ reach: 4, greed: 5 }))).toMatchObject({ area: expect.closeTo(0.05), gold: expect.closeTo(0.1) });
   });
 
   it('dead heroes give no aura and the active hero\'s own cards still count', () => {
@@ -32,7 +33,7 @@ describe('party', () => {
     const live = partyStats(h, 0).might;
     h[1].dead = true;
     expect(partyStats(h, 0).might).toBeLessThan(live);
-    expect(partyStats(h, 0).might).toBeCloseTo(1.15);
+    expect(partyStats(h, 0).might).toBeCloseTo(1.08);
   });
 
   it('picks the next living hero and detects a wipe', () => {
@@ -54,6 +55,12 @@ describe('party', () => {
     expect(h.health).toBeGreaterThan(10);
     expect(h.health).toBeLessThan(100);
     expect(benchXp(h, 100)).toBeCloseTo(50);
+    // weighed by the resting hero's level against the source's, like the active hero's
+    expect(benchXp(h, 100, 1)).toBeCloseTo(50);
+    expect(benchXp(h, 100, 11)).toBeCloseTo(70);          // below the land: catching up
+    h.level = 20;
+    expect(benchXp(h, 100, 5)).toBeLessThan(1);           // far above it: next to nothing
+    h.level = 1;
     h.dead = true; const before = h.health; benchTick(h, 600);
     expect(h.health).toBe(before);
   });

@@ -1,7 +1,7 @@
 // Save file shape, validation and versioning.
 // The world itself is never saved: only the seed plus what the player changed (deltas).
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 // Bump when terrain / POI / camp generation changes in a way that alters existing worlds.
 export const GENERATOR_VERSION = 4;   // 2: seeded Fisher–Yates shuffles in dungeon floors (were engine-dependent); 3: towns laid out by core/world/towns; 4: corrupted lands (barren decor, denser camps)
 
@@ -113,6 +113,7 @@ export interface SaveData {
   name?: string;                            // a name the player gave the save
   thumb?: string;                           // small JPEG of the screen when saved (data URL)
   meta?: { region?: string; place?: string };   // where the party was, for the slot list
+  notices?: string[];                       // said once when the save is next loaded (a migration's news), never written back
 }
 
 export interface SaveSummary {

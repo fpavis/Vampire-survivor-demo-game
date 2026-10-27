@@ -21,6 +21,7 @@ import { SeaSystem } from './sea';
 import { BOAT_SPEED, TOWER_DEFS } from '../core/world/towers';
 import { NODES, isNode, nodeId, rollYield } from '../core/economy/gather';
 import { CARDS, computeStats, offerCards, dominantPath } from '../core/hero/stats';
+import { xpLevelFactor } from '../core/hero/progression';
 import { rollSkillDrop, TEMPLATES, RUNES } from '../core/spells/spells';
 import { rollKillLoot, filteredOut, runeValue, spellValue, emptyWallet, dungeonAffinity, dungeonPower } from '../core/loot/loot';
 import { STOCK_EPOCH_SECONDS, epochOf, innCost, rumorFor, stockFor } from '../core/economy/shop';
@@ -762,6 +763,7 @@ class Game {
         this.gameTicker = (delta) => this.gameLoop(delta);
         this.app.ticker.add(this.gameTicker);
         this.tips.reset(save && save.tips ? save.tips : []);
+        for (const n of (save && save.notices) || []) { this.ui.toast(n, 'upgrade'); this.ui.toastTimer = 420; }
         this.events.emit('GameLoaded', { slot: save ? this.saveSlot : 'new' });
         if (!save) this.requestSave('new', true);
     }
@@ -1150,7 +1152,8 @@ class Game {
                 this.interiorState.cleared = true;
                 this.ui.banner(this.interior && this.interior.dungeon ? 'FLOOR CLEARED!' : 'PLACE CLEARED!', 0xffd84a);
                 this.dropGem(p.wx + 30, p.wy + 20, 0, 'heart');
-                for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + this.zoneLevelNow * 2);
+                const lvl = this.placeLevel();
+                for (let i = 0; i < 6; i++) this.dropGem(p.wx + (Math.random() - 0.5) * 120, p.wy + 40 + Math.random() * 40, 12 + lvl * 2, 'gem', lvl);
                 this.dungeons.checkComplete();
             }
         }
@@ -1292,7 +1295,7 @@ class Game {
         if (e.isBoss) {
             s.bossesDefeated++;
             for (let i = 0; i < 10; i++) {
-                this.dropGem(e.wx + (Math.random() - 0.5) * 120, e.wy + (Math.random() - 0.5) * 90, Math.ceil(e.experienceValue / 6));
+                this.dropGem(e.wx + (Math.random() - 0.5) * 120, e.wy + (Math.random() - 0.5) * 90, Math.ceil(e.experienceValue / 6), 'gem', e.level);
             }
             this.dropGem(e.wx, e.wy + 20, 0, 'heart');
             this.dropGem(e.wx + 30, e.wy, 0, 'heart');
@@ -1300,21 +1303,23 @@ class Game {
             this.story.victory(e);
             this.requestSave('boss', true);
         } else {
-            this.dropGem(e.wx, e.wy, e.experienceValue);
+            this.dropGem(e.wx, e.wy, e.experienceValue, 'gem', e.level);
             if (Math.random() < (e.elite ? 0.12 : 0.025)) this.dropGem(e.wx + 14, e.wy + 6, 0, 'heart');
         }
     }
 
-    dropGem(x, y, value, kind = 'gem') {
+    /** `level`: the level of what dropped it (experience is weighed against the hero's level when collected). */
+    dropGem(x, y, value, kind = 'gem', level = null) {
         const s = this.state;
         if (s.gems.length > 260) {
             const old = s.gems.shift();
-            if (old.kind === 'gem') this.gainExp(old.value);
+            if (old.kind === 'gem') this.gainExp(old.value, old.lvl);
             else if (old.kind !== 'heart') this.collect(old);
             EntityManager.cleanup(old);
         }
         const gem = EntityManager.createGem(x, y, value, kind);
         gem.vel = 0;
+        gem.lvl = level;
         this.objectLayer.addChild(gem);
         EntityManager.place(gem);
         s.gems.push(gem);
@@ -1572,7 +1577,7 @@ class Game {
     arriveAt(poi, arrive = 'start') {
         const s = this.state;
         // gems lying on the ground wait where they fell: nothing is lost, and nothing is granted just for walking in
-        this.gemStash = this.mode === 'overworld' ? { poiId: poi.id, gems: s.gems.map((g) => ({ x: g.wx, y: g.wy, value: g.value, kind: g.kind })) } : null;
+        this.gemStash = this.mode === 'overworld' ? { poiId: poi.id, gems: s.gems.map((g) => ({ x: g.wx, y: g.wy, value: g.value, kind: g.kind, lvl: g.lvl })) } : null;
         this.clearWorldEntities();
         this.popRuntime.clearActive();
         this.clearOverworldDisplays();
@@ -1643,9 +1648,7 @@ class Game {
         this.state.keys = {};
         this.audio.play('stairs');
         this.ui.fade(1, 0.09, () => {
-            let banked = 0;
-            this.state.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
-            if (banked > 0) { this.addXp(banked); this.ui.toast(`Gathered the gems you left behind: +${Math.round(banked * this.stats.growth)} XP`); }
+            this.bankGems();
             const poi = this.interiorPoi;
             this.clearWorldEntities();
             this.loadFloor(poi, next, delta > 0 ? 'start' : 'end');
@@ -1909,7 +1912,7 @@ class Game {
     // Independent per-kill rolls: gold, resource, skill (XP gem is handled in killEnemy).
     dropLoot(e) {
         const group = this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.type : this.world.groupAtPos(e.wx, e.wy);
-        const loot = rollKillLoot(Math.random, { level: e.level || 1, elite: e.elite, boss: e.isBoss, group });
+        const loot = rollKillLoot(Math.random, { level: e.level || 1, elite: e.elite, boss: e.isBoss, group, luck: this.stats.luck });
         const jig = () => (Math.random() - 0.5) * 40;
         if (loot.gold) this.dropGem(e.wx + jig(), e.wy + jig(), loot.gold, 'coin');
         if (loot.resource) this.dropGem(e.wx + jig(), e.wy + jig(), loot.resource.amount, loot.resource.id);
@@ -1936,14 +1939,17 @@ class Game {
         uiBridge.version.value = this.spells.version;
     }
 
+    /** Into the wallet; coins are worth more with Greed. Returns how much was added. */
     collect(g) {
         const w = this.state.wallet;
-        if (g.kind === 'coin') w.gold += g.value;
-        else if (w[g.kind] !== undefined) w[g.kind] += g.value;
-        else return;
-        this.events.emit('Collected', { resource: g.kind === 'coin' ? 'gold' : g.kind, count: g.value });
+        let n = g.value;
+        if (g.kind === 'coin') { n = Math.max(1, Math.round(g.value * (this.stats.gold || 1))); w.gold += n; }
+        else if (w[g.kind] !== undefined) w[g.kind] += n;
+        else return 0;
+        this.events.emit('Collected', { resource: g.kind === 'coin' ? 'gold' : g.kind, count: n });
         this.audio.play(g.kind === 'coin' ? 'coin' : 'pickup');
         uiBridge.wallet.value = { ...w };
+        return n;
     }
 
     toastGold(g) { if (g > 0) this.ui.toast(`Salvaged for ${g} gold`); }
@@ -2015,16 +2021,14 @@ class Game {
     /** Step out of the place the party is in, to its entrance on the overworld. The screen is already dark. */
     leavePlaceNow() {
         const s = this.state;
-        let banked = 0;
-        s.gems.forEach((g) => { if (g.kind === 'gem') banked += g.value; else if (g.kind !== 'heart') this.collect(g); });
-        if (banked > 0) { this.addXp(banked); this.ui.toast(`Gathered the gems you left behind: +${Math.round(banked * this.stats.growth)} XP`); }
+        this.bankGems();
         const poi = this.interiorPoi;
         this.events.emit('PlaceLeft', { id: poi.id });
         this.applyOverworld(poi.ex, poi.ey + 34);
         // the gems that were on the ground outside are still there
         const stash = this.gemStash;
         this.gemStash = null;
-        if (stash && stash.poiId === poi.id) for (const d of stash.gems) this.dropGem(d.x, d.y, d.value, d.kind);
+        if (stash && stash.poiId === poi.id) for (const d of stash.gems) this.dropGem(d.x, d.y, d.value, d.kind, d.lvl);
     }
 
     // ---------------------------------------------------------------- gems
@@ -2053,8 +2057,8 @@ class Game {
 
             if (dist < 20) {
                 if (g.kind === 'coin' || g.kind === 'wood' || g.kind === 'stone' || g.kind === 'iron') {
-                    this.collect(g);
-                    this.fx.popup(p.wx, p.wy, `+${g.value} ${g.kind === 'coin' ? 'gold' : g.kind}`, g.kind === 'coin' ? 0xffd84a : 0xcfd8e8, 16, 60);
+                    const n = this.collect(g);
+                    this.fx.popup(p.wx, p.wy, `+${n} ${g.kind === 'coin' ? 'gold' : g.kind}`, g.kind === 'coin' ? 0xffd84a : 0xcfd8e8, 16, 60);
                 } else if (g.kind === 'heart') {
                     this.audio.play('heal');
                     const heal = s.maxHealth * 0.25;
@@ -2062,7 +2066,7 @@ class Game {
                     this.fx.popup(p.wx, p.wy, `+${Math.round(heal)}`, 0xff7a94, 20, 60);
                     this.fx.burst(p.wx, p.wy, 20, 0xff6a8a, 12, 2.4, { size: 0.7 });
                 } else {
-                    this.gainExp(g.value);
+                    this.gainExp(g.value, g.lvl);
                     this.fx.burst(g.wx, g.wy, 12, EntityManager.gemTier(g.value).color, 4, 1.8, { size: 0.5, life: 16 });
                     this.gemStreak = this.frame - (this.lastGemAt || -999) < 40 ? Math.min(12, (this.gemStreak || 0) + 1) : 0;
                     this.lastGemAt = this.frame;
@@ -2074,15 +2078,34 @@ class Game {
         }
     }
 
-    gainExp(value) {
-        this.addXp(value);
+    gainExp(value, srcLevel = null) {
+        this.addXp(value, srcLevel);
         this.checkLevelUp();
     }
 
-    // the active hero earns full XP, living bench heroes earn half
-    addXp(value) {
-        this.state.experience += value * this.stats.growth;
-        this.party.addBenchXp(value);
+    /** The active hero earns full XP, living bench heroes half; each weighed by their level against the source's
+     *  (no source level, as for quest rewards: as is). Returns what the active hero got. */
+    addXp(value, srcLevel = null) {
+        const given = value * this.stats.growth * xpLevelFactor(this.state.level, srcLevel);
+        this.state.experience += given;
+        this.party.addBenchXp(value, srcLevel);
+        return given;
+    }
+
+    /** Gems left on the ground when the party moves on are not lost: their XP is added at once, other pickups collected. */
+    bankGems() {
+        let xp = 0;
+        for (const g of this.state.gems) {
+            if (g.kind === 'gem') xp += this.addXp(g.value, g.lvl);
+            else if (g.kind !== 'heart') this.collect(g);
+        }
+        if (xp > 0) this.ui.toast(`Gathered the gems you left behind: +${Math.max(1, Math.round(xp))} XP`);
+    }
+
+    /** The level of the place the party is in (a dungeon floor's own, else the land's). */
+    placeLevel() {
+        if (this.mode === 'interior' && this.interiorPoi) return this.dungeons.levelOf(this.interiorPoi, this.floor || 0);
+        return this.zoneLevelNow || 1;
     }
 
     // ---------------------------------------------------- levelling & upgrades

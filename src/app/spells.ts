@@ -2,7 +2,7 @@
 import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { EntityManager } from '../render/entities';
-import { addSpellXp, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES } from '../core/spells/spells';
+import { addSpellXp, heroScaled, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES } from '../core/spells/spells';
 import { spendMana, regenMana } from '../core/hero/stats';
 import { buildHero } from '../render/heroArt';
 import { settings } from './settings';
@@ -137,10 +137,14 @@ export class SpellSystem {
     touch() { this.version++; this.cache.clear(); uiBridge.version.value++; }
     item(uid) { return this.spells.find((s) => s.uid === uid); }
     level(tplId) { const s = this.spells.find((x) => x.tpl === tplId); return s ? s.level : 0; }
-    resolved(item) {
-        const key = item.level + '|' + item.runes.join(',');
-        let c = this.cache.get(item.uid);
-        if (!c || c.key !== key) { c = { key, r: resolveSpell(item) }; this.cache.set(item.uid, c); }
+    /** The spell's numbers as the hero casts it (area and duration from the hero's cards); `plain` for towers. */
+    resolved(item, plain = false) {
+        const st = this.game.stats;
+        const area = plain || !st ? 1 : st.area || 1, dur = plain || !st ? 1 : st.duration || 1;
+        const key = item.level + '|' + item.runes.join(',') + '|' + area + '|' + dur;
+        const id = plain ? 'plain:' + item.uid : item.uid;
+        let c = this.cache.get(id);
+        if (!c || c.key !== key) { c = { key, r: heroScaled(resolveSpell(item), area, dur) }; this.cache.set(id, c); }
         return c.r;
     }
 
@@ -347,8 +351,9 @@ export class SpellSystem {
         const knock = opts.knock ? { ...opts.knock, force: opts.knock.force * p.knock } : undefined;
         g.damageEnemy(e, amount, { color: opts.color, knock, spell: r.item, critBonus: p.crit, quiet: opts.quiet });
         if (e.dead) return;
-        if (p.slow > 0) { e.slowUntil = Math.max(e.slowUntil || 0, g.frame + 150); e.slowAmount = Math.max(e.slowAmount || 0, p.slow); }
-        if (p.burn > 0) { e.burnUntil = g.frame + 180; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; this.burning.add(e); }
+        const dur = g.stats.duration || 1;      // Persistence: burns and slows last longer
+        if (p.slow > 0) { e.slowUntil = Math.max(e.slowUntil || 0, g.frame + 150 * dur); e.slowAmount = Math.max(e.slowAmount || 0, p.slow); }
+        if (p.burn > 0) { e.burnUntil = g.frame + 180 * dur; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; this.burning.add(e); }
         if (this.depth < MAX_TRIGGER_DEPTH) {
             for (const t of r.triggers) {
                 if (t.on !== 'hit' || Math.random() > t.chance) continue;
@@ -916,7 +921,7 @@ export class SpellSystem {
         const key = 'tw' + rec.id;
         this.timers[key] = (this.timers[key] ?? 30) - delta;
         if (this.timers[key] > 0) return;
-        const r = this.resolved(item);
+        const r = this.resolved(item, true);
         this.srcMult = 1;
         let fired = false;
         switch (r.tpl.expr) {

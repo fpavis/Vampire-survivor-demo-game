@@ -93,7 +93,19 @@ export const MIGRATIONS: Record<number, Migration> = {
       runes: [...new Set<string>(raw.inventory?.runes ?? [])]
     },
     party: { ...raw.party, heroes: raw.party.heroes.map((h: object) => ({ ...h, presets: [null, null, null], assist: null })) }
-  })
+  }),
+  // v9 -> v10: the passive cards were rebalanced (ten small ranks each, new cards, mastery), so every hero's picks
+  // are refunded as pending upgrades to spend again; a notice says so once, on the first load
+  9: (raw) => {
+    const refunds: string[] = [];
+    const heroes = raw.party.heroes.map((h: { id: string; pending?: number; picks?: Record<string, number> }) => {
+      const n = Object.values(h.picks ?? {}).reduce((a, r) => a + (Number(r) || 0), 0);
+      if (n > 0) refunds.push(`${h.id.charAt(0).toUpperCase()}${h.id.slice(1)} ${n}`);
+      return { ...h, pending: (h.pending ?? 0) + n, picks: {} };
+    });
+    const notices = refunds.length ? [`Passives were rebalanced: upgrades refunded to spend again (${refunds.join(', ')})`] : [];
+    return { ...raw, version: 10, party: { ...raw.party, heroes }, notices: [...(raw.notices ?? []), ...notices] };
+  }
 };
 
 export class SaveError extends Error {

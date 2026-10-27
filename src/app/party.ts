@@ -174,8 +174,8 @@ export class PartyRuntime {
         if (this.sync >= 6) { this.sync = 0; this.publish(); }
     }
 
-    addBenchXp(v) {
-        this.heroes.forEach((h, i) => { if (i !== this.active && !h.dead) h.experience += benchXp(h, v); });
+    addBenchXp(v, srcLevel = null) {
+        this.heroes.forEach((h, i) => { if (i !== this.active && !h.dead) h.experience += benchXp(h, v, srcLevel); });
     }
 
     /** inn: everyone is revived, healed and has full mana */

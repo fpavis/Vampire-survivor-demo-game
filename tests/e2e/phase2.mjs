@@ -164,7 +164,7 @@ const loaded = await page.evaluate(() => {
   return { spells: g.spells.spells.length, runes: g.spells.runes.length, wide: g.spells.spells.find((s) => s.tpl === 'nova').runes[0], auto: g.spells.auto.length, pending: g.state.pending, res: g.state.picks.reservoir, maxMana: g.stats.maxMana };
 });
 check('loadout and runes survive a reload', loaded.spells === saved.spells && loaded.runes === saved.runes && loaded.wide === 'wide' && loaded.auto === saved.auto, JSON.stringify(loaded));
-check('pending picks and stat picks persist', loaded.pending === 2 && loaded.res === 2 && loaded.maxMana === 100, JSON.stringify(loaded));
+check('pending picks and stat picks persist', loaded.pending === 2 && loaded.res === 2 && loaded.maxMana === 80, JSON.stringify(loaded));
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();

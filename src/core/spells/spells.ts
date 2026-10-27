@@ -248,6 +248,17 @@ export function resolveSpell(item: SpellItem): ResolvedSpell {
   return { item, tpl, p, color: CORE_INFO[tpl.core].color, triggers };
 }
 
+// What the hero's Reach and Persistence cards stretch: the spells that cover ground, and the ones that linger.
+const AREA_EXPRS = new Set<ExprId>(['nova', 'meteor', 'trail', 'cloud', 'slam', 'barrier', 'orbit']);
+const LASTING_EXPRS = new Set<ExprId>(['trail', 'cloud', 'barrier', 'heal']);
+
+/** A resolved spell as a hero casts it: its area and lingering time scaled by the hero's stats (towers use the plain one). */
+export function heroScaled(r: ResolvedSpell, area: number, duration: number): ResolvedSpell {
+  const a = AREA_EXPRS.has(r.tpl.expr) && area !== 1, d = LASTING_EXPRS.has(r.tpl.expr) && duration !== 1;
+  if (!a && !d) return r;
+  return { ...r, p: { ...r.p, radius: a ? r.p.radius * area : r.p.radius, duration: d ? r.p.duration * duration : r.p.duration } };
+}
+
 /** Kills a spell needs before reaching the next level. */
 export const spellXpFor = (level: number) => Math.round(18 * Math.pow(level, 1.55));
 

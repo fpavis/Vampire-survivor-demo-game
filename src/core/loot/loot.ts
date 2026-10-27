@@ -7,7 +7,7 @@ export const emptyWallet = (): Wallet => ({ gold: 0, wood: 0, stone: 0, iron: 0 
 
 export const DROP_RATES = { gold: 0.10, resource: 0.01, skill: 0.001 } as const;
 
-export interface KillInfo { level: number; elite?: boolean; boss?: boolean; group?: string }
+export interface KillInfo { level: number; elite?: boolean; boss?: boolean; group?: string; luck?: number }   // luck: the Fortune card, x find chance
 export interface KillLoot {
   xp: true;                                   // always
   gold: number;                               // 0 when the roll failed
@@ -34,12 +34,13 @@ export function goldAmount(level: number, mult: number, rand: () => number): num
 export function rollKillLoot(rand: () => number, k: KillInfo): KillLoot {
   const strength = Math.min(3, k.level / 25);
   const mult = k.boss ? 12 : k.elite ? 3 : 1;
-  const gold = k.boss || rand() < DROP_RATES.gold * (k.elite ? 2.5 : 1 + strength * 0.4) ? goldAmount(k.level, mult, rand) : 0;
-  const rChance = DROP_RATES.resource * (k.elite ? 4 : 1 + strength * 0.5);
+  const luck = k.luck ?? 1;
+  const gold = k.boss || rand() < DROP_RATES.gold * luck * (k.elite ? 2.5 : 1 + strength * 0.4) ? goldAmount(k.level, mult, rand) : 0;
+  const rChance = DROP_RATES.resource * luck * (k.elite ? 4 : 1 + strength * 0.5);
   const resource = k.boss || rand() < rChance
     ? { id: resourceFor(k.group, k.level, rand), amount: Math.max(1, Math.round((1 + k.level / 12) * (k.boss ? 5 : k.elite ? 2 : 1))) }
     : null;
-  let sChance = DROP_RATES.skill * (1 + strength * 1.5);
+  let sChance = DROP_RATES.skill * luck * (1 + strength * 1.5);
   if (k.elite) sChance *= 8;
   if (k.boss) sChance = 1;
   return { xp: true, gold, resource, skill: rand() < sChance, power: k.boss ? 3 : Math.min(3, strength + (k.elite ? 1 : 0)) };

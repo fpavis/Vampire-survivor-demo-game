@@ -96,16 +96,17 @@ describe('save validation and migration', () => {
   });
 
   it('runs migration steps in order', () => {
-    MIGRATIONS[9] = (raw) => ({ ...raw, version: 10, party: { ...raw.party, extra: 5 } });
-    MIGRATIONS[10] = (raw) => ({ ...raw, version: 11, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
+    const V = SAVE_VERSION;
+    MIGRATIONS[V] = (raw) => ({ ...raw, version: V + 1, party: { ...raw.party, extra: 5 } });
+    MIGRATIONS[V + 1] = (raw) => ({ ...raw, version: V + 2, stats: { ...raw.stats, kills: raw.stats.kills + 1000 } });
     try {
-      const out: any = migrate(sampleSave(), 11);
-      expect(out.version).toBe(11);
+      const out: any = migrate(sampleSave(), V + 2);
+      expect(out.version).toBe(V + 2);
       expect(out.party.extra).toBe(5);
       expect(out.stats.kills).toBe(1321);
     } finally {
-      delete MIGRATIONS[9];
-      delete MIGRATIONS[10];
+      delete MIGRATIONS[V];
+      delete MIGRATIONS[V + 1];
     }
   });
 
@@ -115,7 +116,9 @@ describe('save validation and migration', () => {
     v1.hero = { level: 7, experience: 33, nextLevel: 120, health: 80, passives: { might: 2 }, weapons: [{ id: 'bolt', level: 3 }, { id: 'nova', level: 2 }] };
     const out = migrate(v1);
     expect(out.version).toBe(SAVE_VERSION);
-    expect(out.party.heroes[0].picks).toEqual({ might: 2 });
+    // the old passives became picks (v2), then were refunded when the cards were rebalanced (v10)
+    expect(out.party.heroes[0].picks).toEqual({});
+    expect(out.party.heroes[0].pending).toBe(2);
     expect(out.inventory.spells.map((x) => [x.tpl, x.level]).slice(0, 3)).toEqual([['bolt', 3], ['nova', 2], ['dash', 1]]);
     expect(out.party.heroes[0].auto).toHaveLength(2);
     expect(validateSave(out)).toEqual([]);
@@ -141,7 +144,7 @@ describe('save validation and migration', () => {
     expect(out.version).toBe(SAVE_VERSION);
     expect((out as any).hero).toBeUndefined();
     expect(out.party.heroes.map((h) => h.id)).toEqual(['aria', 'brann', 'cyra']);
-    expect(out.party.heroes[0]).toMatchObject({ level: 12, health: 55, pending: 2, picks: { might: 3 } });
+    expect(out.party.heroes[0]).toMatchObject({ level: 12, health: 55, pending: 5, picks: {} });
     const uids = new Set(out.inventory.spells.map((s) => s.uid));
     for (const h of out.party.heroes) for (const u of [...h.auto, ...h.active]) if (u) expect(uids.has(u)).toBe(true);
     expect(out.inventory.wallet.gold).toBe(9);
@@ -194,6 +197,28 @@ describe('save validation and migration', () => {
     expect(out.codex.runes).toEqual(['piercing']);
     expect(out.party.heroes.every((h) => h.presets.length === 3 && h.assist === null)).toBe(true);
     expect(validateSave(out)).toEqual([]);
+  });
+
+  it('migrates a v9 save: every pick is refunded as a pending upgrade, and a notice says so once', () => {
+    const v9: any = sampleSave();
+    v9.version = 9;
+    v9.party.heroes[0].picks = { might: 5, haste: 3, armor: 2 };
+    v9.party.heroes[0].pending = 1;
+    const out = migrate(v9);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.party.heroes.map((h) => h.picks)).toEqual([{}, {}, {}]);
+    expect(out.party.heroes.map((h) => h.pending)).toEqual([11, 0, 1]);
+    expect(out.party.heroes.map((h) => h.level)).toEqual([7, 3, 1]);      // levels stay
+    expect(out.notices).toHaveLength(1);
+    expect(out.notices![0]).toContain('Aria 10');
+    expect(out.notices![0]).toContain('Cyra 1');
+    expect(out.notices![0]).not.toContain('Brann');
+    expect(validateSave(out)).toEqual([]);
+    // nothing to refund, nothing to say
+    const none: any = sampleSave();
+    none.version = 9;
+    none.party.heroes.forEach((h: any) => { h.picks = {}; });
+    expect(migrate(none).notices).toEqual([]);
   });
 
   it('keeps quest progress, generated bounties and dungeon state through a codec round trip', async () => {

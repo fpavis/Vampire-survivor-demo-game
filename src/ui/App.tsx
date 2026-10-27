@@ -82,7 +82,7 @@ function CardsPanel() {
           <button key={c.id} class="vs-card" style={{ '--rc': hexCss(rarityColor(ui.palette.value, Math.min(3, c.rarity))) }} onClick={() => pick(i)}>
             <div class="ic"><Icon name={def.icon} /></div>
             <div>
-              <div class="tg"><Icon name={path.icon} /> {path.name.toUpperCase()} · {r.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
+              <div class="tg"><Icon name={path.icon} /> {path.name.toUpperCase()} · {def.mastery ? 'MASTERY' : r.name.toUpperCase()} · {c.isNew ? 'NEW' : `LV ${c.toLevel - 1} → ${c.toLevel}`}</div>
               <div class="nm">{def.name}</div>
               {c.lines.map((l) => <div class="ln">{l}</div>)}
             </div>

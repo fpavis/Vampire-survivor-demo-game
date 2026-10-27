@@ -14,6 +14,7 @@ const WORLD_T = WORLD_CONFIG.tile;
 import { FONT_UI as FONT, FONT_DISPLAY as DISPLAY } from '../ui/fonts';
 import { settings } from './settings';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const HUD_CARDS = 8;          // card icons on the HUD row before "+N"
 
 function formatTime(seconds) {
     const m = Math.floor(seconds / 60);
@@ -307,15 +308,23 @@ export class UIManager {
             drawSlot(i * 44, 0, t.icon, it.level, t.max, CORE_INFO[t.core].color);
         });
         const autoRow = game.spells.auto.length ? 1 : 0;
-        Object.entries(s.picks).forEach(([id, lvl], i) => {
-            drawSlot(i * 44, autoRow * 44, CARDS[id].icon, lvl, CARDS[id].max, 0x7be07b);
+        // the eight highest ranks, then "+N" (the game menu's Party page lists every one)
+        const picks = Object.entries(s.picks).filter(([id, lvl]) => CARDS[id] && lvl > 0).sort((a, b) => b[1] - a[1]);
+        picks.slice(0, HUD_CARDS).forEach(([id, lvl], i) => {
+            drawSlot(i * 44, autoRow * 44, CARDS[id].icon, lvl, CARDS[id].max, CARDS[id].mastery ? 0xffd84a : 0x7be07b);
         });
-        this.slotRows = autoRow + (Object.keys(s.picks).length ? 1 : 0);
+        if (picks.length > HUD_CARDS) {
+            const more = new PIXI.Text(`+${picks.length - HUD_CARDS}`, { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', fill: 0xdfe6f2, stroke: 0x000000, strokeThickness: 3 });
+            more.anchor.set(0, 0.5);
+            more.position.set(HUD_CARDS * 44 + 2, autoRow * 44 + 20);
+            this.slotsContainer.addChild(more);
+        }
+        this.slotRows = autoRow + (picks.length ? 1 : 0);
         this.publishHudTop();
 
         const st = game.stats;
         this.elements.statsText.visible = false;   // detailed numbers live in the spell panel / tooltips
-        this.elements.statsText.position.set(12, 98 + (Object.keys(s.picks).length ? 92 : 48));
+        this.elements.statsText.position.set(12, 98 + (picks.length ? 92 : 48));
         this.elements.statsText.text =
             `Damage ×${st.might.toFixed(2)}   Speed ×${st.speed.toFixed(2)}\n` +
             `Crit ${Math.round(st.crit * 100)}%   Armor ${Math.round(st.armor * 100)}%   Regen ${st.regen.toFixed(1)}/s`;

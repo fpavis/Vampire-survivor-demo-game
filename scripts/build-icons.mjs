@@ -54,6 +54,8 @@ const MANIFEST = {
   'card-vitality': ['gi:heart-plus', 0xff5a6a], 'card-recovery': ['gi:regeneration', 0x7be07b], 'card-armor': ['gi:shield', 0xc9d4e0],
   'card-swift': ['gi:running-shoe', 0x7be0d0], 'card-magnet': ['gi:magnet', 0xff6a6a], 'card-growth': ['gi:open-book', 0x9be7ff],
   'card-reservoir': ['gi:concentration-orb', 0x6ab8ff], 'card-wellspring': ['gi:fountain', 0x6ab8ff], 'card-thrift': ['gi:two-coins', 0xffd84a],
+  'card-reach': ['gi:expanded-rays', 0xc08bff], 'card-persistence': ['gi:hourglass', 0x6ab8ff], 'card-fortune': ['gi:clover', 0x7be07b],
+  'card-greed': ['gi:coins-pile', 0xffd84a],
 
   // heroes, people and foes
   'hero-aria': ['gi:wizard-staff', 0x6aa8ff], 'hero-brann': ['gi:visored-helm', 0xff8a5a], 'hero-cyra': ['gi:oak-leaf', 0x7be07b],

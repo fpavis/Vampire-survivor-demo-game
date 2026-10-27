@@ -133,9 +133,15 @@ describe('hero stats', () => {
     expect(base.maxHealth).toBe(100);
     expect(base.maxMana).toBeGreaterThan(0);
     const s = computeStats({ might: 2, reservoir: 3, thrift: 4 });
-    expect(s.might).toBeCloseTo(1.3);
-    expect(s.maxMana).toBe(base.maxMana + 60);
-    expect(s.manaCost).toBeCloseTo(0.68);
+    expect(s.might).toBeCloseTo(1.16);
+    expect(s.maxMana).toBe(base.maxMana + 30);
+    expect(s.manaCost).toBeCloseTo(0.88);
+    expect([base.area, base.duration, base.luck, base.gold]).toEqual([1, 1, 1, 1]);
+    const t = computeStats({ reach: 10, persistence: 10, fortune: 10, greed: 10, 'mastery-greed': 5 });
+    expect(t.area).toBeCloseTo(1.5);
+    expect(t.duration).toBeCloseTo(1.6);
+    expect(t.luck).toBeCloseTo(1.6);
+    expect(t.gold).toBeCloseTo(1.95);
   });
 
   it('offers three distinct cards that can still be levelled', () => {
