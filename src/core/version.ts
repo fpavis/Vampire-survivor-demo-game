@@ -1,18 +1,18 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.10.0';
+export const GAME_VERSION = '0.11.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'Pixel art, teleporters and corrupted lands',
+  title: 'A game menu, fairer levels and a training ground',
   notes: [
-    'Everything drawn at the ground\'s pixel grain (or smooth), with CRT, pixelate, film grain and colour grades',
-    'The ground is felt: lava glows and shimmers, ice frosts the edges, quicksand drains the colour',
-    'A world map to pan and zoom, with Visited and Cleared badges; dungeon floors remember what you explored',
-    'Dungeons are cleared when everything is done, and a portal leads out from the boss',
-    'Towns of every size and shape, each with a teleporter: travel between towns and your own waypoints',
-    'Corrupted lands: barren, violet and full of monsters',
-    'Warbands, swarms and hunters come looking for you out in the world',
-    'Fairer ambushes, boat recall at docks, and an experimental click to use'
+    'One game menu (Esc or Start): party, spells, upgrades, journal, building, the map, saves and settings',
+    'The Party page shows every hero\'s stats, what the others lend, and every passive taken',
+    'Experience is weighed against your level: far weaker monsters give little, so the lands keep pace',
+    'Passives come in ten small ranks, with four new ones (Reach, Persistence, Fortune, Greed) and mastery after',
+    'Your old passives were refunded: spend them again on the Upgrades page',
+    'Resting heroes lend a quarter of their strength and stay near the land\'s level',
+    'Every town has a training ground with three dummies, and the meter shows each skill\'s damage',
+    'The upgrades reminder no longer covers your party'
   ]
 };
 

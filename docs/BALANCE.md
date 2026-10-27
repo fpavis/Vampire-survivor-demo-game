@@ -102,7 +102,7 @@ What the new cards touch:
 
 They are offered only when there aren't three ordinary cards left, so a level is never wasted.
 
-**HUD.** The HUD card row shows the 8 highest ranks and "+N" for the rest. The game menu's Party page (11c) lists
+**HUD.** The HUD card row shows the 8 highest ranks and "+N" for the rest. The game menu's Party page (C) lists
 them all.
 
 ### Auras (`src/core/party/party.ts`)
@@ -179,8 +179,12 @@ and names the broken expectation when it is not.
   - teleport by distance from the start (the panel shows the land's level next to the hero's);
   - max every spell's level, and give every spell and rune;
   - turn on god mode and run at ×2 or ×4 speed.
-- **Training dummy.** It measures damage per second (11d):
-  - each skill on its own row, with its kind (hit, burn, echo and so on) and its share;
-  - the town's training ground has three dummies, for spells that hit several targets.
+- **Training ground.** Every town has one, away from the fountain, with three dummies (for spells that hit
+  several targets). Its meter shows:
+  - damage per second over the last five seconds, the best rate, the total, and how many dummies were hit;
+  - each skill on its own row, with its kind (zone, burn, echo, spark, burst, shards, linked, assist, tower;
+    no label for a direct hit) and its share of the total;
+  - a Reset button.
 
-  Compare a spell's DPS before and after a rune or a card, not across sessions; the dummy has no armor.
+  Compare a spell's DPS before and after a rune or a card, not across sessions. Dummies have no armour and
+  never die, so kill effects (Death Echo, Splinter, Resonance, Vampiric, Mana Siphon) never show there.

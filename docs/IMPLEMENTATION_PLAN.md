@@ -784,6 +784,35 @@ Acceptance
 - The pixel style is one pass with the camera on whole cells; the HUD and names stay outside the filters.
 - Corrupted land is barren, violet and denser; events start off screen, pay out, and give up.
 
+### Phase 11: Balance, one game menu, per-skill DPS (L)
+
+A 43-minute playtest reached hero level 97 in level 29 lands, with the unused heroes past 60, no passives
+left after level 60, per-level upgrades that felt too strong, no way to see the passives taken, an upgrades
+pill over the party, Esc going straight to the settings, and a dummy that gave one number. Five steps, each
+committed, checked by CI and published:
+
+- **11a** The upgrades pill on its own at the top, never over the party; no map over the menu.
+- **11b** Experience weighed against the hero's level (gems remember the level of what dropped them, resting
+  heroes are weighed too); sixteen cards of ten small ranks (Reach, Persistence, Fortune, Greed are new) and
+  endless mastery after them; auras at a quarter; save version 10 refunds every pick; `docs/BALANCE.md`
+  with the curves, the levers and a power-curve model the tests pin.
+- **11c** One game menu (Esc / Start, or C, I, U, J, B on their page; LB / RB flip pages) over the paused
+  game: Party (stats with auras, passives, spells), Spells, Upgrades, Journal, Build, World map, Save & Load,
+  Settings, Quit. The old standalone panels are gone.
+- **11d** A fenced training ground in every town, far from the fountain, with three dummies; every hit
+  carries its source, and the meter shows a row per skill (hit, zone, burn, echo, rune, assist, tower).
+- **11e** Docs, version 0.11.0, the full e2e chain, CI, publish.
+
+Decisions: one menu hub; experience relative to the monster's level; smaller steps, more of them; resting
+heroes near the land's level. Save version 10; generator version 5 (the training ground).
+
+Acceptance
+- The playtest run, replayed by `simulateLevel`, ends near level 36 (resting heroes near 34), not 97.
+- Every level up to 99 has an ordinary card to pick; past that, mastery; nothing is ever stuck pending.
+- Esc opens the menu on the page it was left on; every page renders without emoji; the game waits under it.
+- Every town's three dummies can be walked to, sit far from the fountain, and are within a chain's jump.
+- The meter's rows add up to the whole; a burn is its own row; Chain Lightning reaches several dummies.
+
 ## 7. What happens to the current code
 
 | Current file | Fate |
