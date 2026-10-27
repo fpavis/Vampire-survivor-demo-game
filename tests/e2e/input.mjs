@@ -31,6 +31,7 @@ await context.addInitScript((seed) => {
 }, SEED);
 
 let page = await context.newPage();
+if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
 const watch = (pg) => { pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); }); };
 watch(page);
 const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
@@ -190,7 +191,8 @@ for (let i = 0; i < 24; i++) {
 const dz0 = await ev(() => Number(document.activeElement.value));
 await tap(B.RIGHT); await tap(B.RIGHT);
 const dz1 = await ev(() => Number(document.activeElement.value));
-check('left and right adjust the focused slider', slider && dz1 > dz0, `${dz0} -> ${dz1}`);
+const focusNow = await ev(() => { const a = document.activeElement; return a ? `${a.tagName}.${a.className} ${(a.innerText || a.type || '').slice(0, 40)}` : null; });
+check('left and right adjust the focused slider', slider && dz1 > dz0, `${dz0} -> ${dz1} (focus: ${focusNow})`);
 const saved = await ev(() => JSON.parse(localStorage.getItem('vs.input.v1') || '{}'));
 check('the dead zone setting is remembered', Math.abs(saved.deadzone - dz1) < 0.001, JSON.stringify(saved));
 await tap(B.B);
