@@ -1,6 +1,6 @@
 // Phase 11 end-to-end checks: balance (experience against the hero's level, small card steps, mastery, the
-// refund of old picks), the game menu, per-skill DPS and the training ground. Sections can be picked with
-// ONLY=balance,...; SHOTS=<dir> saves screenshots; THROTTLE=n slows the CPU like a busy CI runner.
+// refund of old picks), the game menu, the training ground and per-skill DPS. Sections can be picked with
+// ONLY=balance,menu,yard,dps; SHOTS=<dir> saves screenshots; THROTTLE=n slows the CPU like a busy CI runner.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 
@@ -199,6 +199,99 @@ if (want('menu')) {
   const pill = await until(() => window.__dev.ui.menuPage.value === 'upgrades' && document.querySelectorAll('.vs-menu .vs-card').length === 3);
   check('the upgrades pill opens the Upgrades page with three cards', pill);
   await ev(() => { const g = window.game; g.state.pending = 0; g.ensureCards(); g.ui.closeMenu(); });
+}
+
+// ---- 11d: every town's training ground, far from its centre, with three dummies that can be walked to
+const inside = () => page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 15000 });
+const outside = () => page.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 15000 });
+if (want('yard')) {
+  const towns = await ev(() => window.__dev.tools.nearestPlaces('city', 3));
+  const seen = [];
+  for (const q of towns) {
+    await ev((q) => window.game.enterPlace(q), q);
+    await inside();
+    seen.push(await ev(() => {
+      const g = window.game, src = g.interior, T = 48, p = g.state.player, W = src.w, H = src.h;
+      const fits = (tx, ty) => tx >= 0 && ty >= 0 && tx < W && ty < H && !g.world.blocked((tx + 0.5) * T, (ty + 0.5) * T, p.radius);
+      const open = new Uint8Array(W * H), stack = [[Math.floor(p.wx / T), Math.floor(p.wy / T)]];
+      open[stack[0][1] * W + stack[0][0]] = 1;
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (fits(nx, ny) && !open[ny * W + nx]) { open[ny * W + nx] = 1; stack.push([nx, ny]); } }
+      }
+      const nearest = (x, y) => { let bd = Infinity; for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) if (open[ty * W + tx]) bd = Math.min(bd, Math.hypot((tx + 0.5) * T - x, (ty + 0.5) * T - y)); return Math.round(bd); };
+      const ds = g.dummy.list;
+      const f = src.fountain;
+      return {
+        n: ds.length,
+        reach: ds.map((e) => nearest(e.wx, e.wy)),
+        away: Math.round(Math.min(...ds.map((e) => Math.hypot(e.wx - f.x, e.wy - f.y))) / T),
+        width: W,
+        gaps: ds.slice(1).map((e, i) => Math.round(Math.hypot(e.wx - ds[i].wx, e.wy - ds[i].wy))),
+        fence: src.decor.filter((d) => d.type === 'fence').length,
+        markers: g.map.markers.filter((m) => m.icon === 'dummy').length
+      };
+    }));
+    if (SHOTS && seen.length === 1) {
+      await ev(() => { const g = window.game, e = g.dummy.list[1], p = g.state.player; p.wx = e.wx; p.wy = e.wy + 140; g.cam.x = p.wx; g.cam.y = p.wy; for (let i = 0; i < 4; i++) g.gameLoop(1); });
+      await page.screenshot({ path: `${SHOTS}/yard.png` });
+    }
+    await ev(() => window.game.exitPlace());
+    await outside();
+  }
+  check('every town has three training dummies in a fenced yard, marked once on the map', seen.every((t) => t.n === 3 && t.fence > 8 && t.markers === 1), JSON.stringify(seen));
+  check('...far from the fountain (a third of the town across, or near it)', seen.every((t) => t.away >= Math.floor(t.width * 0.3) - 4), JSON.stringify(seen.map((t) => [t.away, t.width])));
+  check('...each one walked up to', seen.every((t) => t.reach.every((d) => d < 70)), JSON.stringify(seen.map((t) => t.reach)));
+  check('...close enough for a chain to jump between them', seen.every((t) => t.gaps.every((d) => d > 100 && d < 240)), JSON.stringify(seen.map((t) => t.gaps)));
+}
+
+// ---- 11d: the meter splits damage per skill, and spells that hit several targets show it
+if (want('dps')) {
+  const [q] = await ev(() => window.__dev.tools.nearestPlaces('city', 1));
+  await ev((q) => window.game.enterPlace(q), q);
+  await inside();
+  const run = await ev(() => {
+    const g = window.game, sp = g.spells, p = g.state.player, ds = g.dummy.list;
+    const cx = ds.reduce((s, e) => s + e.wx, 0) / ds.length, cy = ds.reduce((s, e) => s + e.wy, 0) / ds.length;
+    p.wx = cx; p.wy = cy + 120; g.cam.x = p.wx; g.cam.y = p.wy;
+    for (const c of g.critters.list) { c.wx = c.tx = p.wx + 3000; c.wy = c.ty = p.wy; c.wait = 9999; }
+    const bolt = sp.addSpell('bolt', 4); bolt.runes = ['ignite', null];
+    const chain = sp.addSpell('lightning', 4);
+    sp.addRune('ignite');
+    sp.setLoadout([chain.uid, bolt.uid], sp.active);
+    sp.touch();
+    g.dummy.reset();
+    // which dummies each spell reached
+    const by = {};
+    const orig = g.dummy.hit.bind(g.dummy);
+    g.dummy.hit = (e, v, src) => { const k = src ? `${src.tpl}:${src.kind}` : 'other'; (by[k] = by[k] || new Set()).add(e.uid); orig(e, v, src); };
+    for (let i = 0; i < 1500; i++) {
+      g.gameLoop(1);
+      const rows = g.dummy.meter.breakdown(g.frame / 60);
+      if (i > 600 && rows.some((r) => r.kind === 'burn') && rows.some((r) => r.tpl === 'lightning') && rows.some((r) => r.tpl === 'bolt' && r.kind === 'hit')) break;
+    }
+    g.dummy.hit = orig;
+    const now = g.frame / 60, rows = g.dummy.meter.breakdown(now);
+    return {
+      rows: rows.map((r) => ({ tpl: r.tpl, kind: r.kind, dps: Math.round(r.dps), share: +r.share.toFixed(3) })),
+      shares: rows.reduce((s, r) => s + r.share, 0),
+      sum: Math.round(rows.reduce((s, r) => s + r.dps, 0)), total: Math.round(g.dummy.meter.dps(now)),
+      reached: Object.fromEntries(Object.entries(by).map(([k, s]) => [k, s.size]))
+    };
+  });
+  check('the meter lists each spell on its own row', run.rows.some((r) => r.tpl === 'lightning') && run.rows.some((r) => r.tpl === 'bolt' && r.kind === 'hit'), JSON.stringify(run.rows));
+  check('...a burn as its own row under the spell that set it', run.rows.some((r) => r.tpl === 'bolt' && r.kind === 'burn'), JSON.stringify(run.rows));
+  check('...and the rows add up to the whole', Math.abs(run.shares - 1) < 0.01 && Math.abs(run.sum - run.total) <= run.rows.length, JSON.stringify({ shares: run.shares, sum: run.sum, total: run.total }));
+  check('Chain Lightning reaches more than one dummy', (run.reached['lightning:hit'] || 0) >= 2, JSON.stringify(run.reached));
+  await until(() => (window.__dev.ui.dummy.value?.rows || []).length >= 2);
+  const ui = await ev(() => ({ text: document.querySelector('.vs-meter')?.innerText || '', rows: document.querySelectorAll('.vs-meter .vs-mrow').length }));
+  check('the training ground meter shows a row per skill', /Training ground/.test(ui.text) && /Chain Lightning/.test(ui.text) && /Arcane Bolt/.test(ui.text) && /burn/i.test(ui.text) && ui.rows >= 3, JSON.stringify(ui));
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/dps-meter.png` });
+  await ev(() => document.querySelector('.vs-meter [data-act="reset"]').click());
+  const reset = await ev(() => ({ total: window.game.dummy.meter.total, rows: window.game.dummy.meter.breakdown(window.game.frame / 60).length }));
+  check('Reset clears the meter', reset.total === 0 && reset.rows === 0, JSON.stringify(reset));
+  await ev(() => window.game.exitPlace());
+  await outside();
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
