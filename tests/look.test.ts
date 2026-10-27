@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { pixelCell, snapToCell } from '../src/core/render/look';
 import { DEFAULT_SETTINGS, sanitizeSettings } from '../src/core/settings/settings';
 
@@ -31,5 +32,14 @@ describe('pixel art grain', () => {
     expect(s.pixelSize).toBe(2);
     expect(s.postFx).toBe('crt');
     expect(s.colorGrade).toBe('noir');
+  });
+
+  it('the screen filters read the coordinates Pixi always sets, not the legacy filterArea', () => {
+    // with the default vertex shader Pixi stops updating filterArea after the first frame; another filter in the
+    // scene then leaves its own values there and the art pixels come out the wrong size
+    const src = readFileSync(new URL('../src/render/filters.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/uniform\s+\w*\s*vec4\s+filterArea/);
+    expect(src).toMatch(/uniform vec4 inputSize/);
+    expect(src).not.toMatch(/precision mediump/);
   });
 });

@@ -8,10 +8,11 @@ import * as PIXI from 'pixi.js';
 const VERT = undefined;     // Pixi's default filter vertex shader
 
 const WORLD_FRAG = `
-precision mediump float;
+precision highp float;     // highp: screen coordinates, and it must match the vertex shader for inputSize and outputFrame
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
-uniform vec4 filterArea;
+uniform vec4 inputSize;
+uniform vec4 outputFrame;
 uniform vec4 inputClamp;
 uniform float uCell;
 uniform vec3 uTint;
@@ -21,8 +22,9 @@ uniform float uShimmer;
 uniform float uTime;
 uniform vec3 uTint2;
 uniform float uTint2A;
-vec2 mapCoord(vec2 c) { return c * filterArea.xy + filterArea.zw; }
-vec2 unmapCoord(vec2 c) { return (c - filterArea.zw) / filterArea.xy; }
+// screen coordinates in CSS pixels (inputSize and outputFrame are always set; the legacy filterArea is not)
+vec2 mapCoord(vec2 c) { return c * inputSize.xy + outputFrame.xy; }
+vec2 unmapCoord(vec2 c) { return (c - outputFrame.xy) * inputSize.zw; }
 void main(void) {
   vec2 p = mapCoord(vTextureCoord);
   if (uShimmer > 0.0) {
@@ -40,10 +42,11 @@ void main(void) {
 }`;
 
 const POST_FRAG = `
-precision mediump float;
+precision highp float;     // highp: screen coordinates, and it must match the vertex shader for inputSize and outputFrame
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
-uniform vec4 filterArea;
+uniform vec4 inputSize;
+uniform vec4 outputFrame;
 uniform vec4 inputClamp;
 uniform vec2 uScreen;
 uniform float uMode;      // 0 none, 1 pixelate, 2 crt, 3 film grain
@@ -53,8 +56,9 @@ uniform float uFlicker;
 uniform float uTime;
 uniform mat3 uGrade;
 uniform float uContrast;
-vec2 mapCoord(vec2 c) { return c * filterArea.xy + filterArea.zw; }
-vec2 unmapCoord(vec2 c) { return (c - filterArea.zw) / filterArea.xy; }
+// screen coordinates in CSS pixels (inputSize and outputFrame are always set; the legacy filterArea is not)
+vec2 mapCoord(vec2 c) { return c * inputSize.xy + outputFrame.xy; }
+vec2 unmapCoord(vec2 c) { return (c - outputFrame.xy) * inputSize.zw; }
 vec4 at(vec2 p) { return texture2D(uSampler, clamp(unmapCoord(p), inputClamp.xy, inputClamp.zw)); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main(void) {
