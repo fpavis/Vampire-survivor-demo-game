@@ -121,6 +121,50 @@ them all.
 `MIGRATIONS[9]` refunds every hero's picks as pending upgrades. Levels are kept. The first load shows "Passives were
 rebalanced: upgrades refunded …" once. A level 97 save gets 96 picks into 160 ranks.
 
+## Towers (0.12.0, `src/core/world/towers.ts`)
+
+A spire, warding obelisk or beacon can be raised to level 3 at the tower itself (its panel, **E**). The upgrade is
+paid from the wallet in one go.
+
+| Level | Cost (of the tower's base cost) | Spire damage | Spire cooldown | Obelisk dome | Obelisk heal | Beacon reveal |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | (building it) | ×1 | ×1 | 7 tiles | 1.5 hp/s | 44 tiles |
+| 2 | ×0.6 | ×1.4 | ×0.85 | 8.5 tiles | 2.5 hp/s | 60 tiles |
+| 3 | ×1.0 | ×1.9 | ×0.7 | 10 tiles | 3.5 hp/s | 76 tiles |
+
+- **Constants:** `towerPower(level)` holds the table; `upgradeCost(kind, toLevel)` the costs; `MAX_TOWER_LEVEL = 3`.
+- **Claimed ground:** a site laid inside a claimed zone costs `CLAIMED_DISCOUNT = 0.75` of the base cost.
+- **Sieges** (`src/core/world/worldEvents.ts`): when a world event is due and a built spire, obelisk or beacon is
+  within `SIEGE_REACH = 1400` px, it is a siege `SIEGE_CHANCE = 35%` of the time: 6 to 9 besiegers and an elite
+  2.5 to 5 tiles round the tower. The tower does nothing until they are beaten; walking far away ends it.
+
+## Town standing (`src/core/quest/quests.ts`, `REP_TIERS`)
+
+Every bounty from a town's board, every townsfolk job from the town and every inn rumour taken there adds one.
+
+| Standing | Done | Bounty and job gold | Market | Inn |
+| --- | --- | --- | --- | --- |
+| Stranger | 0 | ×1 | full price | paid |
+| Known | 3 | ×1.1 | full price | paid |
+| Trusted | 8 | ×1.2 | 5% off | paid |
+| Hero of the town | 15 | ×1.3 | 10% off | free |
+
+- **Applied:** the gold bonus is applied at hand-in by the tier held before it (`withRep`); the board's offers
+  show the raised amount.
+- **Job rewards** (`src/core/quest/townsfolk.ts`) scale with the town's land level:
+
+  | Job | Gold | XP |
+  | --- | --- | --- |
+  | Fetch | 60 + 8 per level | 25 + 4 per level |
+  | Escort | 80 + 9 per level | 30 + 5 per level |
+  | Cull of 15–24 monsters | 3 + 0.5 per level, per monster | 1 + 0.2 per level, per monster |
+  | Rumour, cave or ruins | 90 + 12 per level | 45 + 6 per level |
+  | Rumour, dungeon | 220 + 12 per level, and a skill | 110 + 6 per level |
+
+  Marking a rumour costs `rumourFee(level) = 10 + 2 per level`.
+- **Escort:** the traveller has `160 × enemyDamageScale(level)` health and takes half of a touching monster's
+  damage per second (`src/app/escort.ts`).
+
 ## The rest of the curve (unchanged)
 
 | What | Where | Rule |
@@ -168,6 +212,8 @@ The tests pin:
 | How much resting heroes lend | `AURA_STRENGTH` | |
 | Endless growth past the cards | the mastery cards' steps | |
 | How much harder the lands get | `enemyHealthScale` and `enemyDamageScale` | The "Factor ÷ health" column is the quick check |
+| How much towers grow | `towerPower` and `upgradeCost` in `towers.ts` | A level 3 spire is the strongest single source a party can build |
+| How fast standing grows, and what it gives | `REP_TIERS` in `quests.ts` | The tier thresholds count bounties, jobs and rumours together |
 
 After a change, run `npx vitest run tests/progression.test.ts`. It prints nothing when the curve is inside its band
 and names the broken expectation when it is not.

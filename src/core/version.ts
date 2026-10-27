@@ -1,18 +1,17 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.11.0';
+export const GAME_VERSION = '0.12.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'A game menu, fairer levels and a training ground',
+  title: 'Towers that grow, townsfolk with work, and lords who speak',
   notes: [
-    'One game menu (Esc or Start): party, spells, upgrades, journal, building, the map, saves and settings',
-    'The Party page shows every hero\'s stats, what the others lend, and every passive taken',
-    'Experience is weighed against your level: far weaker monsters give little, so the lands keep pace',
-    'Passives come in ten small ranks, with four new ones (Reach, Persistence, Fortune, Greed) and mastery after',
-    'Your old passives were refunded: spend them again on the Upgrades page',
-    'Resting heroes lend a quarter of their strength and stay near the land\'s level',
-    'Every town has a training ground with three dummies, and the meter shows each skill\'s damage',
-    'The upgrades reminder no longer covers your party'
+    'Spires, obelisks and beacons rise to level 3: tend them with E',
+    'Monsters may besiege a tower and silence it until you drive them off',
+    'Towers on claimed ground cost a quarter less',
+    'Townsfolk ask for help: lost things to recover, travellers to walk to the next town, monsters to thin',
+    'Innkeepers trade rumours of places worth clearing, and pay when you have',
+    'Towns remember what you do for them: better pay, better prices, and a free bed for their hero',
+    'The demon lords speak for themselves, and the Elder has a word between chapters (Settings: Story scenes)'
   ]
 };
 
