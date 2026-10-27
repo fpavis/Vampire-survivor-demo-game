@@ -1620,7 +1620,13 @@ class Game {
             this.interactables.push({ kind: 'chest', x: c.x, y: c.y, idx: i, big: !!c.big, opened, sprite });
             if (!opened) this.map.markers.push({ tx: c.x / T, ty: c.y / T, icon: 'chest' });
         });
-        if (poi.type === 'city' && src.fountain) {
+        if (poi.type === 'city' && src.services) {
+            // each town's own layout says where its people stand (all of them proven reachable from the gate)
+            const sv = src.services;
+            for (const k of ['healer', 'merchant', 'innkeeper', 'elder']) this.spawnNpc(k, sv[k].x, sv[k].y);
+            this.spawnBoard(sv.board.x, sv.board.y);
+            this.dummy.spawn(sv.dummy.x, sv.dummy.y);
+        } else if (poi.type === 'city' && src.fountain) {
             this.spawnNpc('healer', src.fountain.x + 120, src.fountain.y + 10);
             this.spawnNpc('merchant', src.fountain.x - 130, src.fountain.y + 20);
             if (src.altar) this.spawnNpc('innkeeper', src.altar.x + 150, src.altar.y + 70);

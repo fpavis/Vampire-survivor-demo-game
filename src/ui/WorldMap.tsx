@@ -151,7 +151,9 @@ function MapPanel({ mode }: { mode: 'view' | 'travel' }) {
 
   const title = g.world.bounded ? g.interiorName : 'World map';
   const legend: [string, string][] = g.world.bounded
-    ? [['door', 'Exit'], ['chest', 'Treasure'], ['stairs-down', 'Stairs down']]
+    ? (g.interiorPoi?.type === 'city'
+      ? [['door', 'Gate'], ['healer', 'Healer'], ['merchant', 'Merchant'], ['innkeeper', 'Inn'], ['elder', 'Elder'], ['board', 'Bounties'], ['dummy', 'Training dummy']]
+      : [['door', 'Exit'], ['chest', 'Treasure'], ['stairs-down', 'Stairs down']])
     : [['place-town', 'Town'], ['place-cave', 'Cave'], ['place-ruins', 'Ruins'], ['dungeon', 'Dungeon'], ['lair', 'Warlord lair'], ['flag', 'Visited'], ['check', 'Cleared']];
   const hint = onPad()
     ? `Left stick to look around · ${glyph('prevHero')} ${glyph('nextHero')} zoom · ${glyph('skill1')} back to you · ${glyph('cancel')} close`

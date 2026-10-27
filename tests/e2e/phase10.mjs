@@ -436,6 +436,50 @@ if (want('portal')) {
   await outside();
 }
 
+// ---- 10d: towns differ, and everyone in them can be walked up to
+if (want('town')) {
+  const towns = await ev(() => window.__dev.tools.nearestPlaces('city', 3));
+  const seen = [];
+  for (const q of towns) {
+    await ev((q) => window.game.enterPlace(q), q);
+    await inside();
+    seen.push(await ev(() => {
+      const g = window.game, src = g.interior, T = 48, p = g.state.player, W = src.w, H = src.h;
+      // every tile the hero fits on, flooding out from where the party arrives (the game's own collision)
+      const fits = (tx, ty) => tx >= 0 && ty >= 0 && tx < W && ty < H && !g.world.blocked((tx + 0.5) * T, (ty + 0.5) * T, p.radius);
+      const open = new Uint8Array(W * H), stack = [[Math.floor(p.wx / T), Math.floor(p.wy / T)]];
+      open[stack[0][1] * W + stack[0][0]] = 1;
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (fits(nx, ny) && !open[ny * W + nx]) { open[ny * W + nx] = 1; stack.push([nx, ny]); } }
+      }
+      // stand on the reachable tile nearest a spot and see what E would use
+      const walkTo = (x, y) => {
+        let best = null, bd = Infinity;
+        for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) if (open[ty * W + tx]) { const d = Math.hypot((tx + 0.5) * T - x, (ty + 0.5) * T - y); if (d < bd) { bd = d; best = [tx, ty]; } }
+        for (const c of g.critters.list) { c.wx = c.tx = src.exit.x; c.wy = c.ty = src.exit.y + 9999; c.home = { x: c.wx, y: c.wy, r: 5 }; c.wait = 9999; }
+        p.wx = (best[0] + 0.5) * T; p.wy = (best[1] + 0.5) * T; g.updateInteraction();
+        return { kind: g.target && g.target.kind, d: Math.round(bd) };
+      };
+      const out = { size: `${W}x${H}`, tiles: src.tiles.reduce((a, b, i) => (a * 31 + b * (i % 97)) >>> 0, 7), reach: {} };
+      for (const k of ['healer', 'merchant', 'innkeeper', 'elder', 'board']) { const it = g.interactables.find((i) => i.kind === k); out.reach[k] = walkTo(it.x, it.y); }
+      out.reach.fountain = walkTo(src.fountain.x, src.fountain.y + 20);
+      out.reach.altar = walkTo(src.altar.x, src.altar.y + 20);
+      out.reach.exit = walkTo(src.exit.x, src.exit.y);
+      out.reach.dummy = walkTo(g.dummy.e ? g.dummy.e.wx : src.services.dummy.x, g.dummy.e ? g.dummy.e.wy : src.services.dummy.y);
+      out.reach.dummy.kind = out.reach.dummy.d < 70 ? 'dummy' : null;
+      return out;
+    }));
+    await ev(() => window.game.exitPlace());
+    await outside();
+  }
+  const layouts = new Set(seen.map((t) => t.tiles)), sizes = new Set(seen.map((t) => t.size));
+  check('towns are laid out differently', layouts.size === seen.length, JSON.stringify(seen.map((t) => t.size)));
+  check('and do not all share one size', sizes.size >= 2 || seen.length < 3, JSON.stringify([...sizes]));
+  const bad = seen.flatMap((t, i) => Object.entries(t.reach).filter(([k, r]) => r.kind !== k).map(([k, r]) => `${i}:${k}:${r.kind}:${r.d}`));
+  check('in every town the healer, merchant, inn, elder, board, fountain, altar, dummy and gate can be walked up to and used', bad.length === 0, bad.join(' '));
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 process.kill(-preview.pid);

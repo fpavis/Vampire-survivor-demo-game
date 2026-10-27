@@ -4,6 +4,7 @@ import { BIOME, INTERIOR_ROSTERS, GROUP } from './biomes';
 import { addDecorItem } from './terrain';
 import { floorSeed, type DungeonInfo } from './dungeons';
 import { addVault, type Puzzle } from './puzzles';
+import { TILE, planTown } from './towns';
 import type { ChunkLike, InteriorTheme, Poi, TerrainSource, Vec2 } from '../types';
 
 export interface InteriorSpawn { type: string; x: number; y: number; elite?: boolean }
@@ -63,6 +64,8 @@ export class InteriorSource implements TerrainSource {
     boss: Vec2 | null = null;
     /** a vault behind a gate and the puzzle that opens it (some dungeon floors) */
     puzzle: Puzzle | null = null;
+    /** towns: where each service stands (healer, merchant, innkeeper, elder, board, dummy, teleporter), in world units */
+    services: Record<string, Vec2> | null = null;
     /** The elite guardians of a floor: the stairs down stay sealed until every one of them has fallen. */
     get guardians(): number { return this.spawns.filter((s) => s.elite).length; }
 
@@ -358,7 +361,30 @@ function generateRuins(poi: Poi, floor = 0): InteriorSource {
 }
 
 // --------------------------------------------------------------------- city
+const GATE_ART: Record<string, number> = { [GROUP.DESERT]: 1, [GROUP.SHORE]: 2 };
+
+/** A town laid out by core/world/towns: its own size, streets and houses, with every service reachable. */
 function generateCity(poi: Poi): InteriorSource {
+    const plan = planTown(poi.seed, { gateVariant: GATE_ART[poi.group] ?? 0 });
+    if (!plan) return generateClassicCity(poi);
+    const src = new InteriorSource('city', poi.group, plan.w, plan.h, poi.seed);
+    const BIO = [BIOME.CITY_FLOOR, BIOME.CITY_STONE, BIOME.CITY_WALL];
+    for (let i = 0; i < plan.tiles.length; i++) src.tiles[i] = BIO[plan.tiles[i] === TILE.WALL ? 1 : plan.tiles[i] === TILE.BUILDING ? 2 : 0];
+    for (const d of plan.decor) src.decor.push({ type: d.type, variant: d.variant, x: d.x * T, y: d.y * T });
+    const at = (v: { x: number; y: number }): Vec2 => ({ x: v.x * T, y: v.y * T });
+    const fountain = plan.decor.find((d) => d.type === 'fountain')!, altar = plan.decor.find((d) => d.type === 'altar')!;
+    src.fountain = at(fountain);
+    src.altar = at(altar);
+    src.exit = at(plan.exit);
+    src.start = at(plan.start);
+    src.services = {};
+    for (const id of ['healer', 'merchant', 'innkeeper', 'elder', 'board', 'dummy', 'teleporter'] as const) src.services[id] = at(plan.services[id]);
+    for (const v of plan.villagers) src.npcs.push({ x: v.x * T, y: v.y * T, hue: v.hue });
+    return src;
+}
+
+/** The fixed town of earlier versions: kept for the rare seed whose own layout does not pass the checks. */
+function generateClassicCity(poi: Poi): InteriorSource {
     const rng = makeRng(poi.seed);
     const w = 60, h = 48;
     const src = new InteriorSource('city', poi.group, w, h, poi.seed);
