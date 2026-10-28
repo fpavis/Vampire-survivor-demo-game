@@ -370,6 +370,13 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-roll dt{color:var(--c-muted)}
 .vs-roll dd{margin:0;color:var(--c-text);font-variant-numeric:tabular-nums;font-weight:700}
 .vs-roll .fin{font-family:var(--font-display);font-size:22px;color:#f3e6c4;margin-top:56px}
+.vs-turn{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,7,12,.9)}
+.vs-turn .box{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;max-width:300px}
+.vs-turn .box>.vs-icon{color:var(--c-gold,#ffd070);animation:vs-turn 2.4s ease-in-out infinite}
+.vs-turn b{font-size:18px}
+.vs-turn span{color:var(--c-muted)}
+@keyframes vs-turn{0%,30%{transform:rotate(0)}55%,85%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+@media (prefers-reduced-motion:reduce){.vs-turn .box>.vs-icon{animation:none}}
 .vs-crash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,4,10,.86)}
 .vs-crash .box{position:relative;width:min(560px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:18px 20px}
 .vs-crash h2{margin:0;display:flex;align-items:center;gap:8px;font-size:20px}

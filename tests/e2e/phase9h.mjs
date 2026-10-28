@@ -1,5 +1,5 @@
 // Phase 9h end-to-end checks: robustness. A crash shows a screen with a report and keeps the last good save;
-// storage that will not save says so. Sections can be picked with ONLY=crash,...; THROTTLE=n slows the CPU.
+// storage that will not save says so. Sections can be picked with ONLY=crash,storage,pwa; THROTTLE=n slows the CPU.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 
@@ -139,6 +139,60 @@ if (want('storage')) {
   await p2.evaluate(() => document.querySelector('[data-act="storage-dismiss"]').click());
   check('...and the warning can be dismissed', await p2.evaluate(() => !document.querySelector('.vs-storage')));
   await bare.close();
+}
+
+// ---- 9h.2: installable, playable offline, fullscreen, and a hint to turn a phone sideways
+if (want('pwa')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const pg = await newPage(ctx);
+  await pg.goto(`http://localhost:${PORT}/`);
+  await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  const man = await pg.evaluate(async () => {
+    const href = document.querySelector('link[rel="manifest"]')?.getAttribute('href');
+    const m = await (await fetch(href)).json();
+    const icons = await Promise.all(m.icons.map(async (i) => { const r = await fetch(i.src); return { src: i.src, ok: r.ok, type: r.headers.get('content-type') }; }));
+    const og = document.querySelector('meta[property="og:image"]')?.getAttribute('content');
+    const ogOk = og ? (await fetch(og)).ok : false;
+    return { name: m.name, display: m.display, icons, maskable: m.icons.some((i) => i.purpose === 'maskable'), ogOk, desc: !!document.querySelector('meta[name="description"]') };
+  });
+  check('the manifest names the game and its icons load', man.name === 'Survival Game' && man.icons.length >= 3 && man.icons.every((i) => i.ok && /png/.test(i.type)) && man.maskable, JSON.stringify(man.icons.map((i) => `${i.src}:${i.ok}`)));
+  check('...with a description and a social preview image', man.desc && man.ogOk);
+  const sw = await pg.waitForFunction(() => !!navigator.serviceWorker && !!navigator.serviceWorker.controller, null, { timeout: 30000 }).then(() => true, () => false);
+  check('the service worker installs and takes the page', sw);
+  // with the network gone, the game still starts
+  await ctx.setOffline(true);
+  await pg.reload();
+  const offline = await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 }).then(() => true, () => false);
+  check('with the network cut, the game loads from the cache', offline);
+  if (offline) {
+    await pg.keyboard.press('Enter');
+    check('...and a new game starts', await pg.waitForFunction(() => !!window.game.state.player, null, { timeout: 30000 }).then(() => true, () => false));
+  }
+  await ctx.setOffline(false);
+  // fullscreen from Video settings
+  await pg.evaluate(() => { window.__fs = 0; document.documentElement.requestFullscreen = () => { window.__fs++; return Promise.resolve(); }; window.game.ui.openMenu('settings'); });
+  await pg.waitForFunction(() => !!document.querySelector('.vs-pause [data-tab="video"]'));
+  await pg.evaluate(() => document.querySelector('.vs-pause [data-tab="video"]').click());
+  const fsBtn = await pg.waitForFunction(() => !!document.querySelector('[data-act="fullscreen"]'), null, { timeout: 5000 }).then(() => true, () => false);
+  if (fsBtn) await pg.evaluate(() => document.querySelector('[data-act="fullscreen"]').click());
+  check('Video settings have a Fullscreen switch that asks for it', fsBtn && (await pg.evaluate(() => window.__fs)) === 1);
+  await ctx.close();
+
+  // a phone held upright is asked to turn; sideways it is not
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  const pp = await newPage(phone);
+  await pp.goto(`http://localhost:${PORT}/`);
+  await pp.waitForFunction(() => !!window.game, null, { timeout: 30000 });
+  const asked = await pp.waitForFunction(() => /Turn your device sideways/.test(document.querySelector('.vs-turn')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
+  check('a phone held upright is asked to turn sideways', asked);
+  if (asked) await pp.evaluate(() => document.querySelector('[data-act="turn-dismiss"]').click());
+  check('...and can play like that', await pp.evaluate(() => !document.querySelector('.vs-turn')));
+  await pp.setViewportSize({ width: 844, height: 390 });
+  await pp.reload();
+  await pp.waitForFunction(() => !!window.game, null, { timeout: 30000 });
+  await pp.waitForTimeout(500);
+  check('held sideways, there is no hint', await pp.evaluate(() => !document.querySelector('.vs-turn')));
+  await phone.close();
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

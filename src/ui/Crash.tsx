@@ -35,7 +35,7 @@ export function CrashScreen() {
         <p class="msg"><code>{c.message}</code></p>
         <p class="sub">Sending the error report helps find the cause.</p>
         <div class="vs-acts">
-          <button ref={first} class="vs-btn" data-act="crash-copy" onClick={copy}><Icon name="scroll" /> {copied === 'yes' ? 'Copied' : 'Copy the error report'}</button>
+          <button ref={first} class="vs-btn" data-act="crash-copy" onClick={copy}><Icon name="copy" /> {copied === 'yes' ? 'Copied' : 'Copy the error report'}</button>
           <button class="vs-btn" data-act="crash-reload" onClick={() => location.reload()}><Icon name="reset" /> Reload</button>
           {!c.fatal && <button class="vs-btn" data-act="crash-keep" onClick={() => dismissCrash(ui.game)}>Keep playing</button>}
         </div>

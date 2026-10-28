@@ -4,6 +4,7 @@ import { Dialog, Inn, Shop } from './Town';
 import { BuildHud, SailingHint, TowerPanel } from './Build';
 import { OptionsPanel, PadSetup } from './Pause';
 import { CrashScreen, StorageBanner } from './Crash';
+import { TurnHint } from './Device';
 import { GameMenu } from './Menu';
 import { SlotsPanel } from './Slots';
 import { CreditsPanel, TitleExtras } from './Front';
@@ -145,6 +146,10 @@ export function App() {
       <SlotsPanel />
       <CreditsPanel />
       <RebindPanel />
+      <TurnHint />
+      <StorageBanner />
+      {/* last, so it is on top and takes the keys and the pad */}
+      <CrashScreen />
     </>
   );
   if (!ui.visible.value) return front;
@@ -175,8 +180,6 @@ export function App() {
       <DeathScreen />
       <Ending />
       <PadSetup />
-      <StorageBanner />
-      <CrashScreen />
       {front}
     </>
   );

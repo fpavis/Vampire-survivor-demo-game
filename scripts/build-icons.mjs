@@ -24,6 +24,8 @@ const MANIFEST = {
   timer: ['mdi:timer-outline', null], star: ['mdi:star', null], gamepad: ['mdi:gamepad-variant', null], flask: ['mdi:flask-outline', null],
   'x-mark': ['mdi:close-thick', null], 'star-outline': ['mdi:star-outline', null], eye: ['mdi:eye-outline', null],
   swap: ['mdi:account-switch', null], 'hand-heart': ['mdi:hand-heart', null],
+  fullscreen: ['mdi:fullscreen', null], 'fullscreen-exit': ['mdi:fullscreen-exit', null], 'rotate-device': ['mdi:phone-rotate-landscape', null],
+  copy: ['mdi:content-copy', null],
 
   // schools of magic
   'school-arcane': ['gi:star-swirl', 0xffd84a], 'school-frost': ['gi:snowflake-2', 0x9be7ff], 'school-fire': ['gi:flame', 0xff8a3a],

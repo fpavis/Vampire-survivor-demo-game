@@ -10,6 +10,9 @@ let out = src
   .replace(/<\/?body[^>]*>/gi, '')
   .replace(/<meta\s+charset[^>]*>/gi, '')
   .replace(/<meta\s+name="viewport"[^>]*>/gi, '')
+  // the installable-app and sharing tags point at files the hosted page does not have
+  .replace(/<link\s+rel="(manifest|icon|apple-touch-icon)"[^>]*>/gi, '')
+  .replace(/<meta\s+(property="og:[^"]*"|name="(twitter:card|theme-color|description)")[^>]*>/gi, '')
   .trim();
 // full-bleed dark game surface; deliberately a single look, so set it explicitly
 out = out.replace('</style>', 'html,body{height:100%;background:#000;color:#dfe8ff;color-scheme:dark}</style>');

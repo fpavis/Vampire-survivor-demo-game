@@ -5,6 +5,7 @@ import { PALETTES } from '../core/access/palettes';
 import { setAccess } from '../app/access';
 import { setSettings } from '../app/settings';
 import { Icon } from './Icon';
+import { FullscreenToggle } from './Device';
 
 const kind = () => ui.padKind.value;
 
@@ -138,6 +139,7 @@ function SettingsTabs({ title }: { title: boolean }) {
         )}
         {tab === 'video' && (
           <>
+            <FullscreenToggle />
             <Choice label="Quality" value={s.quality} options={[['high', 'High'], ['medium', 'Medium'], ['low', 'Low (fewer effects)']]} set={(v) => set({ quality: v })} />
             <Slider label="Render scale" min={0.5} max={1} step={0.05} value={s.renderScale} fmt={pct} onInput={(v) => set({ renderScale: v })} />
             <Choice label="Frame rate limit" value={s.fpsCap} options={[[0, 'None'], [60, '60 fps'], [30, '30 fps (saves battery)']]} set={(v) => set({ fpsCap: v })} />

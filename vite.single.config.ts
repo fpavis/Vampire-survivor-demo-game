@@ -13,6 +13,6 @@ function buildInfo(): string {
 export default defineConfig({
   base: './',
   plugins: [viteSingleFile()],
-  define: { __BUILD_INFO__: JSON.stringify(buildInfo()), __DEVTOOLS_BUTTON__: true },
+  define: { __BUILD_INFO__: JSON.stringify(buildInfo()), __DEVTOOLS_BUTTON__: true, __PWA__: false },
   build: { target: 'es2022', outDir: 'dist-single', assetsInlineLimit: 100_000_000 }
 });
