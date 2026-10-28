@@ -1,7 +1,9 @@
 // The world map: a full-screen panel over the paused game that can be panned and zoomed to look over everything
 // already explored, without walking there. Fog stays as it is: only revealed land is ever drawn.
-// Mouse: drag to pan, wheel to zoom about the cursor. Keys: WASD / arrows pan, + and - zoom, C recentres.
-// Pad: left stick pans, LB / RB zoom, X recentres. M, Esc or B closes it.
+// Mouse: drag to pan, wheel to zoom about the cursor, right-click to pin. Keys: WASD / arrows pan, + and - zoom,
+// C recentres, Q / E step through the places on the map, P pins the middle. Pad: left stick pans, LB / RB zoom,
+// X recentres, the d-pad steps through the places, Y pins the middle. M, Esc or B closes it.
+// Pins (overworld only): a press drops a gold one; pressing on it again turns it red, then blue, then takes it off.
 // In travel mode (opened from a town teleporter or a waypoint) it shows the overworld with every destination ringed:
 // gold for town teleporters, violet for waypoints. Pick one on the map or in the list, then Travel.
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -9,7 +11,10 @@ import { ui } from './bridge';
 import { Icon } from './Icon';
 import { glyph, onPad } from './hints';
 import { WORLD_CONFIG } from '../core/config';
-import { DEFAULT_ZOOM, MAP_ZOOMS, boundsOfChunks, clampCenter, markAt, pixelOf, zoomAt, type MapCam } from '../core/world/mapView';
+import {
+  DEFAULT_ZOOM, MAP_ZOOMS, MAX_PINS, PIN_HEX, boundsOfChunks, clampCenter, markAt, markKey, markOrder, pixelOf, stepMark, tileAt, togglePin, zoomAt,
+  type MapCam
+} from '../core/world/mapView';
 import type { TravelNode } from '../core/world/travel';
 import { FONT_UI } from './fonts';
 
@@ -17,6 +22,8 @@ const T = WORLD_CONFIG.tile, CT = WORLD_CONFIG.chunkTiles;
 const PAN_PX = 9;                 // pixels a held key or a full stick moves the map each frame
 const RING = { town: '#ffd070', waypoint: '#c48af5' };
 type Dest = { node: TravelNode; fare: number; tiles: number };
+type Card = { label: string; detail: string; n?: number; total?: number };
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function WorldMap() {
   const st = ui.worldMap.value;
@@ -43,6 +50,11 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
   const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
   const [hover, setHover] = useState<{ label: string; detail: string; x: number; y: number } | null>(null);
   const [zoomIx, setZoomIx] = useState(cam.current.z);
+  // stepping through the places: the one in focus, where the stepping started, where the camera is easing to
+  const focusRef = useRef<string | null>(null);
+  const anchor = useRef<{ x: number; y: number } | null>(null);
+  const ease = useRef<{ cx: number; cy: number } | null>(null);
+  const [card, setCard] = useState<Card | null>(null);
 
   const size = () => { const c = canvasRef.current; return c ? { w: c.width, h: c.height } : { w: 1, h: 1 }; };
   const view = (): MapCam => ({ cx: cam.current.cx, cy: cam.current.cy, ppt: zooms[cam.current.z] });
@@ -61,7 +73,43 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
     setZoomIx(z);
     place(next);
   };
-  const recenter = () => place({ ...home(), ppt: zooms[cam.current.z] });
+  // the player takes the map somewhere: stepping starts afresh from there
+  const lookAround = () => {
+    if (focusRef.current || anchor.current || ease.current) { focusRef.current = null; anchor.current = null; ease.current = null; setCard(null); dirty.current = true; }
+  };
+  const pan = (cx: number, cy: number) => { lookAround(); place({ ...view(), cx, cy }); };
+  const recenter = () => { lookAround(); place({ ...home(), ppt: zooms[cam.current.z] }); };
+
+  // view: step through everything named on the map, nearest the starting point first, then outward
+  const stepMarks = (dir: 1 | -1) => {
+    if (!anchor.current) anchor.current = { x: cam.current.cx, y: cam.current.cy };
+    const order = markOrder(g.map.marks(where), anchor.current.x, anchor.current.y);
+    const m = stepMark(order, focusRef.current, dir);
+    if (!m) { setCard({ label: 'Nothing on the map yet', detail: 'Places join it as you find them' }); return; }
+    focusRef.current = markKey(m);
+    if (ui.reducedMotion.value) place({ ...view(), cx: m.tx, cy: m.ty });
+    else ease.current = { cx: m.tx, cy: m.ty };
+    setCard({ label: m.label, detail: m.detail || '', n: order.indexOf(m) + 1, total: order.length });
+    g.audio?.play('uiMove');
+    dirty.current = true;
+  };
+
+  // pins: at a tile (the cursor's), or at the middle of the map
+  const canPin = !here && where === 'overworld';
+  const pinAt = (x: number, y: number) => {
+    if (!canPin) return;
+    const r = togglePin(g.session.pins, x, y, Math.max(0.6, 12 / zooms[cam.current.z]));
+    g.session.pins = r.pins;
+    g.map.dirty = true;
+    dirty.current = true;
+    focusRef.current = null;
+    const name = r.pin ? `${cap(r.pin.color)} pin` : '';
+    setCard(r.did === 'full' ? { label: `${MAX_PINS} pins at most`, detail: 'Take one off first: press on it until it goes' }
+      : r.did === 'removed' ? { label: 'Pin taken off', detail: '' }
+      : { label: r.did === 'added' ? `${name} placed` : `Now a ${name.toLowerCase()}`, detail: 'Press on it again to change its colour, or to take it off' });
+    g.audio?.play(r.did === 'full' ? 'uiBack' : 'uiOk');
+  };
+  const pinMiddle = () => pinAt(cam.current.cx, cam.current.cy);
 
   // travel: pick a destination (and look at it), then go
   const select = (id: string | null) => {
@@ -107,7 +155,24 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
           ctx.restore();
         }
       }
-    } else g.map.drawPlayer(c, p.wx, p.wy, v.ppt, v.cx, v.cy, 1, g.frame);
+    } else {
+      g.map.drawPlayer(c, p.wx, p.wy, v.ppt, v.cx, v.cy, 1, g.frame);
+      const ctx = c.getContext('2d')!;
+      const f = focusRef.current && g.map.marks(where).find((m: { tx: number; ty: number; label: string }) => markKey(m) === focusRef.current);
+      if (f) ring(ctx, v, c.width, c.height, f.tx - 0.5, f.ty - 0.5, '#ffffff', 18, 2.5, true);
+      // where a pin would go, for the pad and the keys
+      if (canPin && g.input?.device !== 'mouse' && g.input?.device !== 'touch') {
+        const x = c.width / 2, y = c.height / 2;
+        ctx.save();
+        for (const [col, lw] of [['rgba(0,0,0,.7)', 4], ['#ffffff', 1.5]] as const) {
+          ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath();
+          ctx.moveTo(x - 9, y); ctx.lineTo(x - 3, y); ctx.moveTo(x + 3, y); ctx.lineTo(x + 9, y);
+          ctx.moveTo(x, y - 9); ctx.lineTo(x, y - 3); ctx.moveTo(x, y + 3); ctx.lineTo(x, y + 9);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
     dirty.current = false;
   };
 
@@ -115,11 +180,15 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
   useEffect(() => {
     ui.mapCtl = {
       zoom, recenter,
-      pan: (dx: number, dy: number) => place({ ...view(), cx: cam.current.cx + dx, cy: cam.current.cy + dy }),
+      pan: (dx: number, dy: number) => pan(cam.current.cx + dx, cam.current.cy + dy),
       view: () => ({ ...view(), z: cam.current.z }),
       confirm: go,
       select, step,
-      selected: () => selRef.current
+      selected: () => selRef.current,
+      stepMark: stepMarks,
+      focused: () => focusRef.current,
+      pin: pinMiddle,
+      pinAt
     };
     return () => { ui.mapCtl = null; };
   }, []);
@@ -151,7 +220,15 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
       if (m && Math.hypot(m.x, m.y) > 0.2) { vx += m.x; vy += m.y; }
       if (vx || vy) {
         const ppt = zooms[cam.current.z];
-        place({ ...view(), cx: cam.current.cx + (vx * PAN_PX * dt) / ppt, cy: cam.current.cy + (vy * PAN_PX * dt) / ppt });
+        pan(cam.current.cx + (vx * PAN_PX * dt) / ppt, cam.current.cy + (vy * PAN_PX * dt) / ppt);
+      } else if (ease.current) {
+        // glide to the place in focus
+        const e = ease.current, k = 1 - Math.pow(0.75, dt), x0 = cam.current.cx, y0 = cam.current.cy;
+        place({ ...view(), cx: x0 + (e.cx - x0) * k, cy: y0 + (e.cy - y0) * k });
+        if (Math.hypot(e.cx - cam.current.cx, e.cy - cam.current.cy) < 0.05 || Math.hypot(cam.current.cx - x0, cam.current.cy - y0) < 0.002) {
+          place({ ...view(), cx: e.cx, cy: e.cy });
+          ease.current = null;
+        }
       }
       if (dirty.current || g.map.dirty) { g.map.dirty = false; draw(); }
       raf = requestAnimationFrame(step);
@@ -160,15 +237,18 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // keys: pan while held, zoom, recentre (M and Esc close the map through the game's own handlers)
+  // keys: pan while held, zoom, recentre, step through places, pin (M and Esc close the map through the game's own handlers)
   useEffect(() => {
     const PAN = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
     const down = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
+      if (g.input?.keys?.actionFor(e.key) === 'map') return;
       if (PAN.includes(k)) { held.current.add(k); e.preventDefault(); }
       else if (k === '+' || k === '=') zoom(1);
       else if (k === '-' || k === '_') zoom(-1);
       else if (k === 'c' || k === 'home') recenter();
+      else if (!here && (k === 'q' || k === 'e') && !e.repeat) stepMarks(k === 'q' ? -1 : 1);
+      else if (k === 'p' && !e.repeat) pinMiddle();
     };
     const up = (e: KeyboardEvent) => { held.current.delete(e.key.toLowerCase()); };
     window.addEventListener('keydown', down);
@@ -176,9 +256,10 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
+  // a pointer in canvas pixels (the canvas may be a frame behind a change of its box's size, and stretched to fit)
   const local = (e: PointerEvent | WheelEvent) => {
-    const r = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const c = canvasRef.current!, r = c.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) * c.width) / (r.width || 1), y: ((e.clientY - r.top) * c.height) / (r.height || 1) };
   };
   const onDown = (e: PointerEvent) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -189,12 +270,12 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
     if (d) {
       const dx = e.clientX - d.x, dy = e.clientY - d.y;
       if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
-      if (d.moved) { const ppt = zooms[cam.current.z]; place({ ...view(), cx: d.cx - dx / ppt, cy: d.cy - dy / ppt }); setHover(null); }
+      if (d.moved) { const ppt = zooms[cam.current.z]; pan(d.cx - dx / ppt, d.cy - dy / ppt); setHover(null); }
       return;
     }
-    const at = local(e), { w, h } = size();
+    const at = local(e), { w, h } = size(), r = canvasRef.current!.getBoundingClientRect();
     const m = markAt(g.map.marks(where), view(), at.x, at.y, w, h, 16);
-    setHover(m ? { label: m.label, detail: m.detail || '', x: at.x, y: at.y } : null);
+    setHover(m ? { label: m.label, detail: m.detail || '', x: e.clientX - r.left, y: e.clientY - r.top } : null);
   };
   const onUp = (e: PointerEvent) => {
     const d = drag.current;
@@ -208,6 +289,11 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
       if (dd < bd) { bd = dd; best = x.node.id; }
     }
     if (best) select(best);
+  };
+  const onContext = (e: MouseEvent) => {
+    e.preventDefault();
+    const at = local(e as PointerEvent), { w, h } = size(), t = tileAt(view(), at.x, at.y, w, h);
+    pinAt(t.tx, t.ty);
   };
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -226,8 +312,8 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
   const hint = here
     ? (onPad() ? `D-pad to pick a destination · ${glyph('interact')} travel · ${glyph('cancel')} stay` : 'Click a ringed place or pick from the list, then Travel · Esc to stay')
     : onPad()
-    ? `Left stick to look around · ${glyph('prevHero')} ${glyph('nextHero')} zoom · ${glyph('skill1')} back to you · ${glyph('cancel')} close`
-    : 'Drag or WASD to look around · wheel or + - to zoom · C back to you · M or Esc to close';
+    ? `Left stick to look around · D-pad: from place to place${canPin ? ` · ${glyph('skill2')} pin` : ''} · ${glyph('prevHero')} ${glyph('nextHero')} zoom · ${glyph('skill1')} back to you · ${glyph('cancel')} close`
+    : `Drag or WASD to look around · Q E: from place to place${canPin ? ' · P or right-click: pin' : ''} · wheel or + - to zoom · C back to you · M or Esc to close`;
   const gold = ui.wallet.value.gold;
   const picked = dests.find((d) => d.node.id === sel) ?? null;
   return (
@@ -244,8 +330,14 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
       </div>
       <div class="view" ref={wrapRef}>
         <canvas ref={canvasRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-          onPointerLeave={() => setHover(null)} onWheel={onWheel} />
+          onPointerLeave={() => setHover(null)} onWheel={onWheel} onContextMenu={onContext} />
         {hover && <div class="tip" style={{ left: `${hover.x + 14}px`, top: `${hover.y + 10}px` }}><b>{hover.label}</b>{hover.detail && <small>{hover.detail}</small>}</div>}
+        {card && !here && (
+          <div class="card" aria-live="polite">
+            <b>{card.label}</b>{card.detail && <small>{card.detail}</small>}
+            {!!card.total && <span class="n">{card.n} of {card.total}</span>}
+          </div>
+        )}
         {here && (
           <div class="dests" aria-label="Destinations">
             {!dests.length && <div class="vs-empty">No other teleporter yet. Every town you enter joins the network, and so does every waypoint you build.</div>}
@@ -265,7 +357,10 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
         </div>
       )}
       <div class="foot">
-        <div class="legend">{legend.map(([ic, tx]) => <span key={tx}><Icon name={ic} /> {tx}</span>)}</div>
+        <div class="legend">
+          {legend.map(([ic, tx]) => <span key={tx}><Icon name={ic} /> {tx}</span>)}
+          {canPin && <span><i class="pin" style={{ background: PIN_HEX.gold }} /> Your pins</span>}
+        </div>
         <div class="hint">{hint}</div>
       </div>
     </div>

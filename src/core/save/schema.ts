@@ -109,6 +109,7 @@ export interface SaveData {
     towers: TowerSave[];                    // placed towers, construction sites and docks
     boats: Record<string, { x: number; y: number }>;  // dock id -> where its boat is moored
     caches: string[];                       // island treasure already opened
+    pins?: { tx: number; ty: number; color: string }[];   // the player's own pins on the world map
   };
   quests: QuestSave;                        // story progress, active quests, bounty board rotations
   codex: { monsters: string[]; spells: string[]; runes: string[] };   // what the party has met and found

@@ -4,6 +4,7 @@ import { BIOME_COLOR, BIOME, POI_INFO, GROUP_INFO, groupOf, isWaterBiome } from 
 import { blightColor } from '../core/world/corruption';
 import { SURFACE_NUM } from '../core/world/surfaces';
 import { drawIcon } from './icons';
+import { PIN_HEX } from '../core/world/mapView';
 import { FONT_UI, FONT_DISPLAY } from '../ui/fonts';
 
 const ROAD = SURFACE_NUM.road;
@@ -57,6 +58,7 @@ export class MapView {
         this.siteState = () => 'open';   // (id) => 'open' | 'done'
         this.sitesFor = null;            // (cx, cy) => Site[] near a chunk
         this.extras = () => [];          // () => [{ tx, ty, icon, label, color }] towers, docks, caches
+        this.pins = () => [];            // () => [{ tx, ty, color }] the player's own pins (overworld)
         this.regions = () => [];         // () => [{ tx, ty, name, title, capital }] regions the player has seen
         this.placeBadge = () => null;    // (poi) => 'visited' | 'cleared' | null: a mark on the place's icon
         this.superTiles = new Map();     // 8x8 chunks composited at one pixel per tile, for the zoomed-out world map
@@ -251,6 +253,18 @@ export class MapView {
                 }
             }
         }
+        if (mode === 'overworld') {
+            // the player's pins: a round head on a short stem, its point on the tile
+            const r = opts.big ? 6 : 3.5, stem = r * 1.7;
+            for (const p of this.pins()) {
+                const x = ox + (p.tx + 0.5) * ppt, y = oy + (p.ty + 0.5) * ppt;
+                if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
+                ctx.strokeStyle = '#0b0f18'; ctx.lineWidth = opts.big ? 3 : 2;
+                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - stem); ctx.stroke();
+                ctx.fillStyle = PIN_HEX[p.color] || PIN_HEX.gold;
+                ctx.beginPath(); ctx.arc(x, y - stem, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            }
+        }
         for (const m of mode === this.mode ? this.markers : []) {
             const x = ox + m.tx * ppt, y = oy + m.ty * ppt;
             drawIcon(ctx, m.icon, x, y, iconSize);
@@ -288,6 +302,7 @@ export class MapView {
         for (const l of this.lairs.values()) if (!this.lairDefeated(l.id)) out.push({ tx: l.tx, ty: l.ty, label: 'Warlord lair', detail: `Level ${l.level}` });
         for (const st of this.siteList.values()) if (!(st.kind === 'trigger' && this.siteState(st.id) === 'done')) out.push({ tx: st.tx, ty: st.ty, label: st.kind === 'claim' ? 'Claimable zone' : 'Ambush', detail: st.kind === 'claim' && this.siteState(st.id) === 'done' ? 'Claimed' : '' });
         for (const ex of this.extras()) if (ex.label || ex.name) out.push({ tx: ex.tx, ty: ex.ty, label: ex.name || ex.label, detail: ex.detail || '', extra: ex });
+        for (const p of this.pins()) out.push({ tx: p.tx + 0.5, ty: p.ty + 0.5, label: `${p.color[0].toUpperCase()}${p.color.slice(1)} pin`, detail: 'Your own mark', pin: p });
         return out;
     }
 

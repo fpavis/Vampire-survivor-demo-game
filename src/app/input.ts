@@ -360,9 +360,12 @@ export class InputSystem {
                 if (has('nextHero')) c.zoom(1);
                 if (has('skill1')) c.recenter();
                 if (has('interact')) c.confirm();
-                // travel: the d-pad steps through the destinations
+                // the d-pad steps through the destinations (travel) or the places on the map (looking); Y pins
                 const dir = DIRS.find((d) => has(d));
-                if (dir && c.step && uiBridge.worldMap.value && uiBridge.worldMap.value.mode === 'travel') c.step(dir === 'up' || dir === 'left' ? -1 : 1);
+                const by = dir === 'up' || dir === 'left' ? -1 : 1;
+                if (dir && uiBridge.worldMap.value?.mode === 'travel') c.step?.(by);
+                else if (dir) c.stepMark?.(by);
+                if (has('skill2')) c.pin?.();
             }
             return;
         }

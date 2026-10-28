@@ -382,6 +382,10 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-worldmap canvas:active{cursor:grabbing}
 .vs-worldmap .tip{position:absolute;pointer-events:none;background:rgba(8,12,22,.92);border:1px solid var(--c-line-2);border-radius:8px;padding:5px 9px;font-size:12px;display:flex;flex-direction:column;max-width:240px}
 .vs-worldmap .tip small{color:var(--c-muted)}
+.vs-worldmap .card{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);pointer-events:none;background:rgba(8,12,22,.92);border:1px solid var(--c-line-2);border-radius:10px;padding:7px 12px;display:flex;flex-direction:column;align-items:center;gap:2px;max-width:min(360px,90%);text-align:center}
+.vs-worldmap .card small{color:var(--c-muted);font-size:12px}
+.vs-worldmap .card .n{color:var(--c-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.vs-worldmap .legend .pin{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #0b0f18}
 .vs-worldmap .foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 16px;font-size:12px;color:var(--c-muted)}
 .vs-worldmap .legend{display:flex;flex-wrap:wrap;gap:4px 14px}
 .vs-worldmap .legend span{display:inline-flex;align-items:center;gap:5px}

@@ -40,6 +40,7 @@ import { FlowField } from '../core/world/nav';
 import { updateEnemy, SpatialHash } from '../core/ai/ai';
 import { GROUP_INFO, POI_INFO, WARLORDS, groupOf } from '../core/world/biomes';
 import { FogOfWar } from '../core/world/fog';
+import { cleanPins } from '../core/world/mapView';
 import { EventBus } from '../core/sim/events';
 import { randomSeed, seedFromText } from '../core/sim/rng';
 import {
@@ -177,7 +178,7 @@ class Game {
         this.story = new StoryDirector(this);
         this.vaults = new VaultSystem(this);
         this.events.on('QuestCompleted', (e) => { if (e.id === 'm6_sovereign') this.story.queueEnding(); });
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [], pins: [] };
         this.gemStash = null;
         this.fog = new FogOfWar();
         this.interiorFog = new FogOfWar();
@@ -645,7 +646,7 @@ class Game {
         this.pendingSeed = null;
         this.world.setSource(this.overworld);
         this.world.onChunk = null;
-        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [] };
+        this.session = { clearedCamps: {}, defeatedLairs: {}, cities: [], lastCity: null, claimed: {}, triggered: {}, gathered: [], shopSold: {}, boats: {}, caches: [], pins: [] };
         this.worldEvents.reset();
         this.inBlight = null;
         this.zoneCorrupt = 0;
@@ -657,6 +658,7 @@ class Game {
             this.session.clearedCamps = { ...save.world.clearedCamps };
             this.session.defeatedLairs = { ...save.world.defeatedLairs };
             this.session.cities = save.world.cities.map((c) => ({ ...c }));
+            this.session.pins = cleanPins(save.world.pins);
             this.visited = JSON.parse(JSON.stringify(save.world.places));
             this.fog = FogOfWar.fromJSON(save.world.fog);
         }
@@ -677,6 +679,7 @@ class Game {
             for (const m of this.quests.markers()) out.push(m);
             return out;
         };
+        this.map.pins = () => this.session.pins;
         this.map.regions = () => [...this.regionsSeen].map((id) => {
             const r = this.overworld.region(id);
             return { tx: r.tx, ty: r.ty, name: r.name, title: r.title, capital: r.capital ? r.capital.name : null };

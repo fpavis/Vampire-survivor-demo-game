@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsOfChunks, clampCenter, markAt, pixelOf, tileAt, zoomAt, type MapCam } from '../src/core/world/mapView';
+import { boundsOfChunks, clampCenter, markAt, pixelOf, tileAt, zoomAt, type MapCam, MAX_PINS, PIN_COLORS, cleanPins, markKey, markOrder, pinNear, stepMark, togglePin } from '../src/core/world/mapView';
 
 const cam: MapCam = { cx: 100, cy: -40, ppt: 4 };
 
@@ -33,5 +33,56 @@ describe('world map camera', () => {
     expect(markAt(marks, cam, 401, 301, 800, 600)?.label).toBe('here');
     expect(markAt(marks, cam, 411, 300, 800, 600)?.label).toBe('east');
     expect(markAt(marks, cam, 400, 380, 800, 600)).toBeNull();
+  });
+});
+
+describe('stepping through the marks', () => {
+  const marks = [
+    { tx: 10, ty: 0, label: 'Far' }, { tx: 2, ty: 0, label: 'Near' }, { tx: 0, ty: 5, label: 'Mid' }, { tx: -5, ty: 0, label: 'Also mid' }
+  ];
+  it('goes nearest first, then outward, ties by name', () => {
+    expect(markOrder(marks, 0, 0).map((m) => m.label)).toEqual(['Near', 'Also mid', 'Mid', 'Far']);
+  });
+  it('steps on and back, wrapping round, and starts at either end', () => {
+    const o = markOrder(marks, 0, 0);
+    expect(stepMark(o, null, 1)!.label).toBe('Near');
+    expect(stepMark(o, null, -1)!.label).toBe('Far');
+    expect(stepMark(o, markKey(o[0]), 1)!.label).toBe('Also mid');
+    expect(stepMark(o, markKey(o[3]), 1)!.label).toBe('Near');
+    expect(stepMark(o, markKey(o[0]), -1)!.label).toBe('Far');
+    expect(stepMark(o, 'gone', 1)!.label).toBe('Near');
+    expect(stepMark([], null, 1)).toBeNull();
+  });
+});
+
+describe('map pins', () => {
+  it('a press drops a gold pin on the tile, the next ones recolour it, then it goes', () => {
+    let r = togglePin([], 4.7, 9.2, 1);
+    expect(r.did).toBe('added');
+    expect(r.pins).toEqual([{ tx: 4, ty: 9, color: 'gold' }]);
+    const seen = [r.pins[0].color];
+    for (let i = 1; i < PIN_COLORS.length; i++) { r = togglePin(r.pins, 4.5, 9.5, 1); expect(r.did).toBe('recoloured'); seen.push(r.pins[0].color); }
+    expect(seen).toEqual([...PIN_COLORS]);
+    r = togglePin(r.pins, 4.4, 9.6, 1);
+    expect(r.did).toBe('removed');
+    expect(r.pins).toEqual([]);
+  });
+  it('only a pin within reach is the one pressed on; the nearest wins', () => {
+    const pins = [{ tx: 0, ty: 0, color: 'gold' as const }, { tx: 2, ty: 0, color: 'gold' as const }];
+    expect(pinNear(pins, 1.6, 0.5, 1)).toBe(1);
+    expect(pinNear(pins, 6, 6, 1)).toBe(-1);
+    expect(togglePin(pins, 6, 6, 1).did).toBe('added');
+  });
+  it('a full map takes no new pin', () => {
+    const pins = Array.from({ length: MAX_PINS }, (_, i) => ({ tx: i * 5, ty: 0, color: 'gold' as const }));
+    const r = togglePin(pins, 1000, 1000, 1);
+    expect(r.did).toBe('full');
+    expect(r.pins.length).toBe(MAX_PINS);
+  });
+  it('pins from a save are cleaned', () => {
+    expect(cleanPins(undefined)).toEqual([]);
+    expect(cleanPins([{ tx: 1.5, ty: 2, color: 'red' }, { tx: 1, ty: 2, color: 'blue' }, { tx: 'x', ty: 0 }, null, { tx: 3, ty: 3, color: 'mauve' }]))
+      .toEqual([{ tx: 1, ty: 2, color: 'red' }, { tx: 3, ty: 3, color: 'gold' }]);
+    expect(cleanPins(Array.from({ length: 50 }, (_, i) => ({ tx: i, ty: 0, color: 'gold' }))).length).toBe(MAX_PINS);
   });
 });

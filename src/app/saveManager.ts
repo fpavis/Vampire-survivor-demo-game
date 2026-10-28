@@ -34,7 +34,8 @@ export function buildSave(game: any): SaveData {
       shopSold: JSON.parse(JSON.stringify(game.session.shopSold)),
       towers: game.towers.serialize(),
       boats: JSON.parse(JSON.stringify(game.session.boats)),
-      caches: [...game.session.caches]
+      caches: [...game.session.caches],
+      pins: (game.session.pins || []).map((p: any) => ({ ...p }))
     },
     quests: game.quests.serialize(),
     tips: [...game.tips.seen],

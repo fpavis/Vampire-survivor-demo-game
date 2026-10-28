@@ -27,6 +27,7 @@ export function Controls() {
     ['Journal and quests', key('journal'), 'D-pad →'],
     ['Flip the menu\'s pages', 'Click a page, or its key', `${pad('prevHero')} · ${pad('nextHero')}`],
     ['World map', key('map'), pad('map')],
+    ['On the map: from place to place · pin', 'Q E · P or right-click', `D-pad · ${pad('skill2')}`],
     ['Back · close · cancel', 'Esc', pad('cancel')],
     ['Equip · lock on the Spells page', 'F · L', `${pad('skill1')} · ${pad('skill2')}`],
     ['Move through a menu', '↑ ↓ ← →', 'D-pad']
