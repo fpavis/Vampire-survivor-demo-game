@@ -36,7 +36,8 @@ await ev(() => {
     for (let r = minR; r < 520; r += 3) for (let a = 0; a < 6.28; a += 0.06) {
       const tx = Math.round(Math.cos(a) * r), ty = Math.round(Math.sin(a) * r);
       const s = g.world.surfaceAtPos(tx * T + 24, ty * T + 24);
-      if (s && s.id === id) {
+      // a spot the hero can stand on: one inside a rock or a tree would be moved off by the unstick
+      if (s && s.id === id && !g.world.blocked(tx * T + 24, ty * T + 24, g.state.player.radius)) {
         const p = g.state.player; p.wx = tx * T + 24; p.wy = ty * T + 24; g.cam.x = p.wx; g.cam.y = p.wy; g.lastFogTx = null;
         g.world.update(p.wx, p.wy, 1200, 760, true);
         for (const e of [...g.state.enemies]) e.dead = true; g.reap();
