@@ -371,7 +371,7 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-roll dd{margin:0;color:var(--c-text);font-variant-numeric:tabular-nums;font-weight:700}
 .vs-roll .fin{font-family:var(--font-display);font-size:22px;color:#f3e6c4;margin-top:56px}
 .vs-crash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,4,10,.86)}
-.vs-crash .box{width:min(560px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:18px 20px}
+.vs-crash .box{position:relative;width:min(560px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:18px 20px}
 .vs-crash h2{margin:0;display:flex;align-items:center;gap:8px;font-size:20px}
 .vs-crash h2 .vs-icon{color:#ff8a6a}
 .vs-crash p{margin:0;line-height:1.45}
