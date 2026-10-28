@@ -1,17 +1,15 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.13.0';
+export const GAME_VERSION = '0.14.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'Fixes from your second playtest',
+  title: 'Controllers, vibration and the world map',
   notes: [
-    'Switching heroes no longer passes on the last hero\'s wounds or drains the next one\'s mana',
-    'Switching works again after loading a save, and says how long it has left when it must wait',
-    'Mountains and cave walls have rounded, natural edges instead of square steps',
-    'Spells look for monsters on screen, not across it, and bolts stop at walls and mountains',
-    'The climbing tower is now the Expedition Mine, as it bores into the mountain',
-    'Bridges can be walked onto from their gatehouse, and building never traps you',
-    'From a town\'s teleporter the travel map scrolls over everything you have explored'
+    'A controller the browser does not recognise can be set up button by button in Settings, Controls',
+    'Vibration has its own strength, a test, and more moments to feel: crits, big kills, chests, boss entrances',
+    'On the world map the D-pad (or Q and E) goes from place to place, with a card naming each',
+    'Drop your own pins on the world map with Y, P or a right-click; they show on the minimap and are saved',
+    'From 0.13: mountains with natural edges, spells that stop at walls, the Expedition Mine'
   ]
 };
 
