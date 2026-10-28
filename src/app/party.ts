@@ -127,6 +127,7 @@ export class PartyRuntime {
         g.fx.shockwave(p.wx, p.wy, 150, col, 20, 5);
         g.fx.popup(p.wx, p.wy, this.def().name, col, 20, 90);
         g.audio.play('switch');
+        g.input?.haptic('switch');
         return true;
     }
 

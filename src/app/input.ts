@@ -2,7 +2,8 @@
 // One place for every way of playing: keyboard, mouse, touch and controller. It tracks which one the player is
 // using (so prompts and focus rings follow), reads the gamepad, and turns buttons into game actions.
 import {
-    DEFAULT_BINDINGS, DIRS, PadMapper, QUICK_PANELS, SETUP_STEPS, applyProfile, assignPad, emptyFrame, newlyPressed, padKind, profileFromCaptures
+    DEFAULT_BINDINGS, DIRS, HAPTICS, HapticGate, PadMapper, QUICK_PANELS, SETUP_STEPS, applyProfile, assignPad, emptyFrame, newlyPressed, padKind,
+    profileFromCaptures, scaleRumble
 } from '../core/input/gamepad';
 import { KeyMap } from '../core/input/bindings';
 import { ui as uiBridge } from '../ui/bridge';
@@ -28,6 +29,7 @@ export class InputSystem {
         this.profiles = {};              // per controller id: how its raw buttons map onto the standard layout
         this.setup = null;               // the guided setup in progress
         this.warned = new Set();         // unrecognised controllers already pointed at the setup
+        this.hapticGate = new HapticGate();
         this.loadPrefs();
         this.bind();
     }
@@ -37,6 +39,7 @@ export class InputSystem {
         try {
             const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
             if (typeof p.vibration === 'boolean') uiBridge.vibration.value = p.vibration;
+            if (typeof p.vibrationStrength === 'number') uiBridge.vibrationStrength.value = Math.min(1, Math.max(0, p.vibrationStrength));
             if (typeof p.deadzone === 'number') uiBridge.deadzone.value = Math.min(0.6, Math.max(0.05, p.deadzone));
             if (p.keys) this.keys = new KeyMap(p.keys);
             if (p.profiles && typeof p.profiles === 'object') this.profiles = p.profiles;
@@ -51,7 +54,7 @@ export class InputSystem {
 
     savePrefs() {
         this.mapper.options.deadzone = uiBridge.deadzone.value;
-        try { localStorage.setItem(PREFS_KEY, JSON.stringify({ vibration: uiBridge.vibration.value, deadzone: uiBridge.deadzone.value, keys: this.keys.toJSON(), pad: this.mapper.bindings, profiles: this.profiles })); } catch { /* storage unavailable */ }
+        try { localStorage.setItem(PREFS_KEY, JSON.stringify({ vibration: uiBridge.vibration.value, vibrationStrength: uiBridge.vibrationStrength.value, deadzone: uiBridge.deadzone.value, keys: this.keys.toJSON(), pad: this.mapper.bindings, profiles: this.profiles })); } catch { /* storage unavailable */ }
         uiBridge.padProfile.value = !!this.profiles[this.padId];
         uiBridge.bindVersion.value++;
     }
@@ -283,11 +286,18 @@ export class InputSystem {
         return m > 0.25 ? { x: a.x / m, y: a.y / m } : null;
     }
 
-    rumble(strong = 0.5, weak = 0.4, ms = 140) {
-        if (!uiBridge.vibration.value || this.device !== 'pad') return;
+    /**
+     * A named moment felt through the controller (core/input/gamepad HAPTICS), each kept to its cooldown, at the
+     * player's strength. Only while playing on the pad, except the test from Settings, which may be clicked.
+     */
+    haptic(name) {
+        const p = HAPTICS[name];
+        if (!p || !uiBridge.vibration.value || (this.device !== 'pad' && name !== 'test')) return;
+        if (!this.hapticGate.allow(name, performance.now())) return;
+        const r = scaleRumble(p, uiBridge.vibrationStrength.value);
         const pad = this.readPad();
         const act = pad && pad.vibrationActuator;
-        if (act && act.playEffect) act.playEffect('dual-rumble', { startDelay: 0, duration: ms, weakMagnitude: weak, strongMagnitude: strong }).catch(() => {});
+        if (r && act && act.playEffect) act.playEffect('dual-rumble', { startDelay: 0, duration: r.ms, weakMagnitude: r.weak, strongMagnitude: r.strong }).catch(() => {});
     }
 
     // ---------------------------------------------------------------- actions

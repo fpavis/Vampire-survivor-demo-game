@@ -1093,7 +1093,7 @@ export class SpellSystem {
         g.fx.burst(p.wx, p.wy, r.p.radius * 0.5, 0x8a6a4a, 26, 4, { size: 1.3, life: 34, up: 4, gravity: 0.12 });
         g.fx.burst(p.wx, p.wy, 20, 0xe8d8b8, 14, 3, { size: 0.9, life: 24, up: 3 });
         g.fx.flash(p.wx, p.wy, r.p.radius * 2.5, 0xffe0a0, 20);
-        g.input?.rumble(0.9, 0.5, 220);
+        g.input?.haptic('slam');
         for (let k = 1; k <= r.p.echo; k++) {
             const x = p.wx, y = p.wy;
             this.after(27 * k, () => { this.pulse(x, y, r.p.radius * 1.1, dmg * 0.6, r, 6, 'echo'); g.audio.play('slam', { x, y, vol: 0.6 }); g.fx.addShake(4); });
@@ -1173,6 +1173,7 @@ export class SpellSystem {
         g.invulnUntil = Math.max(g.invulnUntil || 0, g.frame + r.p.duration * 60 + 6);
         g.fx.burst(p.wx, p.wy, 10, 0xe8f4ff, 14, 3, { size: 0.8, life: 16, glow: true });
         g.fx.shockwave(p.wx, p.wy, 46, 0xe8f4ff, 14, 4);
+        g.input?.haptic('dash');
     }
 
     // translucent copy of the hero left behind while dashing
@@ -1223,6 +1224,7 @@ export class SpellSystem {
         const x0 = p.wx, y0 = p.wy;
         g.fx.burst(p.wx, p.wy, 20, r.color, 22, 3, { size: 0.9, life: 20, glow: true });
         g.fx.shockwave(p.wx, p.wy, 60, r.color, 16, 5);
+        g.input?.haptic('dash');
         let dist = 0;
         for (let t = 16; t <= r.p.range; t += 16) {
             if (g.world.blocked(p.wx + d.x * t, p.wy + d.y * t, p.radius, !!g.boat)) break;

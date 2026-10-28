@@ -217,6 +217,48 @@ export function newlyPressed(snap: PadSnapshot, rest: readonly number[]): PadSou
   return null;
 }
 
+/** A rumble: the heavy (low) and light (high) motors, 0..1, and how long it lasts. */
+export interface Rumble { strong: number; weak: number; ms: number }
+export type HapticName = 'hurt' | 'crit' | 'bigKill' | 'bossKill' | 'levelUp' | 'chest' | 'quest' | 'bossIntro' | 'switch' | 'dash' | 'slam' | 'wipe' | 'test';
+
+/**
+ * What each moment feels like, and how soon it may be felt again (ms), so a stream of hits or crits does not
+ * turn into one long buzz. Small things use the light motor briefly; the heavy motor is kept for big moments.
+ */
+export const HAPTICS: Record<HapticName, Rumble & { cooldown: number }> = {
+  hurt: { strong: 0.55, weak: 0.3, ms: 150, cooldown: 200 },
+  crit: { strong: 0, weak: 0.3, ms: 50, cooldown: 400 },
+  bigKill: { strong: 0.45, weak: 0.35, ms: 130, cooldown: 300 },
+  bossKill: { strong: 1, weak: 0.7, ms: 520, cooldown: 1500 },
+  levelUp: { strong: 0.3, weak: 0.8, ms: 260, cooldown: 600 },
+  chest: { strong: 0.2, weak: 0.6, ms: 170, cooldown: 400 },
+  quest: { strong: 0.3, weak: 0.7, ms: 240, cooldown: 600 },
+  bossIntro: { strong: 0.8, weak: 0.25, ms: 600, cooldown: 3000 },
+  switch: { strong: 0.2, weak: 0.45, ms: 110, cooldown: 300 },
+  dash: { strong: 0.12, weak: 0.35, ms: 80, cooldown: 200 },
+  slam: { strong: 0.9, weak: 0.5, ms: 220, cooldown: 300 },
+  wipe: { strong: 1, weak: 1, ms: 700, cooldown: 3000 },
+  test: { strong: 0.6, weak: 0.6, ms: 200, cooldown: 250 }
+};
+
+/** A rumble at the player's strength (0..1), or null when that is nothing. The length stays as it is. */
+export function scaleRumble(r: Rumble, strength: number): Rumble | null {
+  const k = Math.max(0, Math.min(1, strength));
+  if (k <= 0 || (r.strong <= 0 && r.weak <= 0)) return null;
+  return { strong: Math.min(1, r.strong * k), weak: Math.min(1, r.weak * k), ms: r.ms };
+}
+
+/** Keeps each pattern to its cooldown. */
+export class HapticGate {
+  private last = new Map<HapticName, number>();
+  allow(name: HapticName, now: number): boolean {
+    const t = this.last.get(name);
+    if (t !== undefined && now - t < HAPTICS[name].cooldown) return false;
+    this.last.set(name, now);
+    return true;
+  }
+}
+
 /** Panels that the d-pad opens when no menu is up (the buttons are fixed, so they live here as data). */
 export type QuickPanel = 'spells' | 'upgrades' | 'build' | 'journal';
 export const QUICK_PANELS: Record<Dir, QuickPanel | null> = { up: 'spells', down: 'upgrades', left: 'build', right: 'journal' };

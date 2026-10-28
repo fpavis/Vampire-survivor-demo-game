@@ -195,7 +195,7 @@ export class QuestSystem {
         g.fx.pillar(p.wx, p.wy, 0xffd84a, 60, 70, 260);
         g.ui.banner(`QUEST COMPLETE · ${title.toUpperCase()}`, 0xffd84a);
         g.audio.play('questDone');
-        g.input.rumble(0.3, 0.7, 240);
+        g.input.haptic('quest');
     }
 
     turnInQuest(id) {

@@ -119,6 +119,7 @@ export class StoryDirector {
         const g = this.game;
         const c = e.kraken ? krakenCard('boss') : bossIntroCard(e.lord || null, ENEMY_TYPES[e.type] ? ENEMY_TYPES[e.type].name : e.type, this.groupOf(e));
         g.audio.stinger('stingBoss');
+        g.input?.haptic('bossIntro');
         // a demon lord speaks for itself; a warlord, or anyone when the player prefers cards, gets the card
         const pic = e.lord ? portrait(g, e.type) : '';
         if (!e.lord || !this.play(lordIntroScene(e.lord).map((l) => ({ ...l, portrait: pic })), { at: { x: e.wx, y: e.wy } })) this.card(c, 4200);

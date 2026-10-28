@@ -174,7 +174,14 @@ function SettingsTabs({ title }: { title: boolean }) {
             <Toggle label="Aim dashes and blinks at the cursor" on={s.aimAtCursor} set={(v) => set({ aimAtCursor: v })} icon="spell-dash" />
             <Toggle label="Experimental mouse interaction: click a chest, tree or door within reach to use it" on={s.mouseInteract} set={(v) => set({ mouseInteract: v })} icon="hand" />
             <div class="vs-sec">CONTROLLER{ui.padName.value ? ` — ${ui.padName.value}` : ' — none detected (press any button on it)'}</div>
-            <button class="vs-btn" onClick={() => { ui.vibration.value = !ui.vibration.value; game.input.savePrefs(); game.input.rumble(0.6, 0.6, 200); }}><Icon name={ui.vibration.value ? 'vibrate' : 'vibrate-off'} /> {ui.vibration.value ? 'Vibration is on' : 'Vibration is off'}</button>
+            <button class="vs-btn" onClick={() => { ui.vibration.value = !ui.vibration.value; game.input.savePrefs(); game.input.haptic('test'); }}><Icon name={ui.vibration.value ? 'vibrate' : 'vibrate-off'} /> {ui.vibration.value ? 'Vibration is on' : 'Vibration is off'}</button>
+            {ui.vibration.value && (
+              <>
+                <Slider label="Vibration strength" min={0} max={1} step={0.1} value={ui.vibrationStrength.value} fmt={pct}
+                  onInput={(v) => { ui.vibrationStrength.value = v; game.input.savePrefs(); game.input.haptic('test'); }} />
+                <button class="vs-btn" data-act="rumble-test" onClick={() => game.input.haptic('test')}><Icon name="vibrate" /> Test the vibration</button>
+              </>
+            )}
             <Slider label="Stick dead zone" min={0.05} max={0.6} step={0.05} value={ui.deadzone.value} fmt={pct}
               onInput={(v) => { ui.deadzone.value = v; game.input.savePrefs(); }} />
             {ui.padName.value && (

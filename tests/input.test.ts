@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BTN, DEFAULT_BINDINGS, PadMapper, SETUP_STEPS, applyProfile, buttonLabel, deadzone, newlyPressed, padGlyph, padKind, pickNeighbor,
-  profileFromCaptures, stickDir, type PadSnapshot, type PadSource, type Rect
+  BTN, DEFAULT_BINDINGS, HAPTICS, HapticGate, PadMapper, SETUP_STEPS, applyProfile, buttonLabel, deadzone, newlyPressed, padGlyph, padKind, pickNeighbor,
+  profileFromCaptures, scaleRumble, stickDir, type PadSnapshot, type PadSource, type Rect
 } from '../src/core/input/gamepad';
 
 const snap = (over: { axes?: number[]; down?: number[]; id?: string } = {}): PadSnapshot => ({
@@ -242,5 +242,38 @@ describe('pad profiles', () => {
     expect(newlyPressed(raw([], [1, 0, 0, 0, 0, 0, 0, 0]), rest)).toBeNull();
     // an axis that rests at -1 (some triggers) only counts when it moves
     expect(newlyPressed(raw([], [0, 0, 0, 0, 0, -1, 0, 0]), [0, 0, 0, 0, 0, -1, 0, 0])).toBeNull();
+  });
+});
+
+describe('haptics', () => {
+  it('scales both motors by the strength and keeps the length', () => {
+    expect(scaleRumble({ strong: 0.6, weak: 0.4, ms: 200 }, 0.5)).toEqual({ strong: 0.3, weak: 0.2, ms: 200 });
+    expect(scaleRumble({ strong: 0.6, weak: 0.4, ms: 200 }, 1)).toEqual({ strong: 0.6, weak: 0.4, ms: 200 });
+    expect(scaleRumble({ strong: 0.6, weak: 0.4, ms: 200 }, 7)).toEqual({ strong: 0.6, weak: 0.4, ms: 200 });
+  });
+
+  it('sends nothing at strength zero', () => {
+    expect(scaleRumble(HAPTICS.wipe, 0)).toBeNull();
+    expect(scaleRumble(HAPTICS.wipe, -1)).toBeNull();
+  });
+
+  it('every pattern is a real rumble within the motors\' range', () => {
+    for (const [name, p] of Object.entries(HAPTICS)) {
+      expect(p.strong + p.weak, name).toBeGreaterThan(0);
+      expect(Math.max(p.strong, p.weak), name).toBeLessThanOrEqual(1);
+      expect(p.ms, name).toBeGreaterThan(0);
+      expect(p.ms, name).toBeLessThanOrEqual(1000);
+    }
+    // the big moments use the heavy motor harder than the small ones
+    expect(HAPTICS.bossKill.strong).toBeGreaterThan(HAPTICS.crit.strong);
+    expect(HAPTICS.wipe.ms).toBeGreaterThan(HAPTICS.dash.ms);
+  });
+
+  it('keeps each pattern to its cooldown, separately', () => {
+    const g = new HapticGate();
+    expect(g.allow('crit', 1000)).toBe(true);
+    expect(g.allow('crit', 1000 + HAPTICS.crit.cooldown - 1)).toBe(false);
+    expect(g.allow('hurt', 1001)).toBe(true);
+    expect(g.allow('crit', 1000 + HAPTICS.crit.cooldown)).toBe(true);
   });
 });

@@ -88,6 +88,7 @@ export const ui = {
   menuPage: signal<MenuPage>('party'),        // its page, kept between openings
   menuSeq: signal(0),                         // bumps on every opening or page jump, so the page can take focus
   vibration: signal(true),
+  vibrationStrength: signal(0.7),
   deadzone: signal(0.2),
   textScale: signal(1),
   palette: signal<'default' | 'redgreen' | 'blueyellow'>('default'),

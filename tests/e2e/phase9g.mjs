@@ -1,5 +1,5 @@
 // Phase 9g end-to-end checks: the input deferrals. A controller the browser cannot lay out is set up by hand
-// and then works like a standard pad. Sections can be picked with ONLY=profile,...; THROTTLE=n slows the CPU
+// and then works like a standard pad. Sections can be picked with ONLY=profile,haptics,...; THROTTLE=n slows the CPU
 // like a busy CI runner.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
@@ -45,10 +45,10 @@ const pad = (o = {}) => ev((o) => {
   p.axes = o.axes || [0, 0, 0, 0, 0, 0];
   for (let i = 0; i < p.buttons.length; i++) { const on = (o.down || []).includes(i); p.buttons[i] = { pressed: on, value: on ? 1 : 0 }; }
 }, o);
-// press until the real ticker has polled it (seen in the given predicate), then let go until it has polled that
-// too (during the setup: until it is ready for the next button)
+// once the real ticker has seen everything let go (during the setup: it is ready for the next button), press until
+// it has polled the press (seen in the given predicate), then let go until it has polled that too
 const released = () => { const i = window.game.input; return i.setup ? i.setup.armed : i.frame.held.size === 0; };
-const press = async (o, seen, arg) => { await pad(o); const ok = await until(seen, arg); await pad(); await until(released); return ok; };
+const press = async (o, seen, arg) => { await until(released); await pad(o); const ok = await until(seen, arg); await pad(); await until(released); return ok; };
 
 await page.goto(`http://localhost:${PORT}/`);
 await page.waitForFunction(() => !!window.game);
@@ -164,6 +164,66 @@ if (want('profile')) {
   }), PAD_ID);
   check('Forget drops the setup', !forgot.saved && !forgot.flag && !forgot.forget, JSON.stringify(forgot));
   await ev(() => window.game.ui.closeMenu());
+}
+
+// ---- 9g.2: haptics have their own strength, named patterns and cooldowns
+if (want('haptics')) {
+  const rumbles = () => ev(() => (window.__rumble || []).map(([, o]) => ({ s: Math.round(o.strongMagnitude * 1000) / 1000, w: Math.round(o.weakMagnitude * 1000) / 1000, ms: o.duration })));
+  const near = (a, b) => Math.abs(a - b) < 0.002;
+  // play on the pad: a push of the stick
+  await press({ axes: [0.9, 0, 0, 0, 0, 0] }, () => window.game.input.device === 'pad');
+  await ev(() => { window.__rumble = []; window.__dev.ui.vibration.value = true; });
+  const strength0 = await ev(() => window.__dev.ui.vibrationStrength.value);
+  check('vibration strength starts at 70%', near(strength0, 0.7), String(strength0));
+
+  // a real moment: switching heroes, felt at 70% of its pattern
+  await ev(() => { const pr = window.game.party; pr.cdUntil = 0; pr.switchTo(pr.active === 0 ? 1 : 0, true); });
+  let r = await rumbles();
+  check('switching heroes is felt, scaled by the strength', r.length === 1 && near(r[0].s, 0.2 * 0.7) && near(r[0].w, 0.45 * 0.7) && r[0].ms === 110, JSON.stringify(r));
+
+  // a hurt hero, through the real hook
+  await ev(() => { window.__rumble = []; const g = window.game; g.godMode = false; g.state.health = g.state.maxHealth = 500; g.invulnUntil = 0; g.lastHurt = -99; g.hurtPlayer(1); g.godMode = true; });
+  r = await rumbles();
+  check('being hurt is felt', r.length === 1 && near(r[0].s, 0.55 * 0.7) && r[0].ms === 150, JSON.stringify(r));
+
+  // a stream of crits is one short tick, not a buzz
+  await ev(() => { window.__rumble = []; for (let i = 0; i < 5; i++) window.game.input.haptic('crit'); });
+  r = await rumbles();
+  check('five crits at once are felt once, on the light motor', r.length === 1 && r[0].s === 0 && r[0].w > 0, JSON.stringify(r));
+
+  // the setting: a slider beside the toggle, with a test
+  await ev(() => window.game.ui.openMenu('settings'));
+  await until(() => !!document.querySelector('.vs-pause [data-tab="controls"]'));
+  await ev(() => document.querySelector('.vs-pause [data-tab="controls"]').click());
+  const slider = () => '[...document.querySelectorAll(".vs-pause input[type=range]")].find((x) => /Vibration strength/.test(x.closest("label").innerText))';
+  await until(new Function(`return !!${slider()}`));
+  const setStrength = (v) => ev(([sel, v]) => { const el = eval(sel); el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, [slider(), v]);
+  await ev(() => { window.__rumble = []; });
+  await page.waitForTimeout(300);
+  await setStrength(0.3);
+  r = await rumbles();
+  const saved = await ev(() => JSON.parse(localStorage.getItem('vs.input.v1') || '{}').vibrationStrength);
+  check('moving the slider plays the test at the new strength and is remembered', r.length === 1 && near(r[0].s, 0.18) && near(r[0].w, 0.18) && near(saved, 0.3), `${JSON.stringify(r)} saved ${saved}`);
+  await page.waitForTimeout(300);
+  await ev(() => document.querySelector('[data-act="rumble-test"]').click());
+  r = await rumbles();
+  check('"Test the vibration" plays one', r.length === 2, JSON.stringify(r));
+
+  await page.waitForTimeout(300);
+  await ev(() => { window.__rumble = []; });
+  await setStrength(0);
+  await ev(() => { const g = window.game; g.input.haptic('hurt'); g.input.haptic('levelUp'); g.input.haptic('wipe'); });
+  r = await rumbles();
+  check('at strength 0 nothing is sent', r.length === 0, JSON.stringify(r));
+
+  await setStrength(0.7);
+  await ev(() => { window.__rumble = []; const b = [...document.querySelectorAll('.vs-pause .vs-btn')].find((x) => /Vibration is on/.test(x.innerText)); b.click(); });
+  await page.waitForTimeout(150);
+  const hidden = await ev(() => !document.querySelector('[data-act="rumble-test"]'));
+  await ev(() => { const g = window.game; g.input.haptic('bossKill'); g.input.haptic('test'); });
+  r = await rumbles();
+  check('with vibration off: no rumble, and the strength and test are hidden', r.length === 0 && hidden, JSON.stringify(r));
+  await ev(() => { window.__dev.ui.vibration.value = true; window.game.input.savePrefs(); window.game.ui.closeMenu(); });
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

@@ -1107,7 +1107,7 @@ class Game {
             this.lastHurt = this.frame;
             this.ui.flashDamage();
             this.fx.addShake(3);
-            this.input.rumble(0.55, 0.3, 150);
+            this.input.haptic('hurt');
             this.audio.play('hurt');
         }
     }
@@ -1274,7 +1274,7 @@ class Game {
                 else this.fx.damageNumber(e.uid, e.wx, e.wy, dmg, opts.color || 0xffffff, 16, e.baseHeight + 8);
             }
             this.audio.play(crit ? 'crit' : 'hit', { x: e.wx, y: e.wy });
-            if (crit) this.addHitStop('crit');
+            if (crit) { this.addHitStop('crit'); this.input.haptic('crit'); }
         }
         // a training dummy only counts the damage, per skill: no knock-back, no waking, no death
         if (e.dummy) { this.dummy.hit(e, dmg, opts.source); e.hitFlash = 6; e.health = e.maxHealth; return; }
@@ -1301,8 +1301,8 @@ class Game {
         s.score += e.experienceValue * 2;
         this.fx.death(e.wx, e.wy, type.color, e.isBoss);
         this.audio.play(e.isBoss ? 'bossDown' : e.radius > 22 || e.elite ? 'killBig' : 'kill', { x: e.wx, y: e.wy });
-        if (e.isBoss || e.dungeonBoss) this.addHitStop('bossKill');
-        else if (e.elite || e.radius > 22) this.addHitStop('bigKill');
+        if (e.isBoss || e.dungeonBoss) { this.addHitStop('bossKill'); this.input.haptic('bossKill'); }
+        else if (e.elite || e.radius > 22) { this.addHitStop('bigKill'); this.input.haptic('bigKill'); }
 
         if (type.onDeath) this.spawnMinions(type.onDeath.spawn, type.onDeath.count, e.wx, e.wy, e.level);
         this.events.emit('EnemyKilled', { type: e.type, level: e.level, x: e.wx, y: e.wy, boss: !!e.isBoss, group: this.mode === 'interior' && this.interiorPoi ? this.interiorPoi.group : this.zoneGroup, dungeon: !!e.dungeonBoss });
@@ -1905,6 +1905,7 @@ class Game {
         it.sprite.texture = set[1].texture;
         this.fx.burst(it.x, it.y, 28, 0xffd84a, 30, 3.2, { size: 0.9, life: 40, up: 4.2 });
         this.audio.play('chest');
+        this.input.haptic('chest');
         this.map.markers = this.map.markers.filter((m) => Math.abs(m.tx - it.x / T) > 0.01 || m.icon !== 'chest');
         this.map.dirty = true;
         if (it.idx === 'boss') { this.fx.pillar(it.x, it.y, 0xffd84a, 80, 80, 300); this.dungeons.openBossChest(it); }
@@ -2165,7 +2166,7 @@ class Game {
         this.fx.pillar(p.wx, p.wy, 0xffe27a, 60, 70, 260);
         this.fx.shockwave(p.wx, p.wy, 220, 0xffe27a, 26, 6);
         this.fx.addShake(3);
-        this.input.rumble(0.3, 0.8, 260);
+        this.input.haptic('levelUp');
         this.audio.play('levelup');
         this.ui.toast(`Level ${s.level}!  ${s.pending} upgrade${s.pending > 1 ? 's' : ''} ready (${quickGlyph('upgrades')})`);
         this.requestSave('level', true);
@@ -2295,6 +2296,7 @@ class Game {
         s.gameOver = true;
         s.health = 0;
         s.pointerDown = false;
+        this.input.haptic('wipe');
         this.ui.update(this, 1);
         this.fx.death(s.player.wx, s.player.wy, 0x6aa8ff, true);
         s.player.visible = false;
