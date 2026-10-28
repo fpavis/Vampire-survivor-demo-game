@@ -186,6 +186,10 @@ if (want('reach')) {
       let inWall = 0, shots = 0, seen = new Set();
       for (let i = 0; i < frames; i++) {
         e.wx = ex; e.wy = ey;
+        // only the planted monster may be a target: anything the world spawns meanwhile is cleared
+        let other = false;
+        for (const o of g.state.enemies) if (o !== e && !o.dead) { o.dead = true; o.silent = true; other = true; }
+        if (other) g.reap();
         g.gameLoop(1);
         for (const b of sp.bullets) { if (!seen.has(b)) { seen.add(b); shots++; } if (g.world.shotBlocked(b.sprite.wx, b.sprite.wy)) inWall++; }
       }
