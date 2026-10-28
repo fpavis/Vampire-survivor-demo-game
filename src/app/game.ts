@@ -82,6 +82,7 @@ import { showDamageNumber } from '../core/settings/settings';
 import { formatPlayTime, listSlots, newestSlot, shouldRotate, slotLabel, writeSlot } from '../core/save/slots';
 import { discover, emptyCodex } from '../core/codex/codex';
 import { guarded, installCrashHandlers } from './crash';
+import { AutoTune } from './autotune';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 class Game {
@@ -160,6 +161,8 @@ class Game {
         applyAccess(this);
         this.perf = new PerfOverlay(this);
         loadSettings();
+        this.autoTune = new AutoTune(this);
+        this.autoTune.startBench();
         applySettings(this);
         this.ui.game = this;
         mountUi(this);
@@ -293,6 +296,7 @@ class Game {
 
     menuLoop(delta) {
         this.input.poll();
+        this.autoTune.titleFrame(this.app.ticker.elapsedMS);
         this.audio.music.setTrack('title');
         this.frame += delta;
         this.cam.x += 0.7 * delta;
@@ -763,6 +767,8 @@ class Game {
         this.ui.onInteract = () => this.interact();
         this.ui.onMapToggle = () => this.toggleMap();
         this.ui.setHUDVisible(true);
+        this.autoTune.finishBench();
+        if (this.autoTune.notice) { this.ui.toast(this.autoTune.notice, 'gauge'); this.autoTune.notice = null; }
         this.ui.shown = { hp: -1, xp: -1, level: -1, slots: '' };
         this.ui.displayHp = gameState.health;
         this.ui.displayXp = gameState.experience;
@@ -920,6 +926,7 @@ class Game {
     gameLoop(rawDelta) {
         const t0 = this.perf && this.perf.shown ? performance.now() : 0;
         this.input.poll();
+        if (!this.state.paused) this.autoTune.playFrame(this.app.ticker.elapsedMS);
         this.accum = Math.min(this.accum + rawDelta * this.timeScale, 5 * this.timeScale);
         while (this.accum >= 1) {
             this.accum -= 1;
@@ -1160,9 +1167,21 @@ class Game {
         this.flow.update(p.wx, p.wy);
 
         let engaged = 0;
+        // a resident idling at home a screen and a half away thinks every 4th step, with the time made up: it
+        // cannot see the party from there, and nobody sees it
+        const farX = this.viewW * 0.75, farY = (this.viewH / TILT) * 0.75, f4 = this.frame | 0;
         for (let i = 0; i < list.length; i++) {
             const e = list[i];
             if (e.dead || e.dummy) continue;
+            if (e.shell === 'idle' && e.home && !(e.hitFlash > 0) && (Math.abs(e.wx - p.wx) > farX || Math.abs(e.wy - p.wy) > farY)) {
+                e.idleAcc = (e.idleAcc || 0) + delta;
+                if ((f4 + e.uid) % 4 !== 0) continue;
+                const d = e.idleAcc;
+                e.idleAcc = 0;
+                updateEnemy(this, e, d);
+                continue;
+            }
+            if (e.idleAcc) e.idleAcc = 0;
             updateEnemy(this, e, delta);
             // a warlord or demon lord that notices the party gets its card
             if ((e.isBoss || e.dungeonBoss) && !e.introduced && !e.dormant && (!e.home || e.shell === 'engaged')) { e.introduced = true; this.story.bossIntro(e); }
@@ -2263,9 +2282,14 @@ class Game {
         EntityManager.place(p);
         EntityManager.animatePlayer(p, this.frame, p.moving, p.facing);
 
+        // a monster well off screen is neither animated nor drawn (it still moves, fights and is placed)
+        const hw = this.viewW / 2 + 180, hh = this.viewH / (2 * TILT) + 240, cx = this.cam.x, cy = this.cam.y;
         for (const e of s.enemies) {
             if (e.dead) continue;
             EntityManager.place(e);
+            const on = Math.abs(e.wx - cx) < hw && Math.abs(e.wy - cy) < hh;
+            if (e.renderable !== on) e.renderable = on;
+            if (!on) continue;
             EntityManager.animateEnemy(e, this.frame);
             if (e.elite) e.marker.alpha = 0.6 + Math.sin(this.frame * 0.15) * 0.4;
         }

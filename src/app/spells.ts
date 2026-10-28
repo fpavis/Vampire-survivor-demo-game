@@ -63,7 +63,7 @@ export class SpellSystem {
     }
 
     clearProjectiles() {
-        this.bullets.forEach((b) => EntityManager.cleanup(b.sprite));
+        this.bullets.forEach((b) => EntityManager.release(b.sprite));
         this.rings.forEach((r) => r.g.destroy());
         this.meteors.forEach((m) => { m.tele.destroy(); EntityManager.cleanup(m.rock); });
         this.bolts.forEach((b) => b.g.destroy());
@@ -617,7 +617,7 @@ export class SpellSystem {
             }
             if (remove) {
                 this.game.fx.hit(sp.wx, sp.wy, b.r.color);
-                EntityManager.cleanup(sp);
+                EntityManager.release(sp);
                 this.bullets.splice(i, 1);
             }
         }

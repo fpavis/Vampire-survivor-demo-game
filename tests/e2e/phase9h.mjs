@@ -1,5 +1,5 @@
 // Phase 9h end-to-end checks: robustness. A crash shows a screen with a report and keeps the last good save;
-// storage that will not save says so. Sections can be picked with ONLY=crash,storage,pwa; THROTTLE=n slows the CPU.
+// storage that will not save says so. Sections can be picked with ONLY=crash,storage,pwa,perf; THROTTLE=n slows the CPU.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 
@@ -193,6 +193,86 @@ if (want('pwa')) {
   await pp.waitForTimeout(500);
   check('held sideways, there is no hint', await pp.evaluate(() => !document.querySelector('.vs-turn')));
   await phone.close();
+}
+
+// ---- 9h.3: pools, monsters off screen, dynamic resolution, the first-run pick
+if (want('perf')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { window.__forceSeed = 2024; window.__autoTune = { skip: 2, frames: 12 }; });
+  const pg = await newPage(ctx);
+  const pev = (fn, arg) => pg.evaluate(fn, arg);
+  await pg.goto(`http://localhost:${PORT}/`);
+  // a first start: the title scene is timed and a preset picked and saved
+  const picked = await pg.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('vs.settings.v1') || 'null')?.quality; } catch { return null; } }, null, { timeout: 30000 }).then((h) => h.jsonValue(), () => null);
+  check('a first start picks a quality preset for the device and keeps it', ['high', 'medium', 'low'].includes(picked), String(picked));
+  await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  await pg.keyboard.press('Enter');
+  await pg.waitForFunction(() => window.game.state.player && window.__dev, null, { timeout: 30000 });
+  const told = await pg.waitForFunction(() => window.__dev.ui.log.value.some((l) => /Graphics set to (High|Medium|Low) for this device/.test(l.text)), null, { timeout: 8000 }).then(() => true, () => false);
+  check('...and says so when the game starts', told);
+  const again = await pev(() => window.game.autoTune.bench === null);
+  check('...once: a later start does not time it again', again);
+
+  // dynamic resolution, fed frame times by hand (the game is held so its own slow frames do not count)
+  const dyn = await pev(() => {
+    const g = window.game, at = g.autoTune;
+    g.state.paused = true;
+    const r0 = g.app.renderer.resolution;
+    for (let i = 0; i < 60; i++) at.playFrame(40);
+    const down = { f: at.factor, r: g.app.renderer.resolution };
+    for (let i = 0; i < 700; i++) at.playFrame(8);
+    const up = { f: at.factor, r: g.app.renderer.resolution };
+    return { r0, down, up };
+  });
+  check('two seconds of long frames lower the resolution a step', dyn.down.f === 0.9 && Math.abs(dyn.down.r - dyn.r0 * 0.9) < 0.02, JSON.stringify(dyn));
+  check('...and five seconds with room bring it back', dyn.up.f === 1 && Math.abs(dyn.up.r - dyn.r0) < 0.01, JSON.stringify(dyn.up));
+  await pev(() => window.game.ui.openMenu('settings'));
+  await pg.waitForFunction(() => !!document.querySelector('.vs-pause [data-tab="video"]'));
+  await pev(() => document.querySelector('.vs-pause [data-tab="video"]').click());
+  const tog = await pg.waitForFunction(() => [...document.querySelectorAll('.vs-pause .vs-toggle')].some((b) => /cannot keep up/.test(b.innerText)), null, { timeout: 5000 }).then(() => true, () => false);
+  if (tog) await pev(() => [...document.querySelectorAll('.vs-pause .vs-toggle')].find((b) => /cannot keep up/.test(b.innerText)).click());
+  const off = await pev(() => { const at = window.game.autoTune; for (let i = 0; i < 200; i++) at.playFrame(40); return at.factor; });
+  check('the Video switch turns it off', tog && off === 1, String(off));
+  await pev(() => { window.game.ui.closeMenu(); window.game.state.paused = false; });
+
+  // pools: a spent particle's sprite and a spent bolt come back for the next ones
+  const pool = await pev(() => {
+    const g = window.game, p = g.state.player;
+    g.fx.burst(p.wx, p.wy, 10, 0xffffff, 20, 2, { life: 6 });
+    for (let i = 0; i < 20; i++) g.fx.update(1);
+    const spent = g.fx.spritePool.length;
+    g.fx.burst(p.wx, p.wy, 10, 0xffffff, 8, 2, { life: 6 });
+    return { spent, after: g.fx.spritePool.length };
+  });
+  check('spent particles go back to a pool and are reused', pool.spent >= 20 && pool.after === pool.spent - 8, JSON.stringify(pool));
+  const bolt = await pev(() => {
+    const g = window.game, sp = g.spells, p = g.state.player;
+    g.godMode = true;
+    for (const e of g.state.enemies) e.dead = true;
+    g.reap();
+    const it = sp.addSpell('bolt', 1);
+    sp.setLoadout([it.uid], sp.active);
+    const target = g.makeEnemy('SLIME', p.wx + 200, p.wy, { level: 1 });
+    target.health = target.maxHealth = 1e6;
+    let first = null;
+    for (let f = 0; f < 240 && !first; f++) { g.gameLoop(1); first = sp.bullets[0]?.sprite || null; }
+    for (let f = 0; f < 240 && sp.bullets.some((b) => b.sprite === first); f++) g.gameLoop(1);
+    let reused = false;
+    for (let f = 0; f < 300 && !reused; f++) { g.gameLoop(1); reused = sp.bullets.some((b) => b.sprite === first); }
+    return { fired: !!first, reused };
+  });
+  check('a spent bolt flies again instead of being rebuilt', bolt.fired && bolt.reused, JSON.stringify(bolt));
+
+  // monsters well off screen are neither animated nor drawn; on screen they are
+  const vis = await pev(() => {
+    const g = window.game, p = g.state.player;
+    const far = g.makeEnemy('SLIME', p.wx + 3000, p.wy, { level: 1 });
+    const near = g.makeEnemy('SLIME', p.wx + 120, p.wy, { level: 1 });
+    g.gameLoop(1);
+    return { far: far.renderable, near: near.renderable };
+  });
+  check('a monster far off screen is not drawn; one on screen is', vis.far === false && vis.near === true, JSON.stringify(vis));
+  await ctx.close();
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

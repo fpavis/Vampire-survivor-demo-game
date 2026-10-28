@@ -142,6 +142,7 @@ function SettingsTabs({ title }: { title: boolean }) {
             <FullscreenToggle />
             <Choice label="Quality" value={s.quality} options={[['high', 'High'], ['medium', 'Medium'], ['low', 'Low (fewer effects)']]} set={(v) => set({ quality: v })} />
             <Slider label="Render scale" min={0.5} max={1} step={0.05} value={s.renderScale} fmt={pct} onInput={(v) => set({ renderScale: v })} />
+            <Toggle label="Lower the resolution a little when the game cannot keep up" on={s.dynRes} set={(v) => set({ dynRes: v })} icon="gauge" />
             <Choice label="Frame rate limit" value={s.fpsCap} options={[[0, 'None'], [60, '60 fps'], [30, '30 fps (saves battery)']]} set={(v) => set({ fpsCap: v })} />
             <Choice label="Camera" value={s.zoom} options={[[0, 'Far'], [1, 'Normal'], [2, 'Close']]} set={(v) => set({ zoom: v })} />
             <Choice label="Art style" value={s.artStyle} options={[['pixel', 'Pixel art (everything at the ground\'s grain)'], ['smooth', 'Smooth']]} set={(v) => set({ artStyle: v })} />

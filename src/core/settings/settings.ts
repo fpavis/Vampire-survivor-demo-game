@@ -17,6 +17,7 @@ export interface Settings {
   // video
   quality: Quality;
   renderScale: number;          // 0.5 .. 1 of the display resolution
+  dynRes: boolean;              // lower the resolution a little while frames run long (core/settings/autotune)
   fpsCap: 0 | 30 | 60;          // 0: as fast as the display allows
   zoom: number;                 // camera zoom index into ZOOMS
   shake: number;                // 0 .. 1
@@ -43,7 +44,7 @@ export const ZOOMS = [0.8, 1, 1.2];
 
 export const DEFAULT_SETTINGS: Settings = {
   autoPick: false, confirmSalvage: false, pauseOnBlur: true,
-  quality: 'high', renderScale: 1, fpsCap: 0, zoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
+  quality: 'high', renderScale: 1, dynRes: true, fpsCap: 0, zoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
   artStyle: 'pixel', pixelSize: 2, postFx: 'none', colorGrade: 'none',
   hudScale: 1, minimap: 'medium', minimapOpacity: 1, healthBars: 'hurt', tracker: true, storyScenes: 'full',
   clickToMove: false, aimAtCursor: false, mouseInteract: false
@@ -64,6 +65,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     pauseOnBlur: bool(r.pauseOnBlur, d.pauseOnBlur),
     quality: pick(r.quality, ['low', 'medium', 'high'] as const, d.quality),
     renderScale: num(r.renderScale, d.renderScale, 0.5, 1),
+    dynRes: bool(r.dynRes, d.dynRes),
     fpsCap: pick(r.fpsCap, [0, 30, 60] as const, d.fpsCap),
     zoom: Math.round(num(r.zoom, d.zoom, 0, ZOOMS.length - 1)),
     shake: num(r.shake, d.shake, 0, 1),

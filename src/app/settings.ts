@@ -7,6 +7,11 @@ const KEY = 'vs.settings.v1';
 
 export const settings: Settings = { ...DEFAULT_SETTINGS };
 
+/** Has this browser saved settings before? (If not, this is a first start.) */
+export function hasSavedSettings(): boolean {
+  try { return localStorage.getItem(KEY) !== null; } catch { return true; }
+}
+
 export function loadSettings(): Settings {
   let raw: unknown = null;
   try { raw = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* storage unavailable */ }
@@ -31,7 +36,8 @@ export function applySettings(game: any) {
   const app = game.app;
   // video
   const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
-  const res = Math.max(0.5, dpr * settings.renderScale);
+  // dynamic resolution takes a share of the chosen scale while frames run long (app/autotune)
+  const res = Math.max(0.5, dpr * settings.renderScale * (game.autoTune ? game.autoTune.factor : 1));
   if (Math.abs(app.renderer.resolution - res) > 0.01) {
     app.renderer.resolution = res;
     app.renderer.resize(app.screen.width, app.screen.height);

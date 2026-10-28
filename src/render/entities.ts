@@ -54,6 +54,8 @@ function drawHealthBar(container, width, y) {
 }
 
 export class EntityManager {
+    /** spent bolts by colour, ready to fly again */
+    static boltPool = new Map();
     // hero level, kept up to date by the game; used to colour enemy level tags by threat
     static heroLevel = 1;
     // shared texture atlas for static vector art (set by the game once the renderer exists)
@@ -237,6 +239,19 @@ export class EntityManager {
 
     // ------------------------------------------------------------ bullets
     static createBolt(x, y, angle, color = 0xffd84a) {
+        // a spent bolt of this colour is reused: its art is already built and baked
+        const pool = EntityManager.boltPool.get(color);
+        const old = pool && pool.pop();
+        if (old) {
+            const trail = old.getChildAt(1).getChildAt(0);
+            trail.rotation = angle;
+            old.scale.set(1);
+            old.alpha = 1;
+            old.visible = true;
+            old.wx = x;
+            old.wy = y;
+            return old;
+        }
         const container = new PIXI.Container();
         const body = new PIXI.Container();
         const trail = new PIXI.Graphics();
@@ -265,7 +280,20 @@ export class EntityManager {
         container.addChild(makeShadow(6, 2.4, 0.3), body);
         container.wx = x;
         container.wy = y;
+        container.boltColor = color;
         return container;
+    }
+
+    /** A spent projectile: a bolt goes back to its pool (a few dozen per colour); anything else is destroyed. */
+    static release(entity) {
+        if (!entity) return;
+        const color = entity.boltColor;
+        if (color === undefined || entity.destroyed) { EntityManager.cleanup(entity); return; }
+        if (entity.parent) entity.parent.removeChild(entity);
+        let pool = EntityManager.boltPool.get(color);
+        if (!pool) EntityManager.boltPool.set(color, (pool = []));
+        if (pool.length < 48) pool.push(entity);
+        else entity.destroy({ children: true });
     }
 
     /** A drifting arcane wisp: a soft glow around a bright core with a little sparkle. */

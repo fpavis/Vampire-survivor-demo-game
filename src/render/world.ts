@@ -85,6 +85,7 @@ export class World {
         this.views.forEach((v) => this.destroyView(v));
         this.views.clear();
         this.data.clear();
+        this.lastChunk = null;
         this.source = source;
         this.dynTiles.clear();
         this.dynCircles.length = 0;
@@ -105,9 +106,12 @@ export class World {
 
     // ------------------------------------------------------------ generation
     getChunk(cx, cy) {
+        // most lookups land in the same chunk as the one before (collision and terrain checks walk tile by tile)
+        const last = this.lastChunk;
+        if (last && last.cx === cx && last.cy === cy) return last;
         const key = chunkKey(cx, cy);
         let chunk = this.data.get(key);
-        if (chunk) return chunk;
+        if (chunk) { this.lastChunk = chunk; return chunk; }
 
         chunk = new ChunkData(cx, cy);
         const src = this.source;
@@ -185,6 +189,7 @@ export class World {
 
         this.data.set(key, chunk);
         if (this.data.size > WORLD_CONFIG.maxCachedChunks) this.pruneCache();
+        this.lastChunk = chunk;
         return chunk;
     }
 
@@ -196,6 +201,7 @@ export class World {
                 if (!this.views.has(key)) this.data.delete(key);
             }
         }
+        this.lastChunk = null;
     }
 
     // --------------------------------------------------------------- queries
@@ -224,6 +230,7 @@ export class World {
             if (v) { this.destroyView(v); this.views.delete(key); }
             this.data.delete(key);
         }
+        this.lastChunk = null;
     }
 
     // surface under a world position: a SurfaceDef or null

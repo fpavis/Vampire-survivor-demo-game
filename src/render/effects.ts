@@ -8,6 +8,7 @@ import { canStack } from '../core/sim/feel';
 
 const TILT = WORLD_CONFIG.tilt;
 const MAX_PARTICLES = 450;
+const POOL = 600;
 
 // Particles, floating damage numbers and camera shake.
 // Everything is updated from the game loop so it respects pause / level-up.
@@ -15,6 +16,7 @@ export class Effects {
     constructor(game) {
         this.game = game;
         this.particles = [];
+        this.spritePool = [];          // spent particle sprites, reused instead of made anew (at most POOL)
         this.popups = [];
         this.popupPool = [];
         this.stacks = new Map();     // monster uid -> its live damage number
@@ -102,9 +104,10 @@ export class Effects {
         const { size = 1, life = 30, gravity = 0.22, up = 2.5, glow = false } = opts;
         for (let i = 0; i < count; i++) {
             if (this.particles.length >= (this.maxParticles ?? MAX_PARTICLES)) return;
-            const s = new PIXI.Sprite(glow ? this.spark : this.dot);
-            if (glow) s.blendMode = PIXI.BLEND_MODES.ADD;
-            s.anchor.set(0.5);
+            let s = this.spritePool.pop();
+            if (s) { s.texture = glow ? this.spark : this.dot; s.alpha = 1; s.rotation = 0; }
+            else { s = new PIXI.Sprite(glow ? this.spark : this.dot); s.anchor.set(0.5); }
+            s.blendMode = glow ? PIXI.BLEND_MODES.ADD : PIXI.BLEND_MODES.NORMAL;
             s.tint = color;
             const a = Math.random() * Math.PI * 2;
             const v = speed * (0.4 + Math.random() * 0.6);
@@ -199,8 +202,10 @@ export class Effects {
             if (p.z < 0) { p.z = 0; p.vz *= -0.35; p.vx *= 0.7; p.vy *= 0.7; }
             p.life -= delta;
             if (p.life <= 0) {
-                p.s.destroy();
-                this.particles.splice(i, 1);
+                this.retire(p.s);
+                // order does not matter: the last one has had its turn already (the loop runs backwards)
+                this.particles[i] = this.particles[this.particles.length - 1];
+                this.particles.pop();
                 continue;
             }
             p.s.position.set(p.wx, p.wy * TILT - p.z);
@@ -269,8 +274,15 @@ export class Effects {
         if (this.shake < 0.2) this.shake = 0;
     }
 
+    /** A spent particle's sprite goes back to the pool (or away, when the pool is full). */
+    retire(s) {
+        if (s.parent) s.parent.removeChild(s);
+        if (this.spritePool.length < POOL) this.spritePool.push(s);
+        else s.destroy();
+    }
+
     clear() {
-        this.particles.forEach((p) => p.s.destroy());
+        this.particles.forEach((p) => this.retire(p.s));
         this.particles.length = 0;
         this.popups.forEach((p) => {
             p.t.visible = false;
