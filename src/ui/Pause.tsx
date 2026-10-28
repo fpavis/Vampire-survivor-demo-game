@@ -177,6 +177,15 @@ function SettingsTabs({ title }: { title: boolean }) {
             <button class="vs-btn" onClick={() => { ui.vibration.value = !ui.vibration.value; game.input.savePrefs(); game.input.rumble(0.6, 0.6, 200); }}><Icon name={ui.vibration.value ? 'vibrate' : 'vibrate-off'} /> {ui.vibration.value ? 'Vibration is on' : 'Vibration is off'}</button>
             <Slider label="Stick dead zone" min={0.05} max={0.6} step={0.05} value={ui.deadzone.value} fmt={pct}
               onInput={(v) => { ui.deadzone.value = v; game.input.savePrefs(); }} />
+            {ui.padName.value && (
+              <div class="vs-row vs-padrow">
+                <span>Controller layout{ui.padProfile.value ? ' · set up by you' : ''}</span>
+                <span class="vs-acts">
+                  <button class="vs-btn" data-act="pad-setup" onClick={() => game.input.startPadSetup()}><Icon name="gamepad" /> Set up this controller</button>
+                  {ui.padProfile.value && <button class="vs-btn" data-act="pad-forget" onClick={() => game.input.forgetPadProfile()}>Forget its setup</button>}
+                </span>
+              </div>
+            )}
             {touch && (
               <>
                 <div class="vs-sec">TOUCH CONTROLS</div>
@@ -212,6 +221,25 @@ function SettingsTabs({ title }: { title: boolean }) {
             <HowToPlay />
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The guided controller setup: one button at a time, for pads the browser does not lay out itself. */
+export function PadSetup() {
+  const st = ui.padSetup.value;
+  const game = ui.game;
+  if (!st || !game) return null;
+  return (
+    <div class="vs-panel vs-padsetup hit" role="dialog" aria-label="Controller setup">
+      <h2><Icon name="gamepad" /> Set up {st.name || 'the controller'}</h2>
+      <div class="sub">Step {st.step + 1} of {st.total}. Let go of everything, then press:</div>
+      <div class="ask" aria-live="polite">{st.prompt}</div>
+      <div class="vs-bar"><u style={{ width: `${(st.step / st.total) * 100}%` }} /></div>
+      <div class="vs-acts">
+        <button class="vs-btn" data-act="pad-skip" onClick={() => game.input.skipPadSetupStep()}>It has no such button: skip</button>
+        <button class="vs-btn" data-act="pad-cancel" onClick={() => game.input.cancelPadSetup()}>Cancel (Esc)</button>
       </div>
     </div>
   );

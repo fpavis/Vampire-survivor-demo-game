@@ -1,7 +1,9 @@
 // @ts-nocheck -- bound to the game runtime; the rules live in core/input/gamepad
 // One place for every way of playing: keyboard, mouse, touch and controller. It tracks which one the player is
 // using (so prompts and focus rings follow), reads the gamepad, and turns buttons into game actions.
-import { DEFAULT_BINDINGS, DIRS, PadMapper, QUICK_PANELS, assignPad, emptyFrame, padKind } from '../core/input/gamepad';
+import {
+    DEFAULT_BINDINGS, DIRS, PadMapper, QUICK_PANELS, SETUP_STEPS, applyProfile, assignPad, emptyFrame, newlyPressed, padKind, profileFromCaptures
+} from '../core/input/gamepad';
 import { KeyMap } from '../core/input/bindings';
 import { ui as uiBridge } from '../ui/bridge';
 import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navWantsArrows, navTab } from '../ui/nav';
@@ -23,6 +25,9 @@ export class InputSystem {
         this.captureKeyCb = null;        // rebinding: the next key press goes here
         this.capturePadCb = null;        // rebinding: the next newly pressed button goes here
         this.captureArmed = false;
+        this.profiles = {};              // per controller id: how its raw buttons map onto the standard layout
+        this.setup = null;               // the guided setup in progress
+        this.warned = new Set();         // unrecognised controllers already pointed at the setup
         this.loadPrefs();
         this.bind();
     }
@@ -34,6 +39,7 @@ export class InputSystem {
             if (typeof p.vibration === 'boolean') uiBridge.vibration.value = p.vibration;
             if (typeof p.deadzone === 'number') uiBridge.deadzone.value = Math.min(0.6, Math.max(0.05, p.deadzone));
             if (p.keys) this.keys = new KeyMap(p.keys);
+            if (p.profiles && typeof p.profiles === 'object') this.profiles = p.profiles;
             if (p.pad) {
                 const b = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
                 for (const k of Object.keys(b)) if (Array.isArray(p.pad[k]) && p.pad[k].length) b[k] = p.pad[k];
@@ -45,7 +51,8 @@ export class InputSystem {
 
     savePrefs() {
         this.mapper.options.deadzone = uiBridge.deadzone.value;
-        try { localStorage.setItem(PREFS_KEY, JSON.stringify({ vibration: uiBridge.vibration.value, deadzone: uiBridge.deadzone.value, keys: this.keys.toJSON(), pad: this.mapper.bindings })); } catch { /* storage unavailable */ }
+        try { localStorage.setItem(PREFS_KEY, JSON.stringify({ vibration: uiBridge.vibration.value, deadzone: uiBridge.deadzone.value, keys: this.keys.toJSON(), pad: this.mapper.bindings, profiles: this.profiles })); } catch { /* storage unavailable */ }
+        uiBridge.padProfile.value = !!this.profiles[this.padId];
         uiBridge.bindVersion.value++;
     }
 
@@ -61,6 +68,63 @@ export class InputSystem {
         if (!b) return false;
         this.mapper.bindings = b;
         this.savePrefs();
+        return true;
+    }
+
+    // ---------------------------------------------------------- pad setup
+    /** Walk through every standard button on the controller in hand, so a pad the browser does not know works. */
+    startPadSetup() {
+        const pad = this.readPad();
+        if (!pad) { this.game.ui?.toast?.('Press any button on the controller first, so the game can see it'); return false; }
+        this.setup = { id: pad.id, step: 0, captures: [], armed: false, rest: [...pad.axes] };
+        this.publishSetup();
+        return true;
+    }
+
+    publishSetup() {
+        const st = this.setup;
+        uiBridge.padSetup.value = st ? { name: st.id.replace(/\s*\(.*$/, ''), step: st.step, total: SETUP_STEPS.length, prompt: SETUP_STEPS[st.step]?.prompt || '' } : null;
+    }
+
+    /** This step's button is missing on the pad: leave it where the standard layout has it. */
+    skipPadSetupStep() { if (this.setup) this.takeSetupInput(null); }
+
+    cancelPadSetup() { this.setup = null; this.publishSetup(); this.mapper.reset(); }
+
+    takeSetupInput(src, pad = null) {
+        const st = this.setup;
+        st.captures.push(src);
+        st.step++;
+        this.game.audio?.play('uiOk');
+        if (st.step < SETUP_STEPS.length) { this.publishSetup(); return; }
+        const prof = profileFromCaptures(st.captures);
+        this.profiles[st.id] = prof;
+        this.setup = null;
+        this.publishSetup();
+        this.mapper.reset();
+        // the last button is still held: swallow it so it does not also act
+        if (pad) this.mapper.update(applyProfile(pad, prof), performance.now());
+        this.savePrefs();
+        this.game.ui?.toast?.('Controller set up: its buttons now work as on a standard pad');
+    }
+
+    /** During setup: wait until everything is let go, then take the next button or hat direction pressed. */
+    pollSetup(pad) {
+        const st = this.setup;
+        if (!pad || pad.id !== st.id) return;
+        const src = newlyPressed(pad, st.rest);
+        if (src === null) { st.armed = true; return; }
+        if (!st.armed) return;
+        st.armed = false;
+        this.takeSetupInput(src, pad);
+    }
+
+    forgetPadProfile() {
+        if (!this.profiles[this.padId]) return false;
+        delete this.profiles[this.padId];
+        this.mapper.reset();
+        this.savePrefs();
+        this.game.ui?.toast?.('The controller is read in the standard way again');
         return true;
     }
 
@@ -97,6 +161,7 @@ export class InputSystem {
                 return;
             }
             if (!MODIFIERS.has(e.key)) this.setDevice('key');
+            if (this.setup && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); this.cancelPadSetup(); return; }
             // a DOM panel over a canvas menu (Options or Load on the title) takes the keys
             const menu = navActive() ? null : this.menus[this.menus.length - 1];
             if (!menu && this.menus.length && e.key === 'Escape' && navBack()) { e.preventDefault(); e.stopImmediatePropagation(); return; }
@@ -174,13 +239,23 @@ export class InputSystem {
             this.padId = best.id;
             uiBridge.padKind.value = padKind(best.id);
             uiBridge.padName.value = best.id.replace(/\s*\(.*$/, '');
+            uiBridge.padProfile.value = !!this.profiles[best.id];
+            // a pad the browser cannot lay out, and no setup for it yet: say where to fix that, once
+            if (best.mapping !== 'standard' && !this.profiles[best.id] && !this.warned.has(best.id)) {
+                this.warned.add(best.id);
+                this.game.ui?.toast?.('This controller is not recognised: set it up in Settings, Controls');
+            }
         }
         return best;
     }
 
     /** Called every frame, also while the game is paused or on the title screen. */
     poll() {
-        const pad = this.readPad();
+        const raw = this.readPad();
+        if (this.setup) { this.frame = this.mapper.update(null, performance.now()); this.pollSetup(raw); return; }
+        // a controller set up by the player is read through its profile
+        const prof = raw && this.profiles[raw.id];
+        const pad = prof ? applyProfile(raw, prof) : raw;
         if (this.capturePadCb && pad) {
             // wait until every button is up, then take the first one pressed
             const down = pad.buttons.map((b, i) => (b.pressed || b.value > 0.5 ? i : -1)).filter((i) => i >= 0);

@@ -250,6 +250,12 @@ html[data-input="pad"] .vs-hint-key{display:none}
 
 .vs-journal{left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
 .vs-board{left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto}
+.vs-padsetup{left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,calc(100vw - 24px));z-index:60;text-align:center}
+.vs-padsetup .ask{font-family:var(--font-display);font-size:20px;color:var(--c-gold);margin:12px 0}
+.vs-padsetup .vs-bar{height:6px;border-radius:3px;background:#0a0f1c;overflow:hidden;margin:6px 0 12px}
+.vs-padsetup .vs-bar>u{display:block;height:100%;background:var(--c-gold);text-decoration:none}
+.vs-padsetup .vs-acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.vs-padrow .vs-acts{display:flex;gap:6px;flex-wrap:wrap}
 .vs-standing{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;margin:6px 0;color:#ffd98a}
 .vs-standing small{color:var(--c-muted)}
 .vs-strow{display:flex;justify-content:space-between;gap:10px;align-items:baseline;border-bottom:1px solid var(--c-line);padding:2px 0}

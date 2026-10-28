@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "gallery": "node scripts/gallery.mjs gallery-out",
     "preview": "vite preview",
-    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/phase1.mjs && node tests/e2e/phase2.mjs && node tests/e2e/phase3.mjs && node tests/e2e/phase4.mjs && node tests/e2e/phase5.mjs && node tests/e2e/phase6.mjs && node tests/e2e/phase7.mjs && node tests/e2e/phase8.mjs && node tests/e2e/phase8b.mjs && node tests/e2e/phase9.mjs && node tests/e2e/phase10.mjs && node tests/e2e/phase11.mjs && node tests/e2e/phase9f.mjs && node tests/e2e/phase12.mjs && node tests/e2e/input.mjs",
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/phase1.mjs && node tests/e2e/phase2.mjs && node tests/e2e/phase3.mjs && node tests/e2e/phase4.mjs && node tests/e2e/phase5.mjs && node tests/e2e/phase6.mjs && node tests/e2e/phase7.mjs && node tests/e2e/phase8.mjs && node tests/e2e/phase8b.mjs && node tests/e2e/phase9.mjs && node tests/e2e/phase10.mjs && node tests/e2e/phase11.mjs && node tests/e2e/phase9f.mjs && node tests/e2e/phase12.mjs && node tests/e2e/phase9g.mjs && node tests/e2e/input.mjs",
     "build:artifact": "npm run build:single && node scripts/make-artifact.mjs"
   },
   "dependencies": {

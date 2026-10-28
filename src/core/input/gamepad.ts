@@ -157,6 +157,66 @@ export function assignPad(bindings: Record<PadAction, number[]>, action: PadActi
   return out;
 }
 
+// ------------------------------------------------------------ pad profiles
+/**
+ * A controller the browser does not lay out in its "standard" way: which of its raw inputs is each standard
+ * button. A source is a raw button index, or an axis pushed one way ({ axis, dir }) for pads that report the
+ * d-pad as a hat; null means it was skipped (the standard index is used as it is).
+ */
+export type PadSource = number | { axis: number; dir: 1 | -1 } | null;
+export interface PadProfile { buttons: PadSource[] }
+
+/** The guided setup asks for these, in order. */
+export const SETUP_STEPS: { btn: number; prompt: string }[] = [
+  { btn: BTN.A, prompt: 'the bottom face button (A on Xbox, ✕ on PlayStation)' },
+  { btn: BTN.B, prompt: 'the right face button (B, ○)' },
+  { btn: BTN.X, prompt: 'the left face button (X, □)' },
+  { btn: BTN.Y, prompt: 'the top face button (Y, △)' },
+  { btn: BTN.LB, prompt: 'the left shoulder (LB, L1)' },
+  { btn: BTN.RB, prompt: 'the right shoulder (RB, R1)' },
+  { btn: BTN.LT, prompt: 'the left trigger (LT, L2)' },
+  { btn: BTN.RT, prompt: 'the right trigger (RT, R2)' },
+  { btn: BTN.BACK, prompt: 'the small left button (View, Share, Back)' },
+  { btn: BTN.START, prompt: 'the small right button (Menu, Options, Start)' },
+  { btn: BTN.UP, prompt: 'up on the d-pad' },
+  { btn: BTN.DOWN, prompt: 'down on the d-pad' },
+  { btn: BTN.LEFT, prompt: 'left on the d-pad' },
+  { btn: BTN.RIGHT, prompt: 'right on the d-pad' }
+];
+
+/** The profile from what was pressed at each setup step (in SETUP_STEPS order). */
+export function profileFromCaptures(captures: PadSource[]): PadProfile {
+  const buttons: PadSource[] = Array.from({ length: 16 }, () => null);
+  SETUP_STEPS.forEach((st, k) => { buttons[st.btn] = captures[k] ?? null; });
+  return { buttons };
+}
+
+const NONE: PadButton = { pressed: false, value: 0 };
+/** A raw snapshot seen through a profile: buttons where the standard layout has them, sticks as they are. */
+export function applyProfile(snap: PadSnapshot, p: PadProfile): PadSnapshot {
+  const buttons: PadButton[] = [];
+  for (let i = 0; i < Math.max(16, snap.buttons.length); i++) {
+    const src = p.buttons[i];
+    if (src === null || src === undefined) buttons.push(snap.buttons[i] ?? NONE);
+    else if (typeof src === 'number') buttons.push(snap.buttons[src] ?? NONE);
+    else { const v = (snap.axes[src.axis] ?? 0) * src.dir; buttons.push(v > 0.5 ? { pressed: true, value: v } : NONE); }
+  }
+  return { id: snap.id, axes: snap.axes, buttons };
+}
+
+/**
+ * During setup: the input newly pressed since `rest` (the axes at rest), or null. A button wins over an axis;
+ * the first two axes (the left stick) are not taken, so a nudged stick never answers for a button.
+ */
+export function newlyPressed(snap: PadSnapshot, rest: readonly number[]): PadSource {
+  for (let i = 0; i < snap.buttons.length; i++) if (down(snap.buttons[i])) return i;
+  for (let a = 2; a < snap.axes.length; a++) {
+    const d = (snap.axes[a] ?? 0) - (rest[a] ?? 0);
+    if (Math.abs(d) > 0.6) return { axis: a, dir: d > 0 ? 1 : -1 };
+  }
+  return null;
+}
+
 /** Panels that the d-pad opens when no menu is up (the buttons are fixed, so they live here as data). */
 export type QuickPanel = 'spells' | 'upgrades' | 'build' | 'journal';
 export const QUICK_PANELS: Record<Dir, QuickPanel | null> = { up: 'spells', down: 'upgrades', left: 'build', right: 'journal' };

@@ -2,7 +2,7 @@ import { useEffect } from 'preact/hooks';
 import { Healer, PartyBar } from './Party';
 import { Dialog, Inn, Shop } from './Town';
 import { BuildHud, SailingHint, TowerPanel } from './Build';
-import { OptionsPanel } from './Pause';
+import { OptionsPanel, PadSetup } from './Pause';
 import { GameMenu } from './Menu';
 import { SlotsPanel } from './Slots';
 import { CreditsPanel, TitleExtras } from './Front';
@@ -173,6 +173,7 @@ export function App() {
       <Scene />
       <DeathScreen />
       <Ending />
+      <PadSetup />
       {front}
     </>
   );

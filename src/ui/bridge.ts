@@ -108,6 +108,9 @@ export const ui = {
   // story moments: a boss or victory card over the action, the ending and its closing roll, the death screen
   // a story scene: letterbox bars, who speaks (a portrait or an icon) and the line typed out to `shown` characters
   scene: signal<{ id: number; index: number; count: number; speaker: string; title: string; text: string; shown: number; portrait: string; icon: string } | null>(null),
+  // the guided controller setup in progress, and whether the pad in hand has a saved setup
+  padSetup: signal<{ name: string; step: number; total: number; prompt: string } | null>(null),
+  padProfile: signal(false),
   card: signal<{ id: number; kind: 'boss' | 'victory' | 'wake'; name: string; title: string; text: string } | null>(null),
   ending: signal<{ epilogue: string[]; roll: [string, string][]; credits: { section: string; lines: string[] }[] } | null>(null),
   death: signal<{ place: string; rows: [string, string, string][] } | null>(null),                // recent toasts and banners, newest last

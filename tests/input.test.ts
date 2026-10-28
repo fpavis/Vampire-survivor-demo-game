@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BTN, DEFAULT_BINDINGS, PadMapper, buttonLabel, deadzone, padGlyph, padKind, pickNeighbor, stickDir,
-  type PadSnapshot, type Rect
+  BTN, DEFAULT_BINDINGS, PadMapper, SETUP_STEPS, applyProfile, buttonLabel, deadzone, newlyPressed, padGlyph, padKind, pickNeighbor,
+  profileFromCaptures, stickDir, type PadSnapshot, type PadSource, type Rect
 } from '../src/core/input/gamepad';
 
 const snap = (over: { axes?: number[]; down?: number[]; id?: string } = {}): PadSnapshot => ({
@@ -189,5 +189,58 @@ describe('rebinding', () => {
     expect(assignPad(DEFAULT_BINDINGS, 'skill1', BTN.UP)).toBeNull();
     expect(assignPad(DEFAULT_BINDINGS, 'up', BTN.A)).toBeNull();
     expect(DEFAULT_BINDINGS.skill1).toEqual([BTN.X]);           // the defaults are never changed
+  });
+});
+
+describe('pad profiles', () => {
+  // a pad the browser does not know: face buttons scrambled, the d-pad on a hat axis (axis 6 left/right, 7 up/down)
+  const RAW = { A: 2, B: 1, X: 3, Y: 0, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9 };
+  const raw = (down: number[] = [], axes: number[] = [0, 0, 0, 0, 0, 0, 0, 0]): PadSnapshot => ({
+    id: 'USB Gamepad (Vendor: 0079 Product: 0011)', axes,
+    buttons: Array.from({ length: 12 }, (_, i) => ({ pressed: down.includes(i), value: down.includes(i) ? 1 : 0 }))
+  });
+  const captures: PadSource[] = [RAW.A, RAW.B, RAW.X, RAW.Y, RAW.LB, RAW.RB, RAW.LT, RAW.RT, RAW.BACK, RAW.START,
+    { axis: 7, dir: -1 }, { axis: 7, dir: 1 }, { axis: 6, dir: -1 }, { axis: 6, dir: 1 }];
+
+  it('the setup asks for every standard button once', () => {
+    expect(SETUP_STEPS).toHaveLength(14);
+    expect(new Set(SETUP_STEPS.map((s) => s.btn)).size).toBe(14);
+  });
+
+  it('maps scrambled buttons and a hat d-pad onto the standard layout', () => {
+    const p = profileFromCaptures(captures);
+    const press = (rawIdx: number) => applyProfile(raw([rawIdx]), p).buttons;
+    expect(press(RAW.A)[BTN.A].pressed).toBe(true);
+    expect(press(RAW.A)[RAW.A].pressed).toBe(false);          // raw 2 is no longer X
+    expect(press(RAW.Y)[BTN.Y].pressed).toBe(true);
+    const up = applyProfile(raw([], [0, 0, 0, 0, 0, 0, 0, -1]), p).buttons;
+    expect(up[BTN.UP].pressed).toBe(true);
+    expect(up[BTN.DOWN].pressed).toBe(false);
+    const right = applyProfile(raw([], [0, 0, 0, 0, 0, 0, 1, 0]), p).buttons;
+    expect(right[BTN.RIGHT].pressed).toBe(true);
+  });
+
+  it('a mapper reading through the profile turns them into actions', () => {
+    const p = profileFromCaptures(captures);
+    const m = new PadMapper();
+    const f = m.update(applyProfile(raw([RAW.A]), p), 0);
+    expect(f.pressed.has('interact')).toBe(true);
+    const g = m.update(applyProfile(raw([], [0, 0, 0, 0, 0, 0, 0, 1]), p), 20);
+    expect(g.pressed.has('down')).toBe(true);
+  });
+
+  it('a skipped step keeps the standard button', () => {
+    const c = [...captures]; c[1] = null;                          // B skipped
+    const p = profileFromCaptures(c);
+    expect(applyProfile(raw([BTN.B]), p).buttons[BTN.B].pressed).toBe(true);
+  });
+
+  it('setup takes a newly pressed button, or a hat axis, but not the left stick', () => {
+    const rest = [0, 0, 0, 0, 0, 0, 0, 0];
+    expect(newlyPressed(raw([5]), rest)).toBe(5);
+    expect(newlyPressed(raw([], [0, 0, 0, 0, 0, 0, 1, 0]), rest)).toEqual({ axis: 6, dir: 1 });
+    expect(newlyPressed(raw([], [1, 0, 0, 0, 0, 0, 0, 0]), rest)).toBeNull();
+    // an axis that rests at -1 (some triggers) only counts when it moves
+    expect(newlyPressed(raw([], [0, 0, 0, 0, 0, -1, 0, 0]), [0, 0, 0, 0, 0, -1, 0, 0])).toBeNull();
   });
 });
