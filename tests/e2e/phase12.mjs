@@ -262,6 +262,34 @@ if (want('travel')) {
   await goOut();
 }
 
+
+// ---- 12e: mountains have round outer corners, and the hero can stand where the old square corner was
+if (want('mountains')) {
+  await goOut();
+  const corner = await ev(() => {
+    const g = window.game, w = g.world, B = window.__dev.BIOME, T = 48;
+    const rock = (tx, ty) => { const b = w.biomeAt(tx, ty); return b === B.MOUNTAIN || b === B.PEAK; };
+    const open = (tx, ty) => !w.shotTile(tx, ty) && w.biomeAt(tx, ty) !== B.DEEP && w.biomeAt(tx, ty) !== B.SHALLOW;
+    for (let r = 8; r < 260; r += 1) for (let a = 0; a < 6.28; a += 0.04) {
+      const tx = Math.round(Math.cos(a) * r), ty = Math.round(Math.sin(a) * r);
+      // a north-west outer corner: rock here, open to the north, west and north-west
+      if (!rock(tx, ty) || !open(tx, ty - 1) || !open(tx - 1, ty) || !open(tx - 1, ty - 1)) continue;
+      // diagonally off the corner: a square tile reaches this circle, a rounded one does not
+      const x = tx * T - 3, y = ty * T - 3, rr = 8;
+      if (w.blocked(x, y, 2)) continue;                                   // something else stands there
+      const free = !w.blocked(x, y, rr);
+      const edge = w.blocked(tx * T + T / 2, ty * T - 3, rr);            // the middle of the north edge still blocks
+      return { tx, ty, free, edge };
+    }
+    return null;
+  });
+  check('a mountain\'s outer corner is round: the hero can stand where the square used to be', !!corner && corner.free && corner.edge, JSON.stringify(corner));
+  if (SHOTS) {
+    await ev((c) => { const g = window.game, T = 48, p = g.state.player; p.wx = (c.tx + 0.5) * T; p.wy = (c.ty + 4) * T; g.cam.x = p.wx; g.cam.y = p.wy - 2 * T; g.world.update(g.cam.x, g.cam.y, 1600, 1000, true); for (let i = 0; i < 4; i++) g.gameLoop(1); }, corner);
+    await page.screenshot({ path: `${SHOTS}/mountains.png` });
+  }
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');

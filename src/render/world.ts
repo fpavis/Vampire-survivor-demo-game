@@ -15,6 +15,8 @@ import { DECOR_LIGHTS } from './lighting';
 import { SURFACES, SURFACE_IDS, surfaceByNum, NAV_COST_BY_NUM } from '../core/world/surfaces';
 import { blightColor } from '../core/world/corruption';
 import { rayCast, RAY_BLOCKED } from '../core/world/nav';
+import { lineYAt, rockShape, rockTouches } from '../core/render/rockShape';
+import { bakeRockTops, NATURAL_ROCK, ROCK_N, ROCK_ROW } from './rockBake';
 
 const T = WORLD_CONFIG.tile;
 const CT = WORLD_CONFIG.chunkTiles;
@@ -60,6 +62,8 @@ const chunkKey = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
 export class World {
     constructor(app, groundLayer, objectLayer) {
         this.app = app;
+        // what natural rock's outline treats as more rock: any wall, and the void round a place
+        this.rockAt = (tx, ty) => { const b = this.biomeAt(tx, ty); return isWallBiome(b) || b === BIOME.VOID; };
         this.groundLayer = groundLayer;
         this.objectLayer = objectLayer;
         this.decorTextures = bakeDecorTextures(app);
@@ -312,6 +316,7 @@ export class World {
             for (let tx = minTx; tx <= maxTx; tx++) {
                 const tb = this.biomeAt(tx, ty);
                 if (sea ? !boatBlocked(tb) : !isSolidBiome(tb)) continue;
+                if (!sea && NATURAL_ROCK.has(tb)) { if (rockTouches(tx, ty, this.rockAt, this.source.seed || 0, T, x, y, r)) return true; continue; }
                 const nx = Math.max(tx * T, Math.min(x, (tx + 1) * T));
                 const ny = Math.max(ty * T, Math.min(y, (ty + 1) * T));
                 const dx = x - nx, dy = y - ny;
@@ -411,6 +416,7 @@ export class World {
 
     destroyView(view) {
         if (view.base) { const tex = view.base.texture; view.base.destroy(); tex.destroy(true); }
+        if (view.rockTex) view.rockTex.destroy(true);
         view.ground.destroy();
         view.sheen.destroy();
         view.sheen2.destroy();
@@ -460,6 +466,23 @@ export class World {
             }
         }
 
+        // natural rock tops: one smooth baked texture per chunk, a sprite per tile row, under that row's cliff faces
+        const rockSeed = src.seed || 0;
+        const tops = bakeRockTops(cx, cy, { biomeAt: (x, y) => this.biomeAt(x, y), shapeOf: (x, y) => this.rockShapeAt(x, y), seed: rockSeed, caveTop: theme && theme.top !== undefined ? theme.top : 0x4a4038 });
+        if (tops) {
+            for (let j = 0; j < CT; j++) {
+                if (!tops.rows[j]) continue;
+                let hRow = WALL_HEIGHT[BIOME.MOUNTAIN];
+                for (let i = 0; i < CT; i++) { const b = chunk.biomes[j * CT + i]; if (NATURAL_ROCK.has(b)) { hRow = WALL_HEIGHT[b]; break; } }
+                const s = new PIXI.Sprite(new PIXI.Texture(tops.texture.baseTexture, new PIXI.Rectangle(0, j * ROCK_ROW, ROCK_N, ROCK_ROW)));
+                s.position.set(cx * CHUNK_SIZE, (cy * CT + j) * T * TILT - hRow);
+                s.scale.set(GROUND_RES, GROUND_RES * TILT);
+                s.zIndex = (cy * CT + j + 1) * T - 0.75;
+                s.cullable = true;
+                objects.push(s);
+            }
+        }
+
         chunk.decor.forEach((d) => {
             const set = this.decorTextures[d.type][d.variant];
             const s = new PIXI.Sprite(set.texture);
@@ -505,7 +528,8 @@ export class World {
         rows.forEach((r) => objects.push(r));
         objects.forEach((o) => this.objectLayer.addChild(o));
 
-        return { cx, cy, base, surfGlow, ground, sheen, sheen2, objects, animated, lights, phase: hash(cx, cy, seed) * 6.28 };
+        if (this.shapeCache) this.shapeCache.clear();
+        return { cx, cy, base, rockTex: tops ? tops.texture : null, surfGlow, ground, sheen, sheen2, objects, animated, lights, phase: hash(cx, cy, seed) * 6.28 };
     }
 
     // base colour of a tile before lighting: biome colour, interior theme, darker land in high-tier regions
@@ -575,14 +599,16 @@ export class World {
             case BIOME.MOUNTAIN:
             case BIOME.PEAK: {
                 const peak = biome === BIOME.PEAK;
-                this.drawRockTop(g, tx, ty, px, topY, peak ? 0xe8eef6 : 0x8e929d, seed, peak ? 0.12 : 0.34, peak ? null : 0x6a7a52);
-                if (showFront) this.drawRockFront(g, tx, px, fy, h, peak ? 0x8a9ab0 : 0x5e626e, seed, peak);
+                const shape = this.rockShapeAt(tx, ty);
+                this.drawRockTop(g, tx, ty, peak ? 0xe8eef6 : 0x8e929d, 1, shape, h);
+                if (showFront) this.drawRockFront(g, tx, px, fy, h, peak ? 0x8a9ab0 : 0x5e626e, seed, peak, false, shape);
                 break;
             }
             case BIOME.CAVE_WALL: {
-                this.drawRockTop(g, tx, ty, px, topY, theme.top, seed, 0.4, null, 0.7);
+                const shape = this.rockShapeAt(tx, ty);
+                this.drawRockTop(g, tx, ty, theme.top, 0.7, shape, h);
                 if (showFront) {
-                    this.drawRockFront(g, tx, px, fy, h, theme.front, seed, false, true);
+                    this.drawRockFront(g, tx, px, fy, h, theme.front, seed, false, true, shape);
                     // the odd glowing crystal vein in the rock face
                     if (hash(tx, ty, seed + 341) > 0.9) {
                         const cols = [0x5ad0ff, 0xc07aff, 0x7affc0];
@@ -751,59 +777,48 @@ export class World {
     }
 
     // Rock top surface: colour from world-space noise in 3x3 cells so neighbouring tiles blend (no tile grid)
-    drawRockTop(g, tx, ty, px, topY, base, seed, variance, moss = null, dim = 1) {
-        const py = ty * T;
-        const S = T / 4;
-        for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
-            const wx = px + i * S + S / 2, wy = py + j * S + S / 2;
-            const n1 = valueNoise(wx / 110, wy / 110, seed + 510), n2 = valueNoise(wx / 34, wy / 34, seed + 511);
-            const c = shade(base, (0.8 + n1 * variance + (n2 - 0.5) * 0.07) * dim);
-            g.beginFill(c);
-            g.drawRect(px + i * S, topY + j * S * TILT, S + 0.6, S * TILT + 0.6);
-            g.endFill();
+    /** A rock tile's outline, computed once per chunk build (the bake and the walls both need it). */
+    rockShapeAt(tx, ty) {
+        const cache = this.shapeCache || (this.shapeCache = new Map());
+        const key = (tx + 32768) * 65536 + (ty + 32768);
+        let s = cache.get(key);
+        if (!s) { s = rockShape(tx, ty, this.rockAt, this.source.seed || 0, T); cache.set(key, s); }
+        return s;
+    }
+
+    /**
+     * Natural rock's top is baked (rockBake) and drawn by the row's rock sprite; here only its edge where it meets
+     * open floor: a soft dark line, and a sunlit rim along the north. Edges shared with more rock are left alone.
+     */
+    drawRockTop(g, tx, ty, base, dim, shape, h) {
+        if (!shape || shape.whole) return;
+        const x0 = tx * T, y0 = ty * T, x1 = x0 + T, y1 = y0 + T;
+        const n = !this.rockAt(tx, ty - 1), so = !this.rockAt(tx, ty + 1), w = !this.rockAt(tx - 1, ty), e = !this.rockAt(tx + 1, ty);
+        const shared = (ax, ay, bx, by) => (ax === x0 && bx === x0 && !w) || (ax === x1 && bx === x1 && !e) || (ay === y0 && by === y0 && !n) || (ay === y1 && by === y1 && !so);
+        const top = shape.top;
+        g.lineStyle(1.5, shade(base, 0.45 * dim), 0.3);
+        for (let i = 0; i < top.length; i += 2) {
+            const j = (i + 2) % top.length, ax = top[i], ay = top[i + 1], bx = top[j], by = top[j + 1];
+            if (shared(ax, ay, bx, by)) continue;
+            g.moveTo(ax, ay * TILT - h); g.lineTo(bx, by * TILT - h);
         }
-        const W = T + 1, TH = T * TILT + 1;
-        const n = !isWallBiome(this.biomeAt(tx, ty - 1)), w = !isWallBiome(this.biomeAt(tx - 1, ty)), e = !isWallBiome(this.biomeAt(tx + 1, ty));
-        if (n) {
-            // sunlit rim along the northern edge, a little ragged
-            g.beginFill(shade(base, 1.32 * dim), 0.9);
-            for (let k = 0; k < 4; k++) g.drawRect(px + k * 12, topY, 12.5, 2 + hash(tx * 4 + k, ty, seed + 512) * 3);
-            g.endFill();
-        }
-        if (w) { g.beginFill(0x000000, 0.18); g.drawRect(px, topY, 3, TH); g.endFill(); }
-        if (e) { g.beginFill(0x000000, 0.24); g.drawRect(px + W - 3, topY, 3, TH); g.endFill(); }
-        // moss and lichen in soft patches, pebbles, cracks
-        if (moss && valueNoise(px / 80, py / 80, seed + 514) > 0.6) {
-            for (let k = 0; k < 3; k++) {
-                const hx = hash(tx * 3 + k, ty, seed + 515), hy = hash(tx, ty * 3 + k, seed + 516);
-                g.beginFill(shade(moss, 0.85 + hx * 0.3), 0.75);
-                g.drawEllipse(px + 8 + hx * 32, topY + (6 + hy * 30) * TILT, 6 + hy * 6, (4 + hx * 3) * TILT);
-                g.endFill();
-            }
-        }
-        for (let k = 0; k < 2; k++) {
-            const hx = hash(tx * 2 + k, ty, seed + 517), hy = hash(tx, ty * 2 + k, seed + 518);
-            if (hx < 0.55) continue;
-            g.beginFill(shade(base, 0.62 * dim)); g.drawEllipse(px + 6 + hy * 36, topY + (8 + hx * 30) * TILT + 1, 3.5, 2); g.endFill();
-            g.beginFill(shade(base, 1.15 * dim)); g.drawEllipse(px + 6 + hy * 36, topY + (8 + hx * 30) * TILT, 3, 1.6); g.endFill();
-        }
-        const h1 = hash(tx, ty, seed + 513);
-        if (h1 > 0.6) {
-            g.lineStyle(1, shade(base, 0.55 * dim), 0.6);
-            const sx = px + 8 + h1 * 26, sy = topY + 6;
-            g.moveTo(sx, sy); g.lineTo(sx + 6, sy + 8); g.lineTo(sx + 2, sy + 15); g.lineTo(sx + 9, sy + 22);
+        g.lineStyle(0);
+        if (shape.north) {
+            const rim = shape.north;
+            g.lineStyle(2, shade(base, 1.28 * dim), 0.6);
+            g.moveTo(rim[0], rim[1] * TILT - h + 1.2);
+            for (let i = 2; i < rim.length; i += 2) g.lineTo(rim[i], rim[i + 1] * TILT - h + 1.2);
             g.lineStyle(0);
         }
-        if (h1 < 0.3) { g.beginFill(shade(base, 1.18 * dim)); g.drawEllipse(px + 10 + h1 * 80, topY + 14, 4, 2.5); g.endFill(); }
     }
 
     // Rock cliff face: vertical light falloff, strata, cracks, ragged foot and contact shadow
-    drawRockFront(g, tx, px, fy, h, base, seed, snowy = false, drips = false) {
+    drawRockFront(g, tx, px, fy, h, base, seed, snowy = false, drips = false, shape = null) {
+        if (shape && !shape.whole && shape.south) { this.drawRockFace(g, tx, px, h, base, seed, snowy, drips, shape.south); return; }
         const W = T + 1;
-        const bands = 6;
+        const bands = 12, lit = 1.06 + (valueNoise(px / 140, 0, seed + 530) - 0.5) * 0.06;
         for (let r = 0; r < bands; r++) {
-            const n = valueNoise((px + 24) / 70, r * 0.7 + fy / 120, seed + 530);
-            g.beginFill(shade(base, 1.08 - r * 0.075 + (n - 0.5) * 0.1));
+            g.beginFill(shade(base, lit - r * 0.038));
             g.drawRect(px, fy + r * (h / bands), W, h / bands + 0.6);
             g.endFill();
         }
@@ -845,6 +860,67 @@ export class World {
         g.endFill();
         g.beginFill(0x000000, 0.3); g.drawRect(px, fy + h, W, 5); g.endFill();
         g.beginFill(0x000000, 0.15); g.drawRect(px, fy + h + 5, W, 7); g.endFill();
+    }
+
+    /**
+     * A cliff face hanging from a curved south edge (world x, y pairs, west to east): the same light falloff,
+     * strata, cracks, snow, drips, ragged foot and contact shadow as a square face, following the curve.
+     */
+    drawRockFace(g, tx, px, h, base, seed, snowy, drips, line) {
+        const top = (x) => lineYAt(line, x) * TILT - h;          // screen y where the face starts at x
+        const xs = []; for (let i = 0; i < line.length; i += 2) xs.push(line[i]);
+        const minX = xs[0], maxX = xs[xs.length - 1];
+        const band = (f0, f1, color, alpha = 1) => {
+            const pts = [];
+            for (const x of xs) pts.push(x, top(x) + h * f0);
+            for (let i = xs.length - 1; i >= 0; i--) pts.push(xs[i], top(xs[i]) + h * f1);
+            g.beginFill(color, alpha); g.drawPolygon(pts); g.endFill();
+        };
+        // light falls off down the face in even, small steps (a gradient, not bands)
+        const bands = 12, lit = 1.06 + (valueNoise(px / 140, 0, seed + 530) - 0.5) * 0.06;
+        for (let r = 0; r < bands; r++) band(r / bands, (r + 1) / bands + 0.01, shade(base, lit - r * 0.038));
+        // strata, following the edge
+        const off = valueNoise(px / 50, 0, seed + 531) * 6 / h;
+        band(0.34 + off, 0.34 + off + 2 / h, 0x000000, 0.08);
+        band(0.66 - off, 0.66 - off + 1.5 / h, 0x000000, 0.08);
+        // vertical cracks from world noise (continuous across tiles)
+        g.beginFill(0x000000, 0.22);
+        for (let k = 0; k < 3; k++) {
+            const hx = hash(tx * 3 + k, 0, seed + 532), x = px + 4 + k * 15 + hx * 6;
+            if (hx > 0.55 && x > minX + 3 && x < maxX - 3) g.drawRect(x, top(x) + 4 + hx * 8, 2, h * (0.4 + hx * 0.4));
+        }
+        g.endFill();
+        // highlight lip where top meets face
+        band(0, 2 / h, 0xffffff, snowy ? 0.4 : 0.08);
+        if (snowy) {
+            const pts = [];
+            for (const x of xs) pts.push(x, top(x));
+            for (let i = xs.length - 1; i >= 0; i--) {
+                const x = xs[i], dip = 6 + ((i % 3) === 1 ? 7 + hash(tx, i, seed) * 6 : 0);
+                pts.push(x, top(x) + dip);
+            }
+            g.beginFill(0xf4f8ff, 0.95); g.drawPolygon(pts); g.endFill();
+        }
+        if (drips) {
+            g.beginFill(shade(base, 0.62));
+            for (let k = 0; k < 3; k++) {
+                const sx = px + 4 + k * 15 + hash(tx, k, seed + 533) * 6;
+                if (sx < minX + 2 || sx + 9 > maxX - 2) continue;
+                const b = top(sx + 4.5) + h;
+                g.drawPolygon([sx, b - 14, sx + 9, b - 14, sx + 4.5, b - 2 + (k % 2) * 3]);
+            }
+            g.endFill();
+        }
+        // ragged foot and ambient occlusion where the cliff meets the ground
+        g.beginFill(shade(base, 0.45));
+        for (let i = 0; i < xs.length - 1; i++) {
+            const a = xs[i], b = xs[i + 1], hk = hash(Math.round(a), 3, seed + 534);
+            const ya = top(a) + h, yb = top(b) + h, ym = top((a + b) / 2) + h;
+            g.drawPolygon([a, ya + 0.5, b, yb + 0.5, b, yb - 4 - hk * 5, (a + b) / 2, ym - 2 - hk * 9, a, ya - 5 - hk * 4]);
+        }
+        g.endFill();
+        band(1, 1 + 5 / h, 0x000000, 0.3);
+        band(1 + 5 / h, 1 + 12 / h, 0x000000, 0.15);
     }
 
     animate(dt) {
