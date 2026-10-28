@@ -112,6 +112,8 @@ export const ui = {
   // the guided controller setup in progress, and whether the pad in hand has a saved setup
   padSetup: signal<{ name: string; step: number; total: number; prompt: string } | null>(null),
   padProfile: signal(false),
+  crash: signal<{ message: string; report: string; fatal: boolean } | null>(null),      // the crash screen
+  storageWarn: signal<'memory' | 'failed' | null>(null),     // saving is not possible right now
   card: signal<{ id: number; kind: 'boss' | 'victory' | 'wake'; name: string; title: string; text: string } | null>(null),
   ending: signal<{ epilogue: string[]; roll: [string, string][]; credits: { section: string; lines: string[] }[] } | null>(null),
   death: signal<{ place: string; rows: [string, string, string][] } | null>(null),                // recent toasts and banners, newest last

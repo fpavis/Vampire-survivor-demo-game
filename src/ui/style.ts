@@ -370,6 +370,22 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-roll dt{color:var(--c-muted)}
 .vs-roll dd{margin:0;color:var(--c-text);font-variant-numeric:tabular-nums;font-weight:700}
 .vs-roll .fin{font-family:var(--font-display);font-size:22px;color:#f3e6c4;margin-top:56px}
+.vs-crash{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,4,10,.86)}
+.vs-crash .box{width:min(560px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:18px 20px}
+.vs-crash h2{margin:0;display:flex;align-items:center;gap:8px;font-size:20px}
+.vs-crash h2 .vs-icon{color:#ff8a6a}
+.vs-crash p{margin:0;line-height:1.45}
+.vs-crash .msg code{display:block;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.4);border:1px solid var(--c-line-2);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.vs-crash .sub{color:var(--c-muted);font-size:13px}
+.vs-crash .vs-acts{display:flex;flex-wrap:wrap;gap:8px}
+.vs-crash details summary{cursor:pointer;color:var(--c-muted);font-size:13px}
+.vs-crash textarea{width:100%;margin-top:6px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.vs-storage{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:45;width:min(720px,calc(100% - 24px));display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-radius:10px;background:rgba(40,16,10,.94);border:1px solid #c8643c;font-size:13px}
+.vs-storage>.vs-icon{color:#ffb07a;flex:none}
+.vs-storage>span:first-of-type{flex:1;min-width:200px}
+.vs-storage .vs-acts{display:flex;gap:6px}
+.vs-storage .vs-export{display:flex;gap:6px;width:100%}
+.vs-storage .vs-export textarea{flex:1;font-size:11px}
 .vs-panel.vs-death{position:fixed;inset:0;border:0;border-radius:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at 50% 45%,rgba(60,8,14,.55),rgba(10,0,4,.94));animation:vs-death-in .9s ease-out both}
 @keyframes vs-death-in{from{opacity:0}to{opacity:1}}
 .vs-panel.vs-worldmap{position:fixed;inset:12px;z-index:30;display:flex;flex-direction:column;gap:8px;padding:10px 12px}

@@ -329,6 +329,13 @@ export class InputSystem {
     dispatch(f) {
         const g = this.game, s = g.state;
         const has = (a) => f.pressed.has(a);
+        // the crash screen: the d-pad moves between its buttons, A presses
+        if (uiBridge.crash.value) {
+            const dir = f.stick || DIRS.find((d) => has(d));
+            if (dir) navMove(dir);
+            if (has('interact')) navConfirm();
+            return;
+        }
         const menu = navActive() ? null : this.menus[this.menus.length - 1];
         if (menu) {
             const dir = f.stick || DIRS.find((d) => has(d));

@@ -81,6 +81,7 @@ import { settings, loadSettings, applySettings, setSettings } from './settings';
 import { showDamageNumber } from '../core/settings/settings';
 import { formatPlayTime, listSlots, newestSlot, shouldRotate, slotLabel, writeSlot } from '../core/save/slots';
 import { discover, emptyCodex } from '../core/codex/codex';
+import { guarded, installCrashHandlers } from './crash';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 class Game {
@@ -188,12 +189,15 @@ class Game {
         this.accum = 0;
         this.timeScale = 1;
         this.godMode = false;
+        this.crashed = null;             // { fatal, message } once something has thrown: nothing is saved after
+        this.saveFailures = 0;
+        installCrashHandlers(this);
         this.zoneLevelNow = 1;
         this.zoneThreat = 'even';
         this.autosaveTimer = 1800;
         this.lastSaveAt = 0;
         this.saveSlot = 'autosave';
-        this.storeReady = createSaveStore().then((store) => { this.store = store; return store; });
+        this.storeReady = createSaveStore().then((store) => { this.store = store; if (!store.persistent) uiBridge.storageWarn.value = 'memory'; return store; });
 
         this.app.renderer.on('resize', () => this.handleResize());     // after Pixi's own (deferred) resize
         const flush = () => { if (this.state.player && !this.state.gameOver && this.mode) this.requestSave('hidden', true); };
@@ -204,7 +208,7 @@ class Game {
         this.applyCamera();
         this.world.update(this.cam.x, this.cam.y, this.viewW, this.viewH, true);
 
-        this.menuTicker = (delta) => this.menuLoop(delta);
+        this.menuTicker = guarded(this, (delta) => this.menuLoop(delta));
         this.app.ticker.add(this.menuTicker);
         this.showStartScreen();
     }
@@ -766,7 +770,7 @@ class Game {
         applySettings(this);
 
         this.lastGold = gameState.wallet.gold;
-        this.gameTicker = (delta) => this.gameLoop(delta);
+        this.gameTicker = guarded(this, (delta) => this.gameLoop(delta));
         this.app.ticker.add(this.gameTicker);
         this.tips.reset(save && save.tips ? save.tips : []);
         for (const n of (save && save.notices) || []) { this.ui.toast(n, 'upgrade'); this.ui.toastTimer = 420; }
@@ -776,7 +780,8 @@ class Game {
 
     // ------------------------------------------------------------- saving
     async requestSave(reason, force = false, slot = this.saveSlot) {
-        if (!this.store || !this.state.player || this.state.gameOver) return false;
+        // after a crash nothing is saved: the last good save stays as it was
+        if (!this.store || !this.state.player || this.state.gameOver || this.crashed) return false;
         const now = performance.now();
         if (!force && now - this.lastSaveAt < 3000) return false;
         this.lastSaveAt = now;
@@ -788,6 +793,8 @@ class Game {
             const wall = Date.now();
             const rotate = shouldRotate(this.lastBackupAt[slot] ?? null, wall, !quiet);
             await writeSlot(this.store, slot, buildSave(this), rotate);
+            this.saveFailures = 0;
+            if (uiBridge.storageWarn.value === 'failed') uiBridge.storageWarn.value = null;
             if (rotate) this.lastBackupAt[slot] = wall;
             this.events.emit('GameSaved', { slot });
             if (!quiet) this.ui.toast(slot === this.saveSlot ? 'Game saved' : `Saved to ${slotLabel(slot)}`, 'save');
@@ -795,6 +802,8 @@ class Game {
         } catch (err) {
             console.warn('save failed', err);
             this.ui.toast('Saving failed: the browser storage may be full or blocked', 'alert');
+            // twice in a row: say so where it stays in view, with a way to keep the progress
+            if (++this.saveFailures >= 2 && !this.storageDismissed) uiBridge.storageWarn.value = 'failed';
             return false;
         }
     }
