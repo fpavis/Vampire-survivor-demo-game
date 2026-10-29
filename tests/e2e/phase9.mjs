@@ -353,6 +353,8 @@ if (want('dummy')) {
 
 // ---- codex: bestiary with portraits, spells, runes and places
 if (want('codex')) {
+  // some land seen, so there are places to list (the section must not depend on what the others explored)
+  await ev(() => { const g = window.game, p = g.state.player; g.fog.revealCircle(Math.floor(p.wx / 48), Math.floor(p.wy / 48), 90); g.syncMap(); });
   await ev(() => { const g = window.game, p = g.state.player; const e = g.makeEnemy('BOAR', p.wx + 60, p.wy, { level: 1 }); g.damageEnemy(e, 1e6, { noCrit: true }); g.gameLoop(1); });
   await page.keyboard.press('j');
   await page.waitForTimeout(200);
@@ -685,6 +687,8 @@ if (want('vaults')) {
 
 // ---- title screen: Load, Options and Credits; quit to the title and continue
 if (want('front')) {
+  // a save of its own to continue (the section must not depend on what the others left behind)
+  await ev(async () => { const g = window.game; g.state.byType.SLIME = 7; await g.requestSave('front', true); });
   await openMenuOn('party');
   await ev(() => document.querySelector('.vs-menu [data-page="quit"]').click());
   await page.waitForTimeout(200);
@@ -719,7 +723,7 @@ if (want('front')) {
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
-  check('Continue starts the newest save', await ev(() => window.game.state.byType.SLIME >= 3));
+  check('Continue starts the newest save', await ev(() => window.game.state.byType.SLIME === 7));
 }
 
 await h.finish();
