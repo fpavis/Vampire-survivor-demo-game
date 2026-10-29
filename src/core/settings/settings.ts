@@ -103,7 +103,3 @@ export const showDamageNumber = (mode: DamageNumbers, crit: boolean) => mode ===
 /** Whether a monster's health bar is shown: `hurt` hides full bars, `always` shows every bar, `off` none. */
 export const showHealthBar = (mode: HealthBars, hurt: boolean) => mode === 'always' || (mode === 'hurt' && hurt);
 
-/** A short first-run benchmark result (average frame time in ms) suggests a quality level. */
-export function suggestQuality(frameMs: number): Quality {
-  return frameMs > 24 ? 'low' : frameMs > 14 ? 'medium' : 'high';
-}

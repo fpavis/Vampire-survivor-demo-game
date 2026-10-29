@@ -119,7 +119,7 @@ describe('dungeon floors', () => {
 });
 
 describe('plateau and sea dungeons', () => {
-  it('a climbing tower plateau hides a Skyvault at its heart', () => {
+  it('an Expedition Mine plateau hides a Skyvault at its heart', () => {
     const rec = { ...newTower('climb', 10, 20, { dir: 2, len: 12 }), built: true };
     const poi = plateauPoi(rec, 2024)!;
     const c = plateauCentre(rec)!;

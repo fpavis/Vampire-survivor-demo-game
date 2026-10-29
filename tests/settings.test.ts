@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, QUALITY, sanitizeSettings, showDamageNumber, showHealthBar, suggestQuality } from '../src/core/settings/settings';
+import { DEFAULT_SETTINGS, QUALITY, sanitizeSettings, showDamageNumber, showHealthBar } from '../src/core/settings/settings';
 
 describe('settings', () => {
   it('fills defaults and drops bad values', () => {
@@ -33,10 +33,15 @@ describe('settings', () => {
     expect(showHealthBar('off', true)).toBe(false);
   });
 
-  it('suggests a quality level from a frame time', () => {
-    expect(suggestQuality(8)).toBe('high');
-    expect(suggestQuality(18)).toBe('medium');
-    expect(suggestQuality(40)).toBe('low');
+  it('dynamic resolution is on by default and takes only a yes or a no', () => {
+    expect(DEFAULT_SETTINGS.dynRes).toBe(true);
+    expect(sanitizeSettings({}).dynRes).toBe(true);
+    expect(sanitizeSettings({ dynRes: false }).dynRes).toBe(false);
+    expect(sanitizeSettings({ dynRes: 'no' }).dynRes).toBe(true);
+    // a save from before it existed (no field) reads as on
+    const old = { ...DEFAULT_SETTINGS } as Partial<typeof DEFAULT_SETTINGS>;
+    delete old.dynRes;
+    expect(sanitizeSettings(old).dynRes).toBe(true);
   });
 });
 

@@ -127,7 +127,7 @@ describe('placement rules', () => {
 });
 
 describe('terrain edits', () => {
-  it('a climbing tower opens a plateau that was unreachable', () => {
+  it('an Expedition Mine opens a plateau that was unreachable', () => {
     const spot = find('climb');
     expect(spot).not.toBeNull();
     const rec = { ...newTower('climb', spot!.tx, spot!.ty, spot!.plan), built: true };

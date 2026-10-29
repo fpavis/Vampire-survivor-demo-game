@@ -4,6 +4,7 @@ import { MIGRATIONS, migrate, SaveError } from '../src/core/save/migrations';
 import { GENERATOR_VERSION, SAVE_VERSION, validateSave, type SaveData } from '../src/core/save/schema';
 import { MemoryStore } from '../src/core/save/store';
 import { FogOfWar } from '../src/core/world/fog';
+import { MAX_PINS, cleanPins } from '../src/core/world/mapView';
 
 function sampleSave(over: Partial<SaveData> = {}): SaveData {
   const fog = new FogOfWar();
@@ -286,5 +287,31 @@ describe('FogOfWar', () => {
   it('ignores corrupt chunk data instead of crashing', () => {
     const fog = FogOfWar.fromJSON({ '0,0': 'AAAA', 'bad': '!!!' } as any);
     expect(fog.revealedTileCount()).toBe(0);
+  });
+});
+
+describe('map pins in a save', () => {
+  const pins = [{ tx: 12, ty: -3, color: 'gold' }, { tx: -40, ty: 7, color: 'red' }, { tx: 0, ty: 0, color: 'blue' }];
+  const withPins = (list: unknown) => sampleSave({ world: { ...sampleSave().world, pins: list as never } });
+
+  it('a save from before pins is valid and has none', () => {
+    const s = sampleSave();
+    expect(s.world.pins).toBeUndefined();
+    expect(validateSave(s)).toEqual([]);
+    expect(cleanPins(s.world.pins)).toEqual([]);
+  });
+
+  it('pins go through the compressed codec and the text export unharmed', () => {
+    const s = withPins(pins);
+    expect(validateSave(s)).toEqual([]);
+    expect(decodeSave(encodeSave(s)).world.pins).toEqual(pins);
+    expect(decodeSave(fromBase64(toBase64(encodeSave(s)))).world.pins).toEqual(pins);
+  });
+
+  it('migration leaves them alone, and loading cleans anything odd that was written by hand', () => {
+    expect(migrate(withPins(pins)).world.pins).toEqual(pins);
+    const odd = [{ tx: 1.9, ty: 2, color: 'gold' }, { tx: 1, ty: 2, color: 'red' }, { tx: 5, ty: 5, color: 'pink' }, 'nope', null, { tx: 'x' }];
+    expect(cleanPins(odd)).toEqual([{ tx: 1, ty: 2, color: 'gold' }, { tx: 5, ty: 5, color: 'gold' }]);
+    expect(cleanPins(Array.from({ length: MAX_PINS + 20 }, (_, i) => ({ tx: i, ty: 0, color: 'blue' }))).length).toBe(MAX_PINS);
   });
 });
