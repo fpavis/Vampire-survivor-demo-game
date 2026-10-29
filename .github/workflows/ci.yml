@@ -6,6 +6,7 @@ on:
   pull_request:
 
 jobs:
+  # Fast checks that need no browser: types, lint, the unit tests, and the size of the build.
   check:
     runs-on: ubuntu-latest
     steps:
@@ -27,14 +28,53 @@ jobs:
         run: npm run check:size
       - name: Build single-file test page
         run: npm run build:single
-      - name: Install browser for end-to-end tests
-        run: npx playwright-core install --with-deps chromium
-      - name: Performance budget
-        run: npm run check:perf
-      - name: End-to-end tests
-        run: npm run test:e2e
       - name: Upload single-file build
         uses: actions/upload-artifact@v4
         with:
           name: test-page
           path: dist-single/index.html
+
+  # Draw calls, objects, chunk builds and the step time of a crowded fight, against budgets.
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser
+        run: npx playwright-core install --with-deps chromium
+      - name: Performance budget
+        run: npm run check:perf
+
+  # The browser tests, in four balanced shards that all run to the end (one failing suite hides nothing).
+  # Each shard prints a table of its suites and names the failing checks; the same table is on the run's summary.
+  e2e:
+    name: e2e (shard ${{ matrix.shard }} of 4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser
+        run: npx playwright-core install --with-deps chromium
+      - name: Browser tests
+        run: node tests/e2e/run.mjs --shard ${{ matrix.shard }}/4 --title "Browser tests, shard ${{ matrix.shard }} of 4" --json e2e-results.json
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.shard }}
+          path: e2e-results.json
+          if-no-files-found: ignore
