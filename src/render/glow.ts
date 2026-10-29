@@ -1,4 +1,3 @@
-// @ts-nocheck -- Pixi-bound renderer helper
 // A soft radial glow sprite (additive). Replaces flat translucent discs so halos fade out smoothly.
 // The texture is premultiplied white with zero alpha: drawn with the normal blend it adds its colour (tinted), so
 // glows batch with the sprites around them instead of switching to the additive blend mode.

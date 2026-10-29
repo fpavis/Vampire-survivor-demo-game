@@ -1,13 +1,19 @@
-// @ts-nocheck -- bridges the typed surface rules (core/world/surfaces) to the legacy game object.
 import { WORLD_CONFIG } from '../core/config';
-import { NO_EFFECT, enemyEffect, isImmune, playerEffect } from '../core/world/surfaces';
+import { NO_EFFECT, enemyEffect, isImmune, playerEffect, type SurfaceDef } from '../core/world/surfaces';
+
+type Game = any;                     // the game object is untyped until the sim is split out
 import { ui as uiBridge } from '../ui/bridge';
 
 const T = WORLD_CONFIG.tile;
 
 /** Applies what the ground does to the party and to monsters standing on it. */
 export class SurfaceSystem {
-    constructor(game) {
+    game: Game;
+    fx: ReturnType<typeof playerEffect>;
+    current: SurfaceDef | null;
+    shown: string;
+
+    constructor(game: Game) {
         this.game = game;
         this.fx = NO_EFFECT;       // current effect on the active hero (read by movement, mana and cooldowns)
         this.current = null;
@@ -16,7 +22,7 @@ export class SurfaceSystem {
 
     reset() { this.fx = NO_EFFECT; this.current = null; this.shown = ''; uiBridge.surface.value = null; }
 
-    update(delta) {
+    update(delta: number) {
         const g = this.game;
         const p = g.state.player;
         if (!p || g.mode !== 'overworld') { if (this.current) this.reset(); return; }
@@ -51,9 +57,9 @@ export class SurfaceSystem {
     }
 
     /** would a ground enemy be hurt by standing at (x, y)? Used so monsters path around lava and swamp. */
-    hazardousFor(e, x, y) {
+    hazardousFor(e: { flying?: boolean; phasing?: boolean; type: string }, x: number, y: number): boolean {
         if (e.flying || e.phasing) return false;
         const sd = this.game.world.surfaceAtPos(x, y);
-        return !!(sd && sd.hazard && !isImmune(e.type, e.flying, sd.id));
+        return !!(sd && sd.hazard && !isImmune(e.type, !!e.flying, sd.id));
     }
 }

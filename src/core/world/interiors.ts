@@ -433,7 +433,7 @@ function generateClassicCity(poi: Poi): InteriorSource {
     // street furniture
     for (let i = 0; i < 6; i++) {
         const side = i % 2 ? 1 : -1;
-        src.addDecor('stall', cxT + side * (5 + (i >> 1) * 0), 17 + (i >> 1) * 4.5, Math.floor(rng() * 3));
+        src.addDecor('stall', cxT + side * 5, 17 + (i >> 1) * 4.5, Math.floor(rng() * 3));
     }
     [[24.5, 31], [35.5, 31], [24.5, 14], [35.5, 14], [24.5, 22], [35.5, 22]].forEach(([x, y], i) => {
         src.addDecor(i % 2 ? 'lamp' : 'planter', x - 0.5, y, 0);

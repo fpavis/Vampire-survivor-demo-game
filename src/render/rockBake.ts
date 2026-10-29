@@ -1,4 +1,3 @@
-// @ts-nocheck -- Pixi-bound renderer helper
 // Bakes the tops of one chunk's natural rock (mountains, peaks, cave walls) into a smooth texture, the way the
 // ground is baked: light that drifts over the rock in broad patches, a fine grain, a snowline that wanders
 // between peaks and bare rock instead of following tile edges, soft moss. Its edges are the rock outline
@@ -115,7 +114,7 @@ export function bakeRockTops(cx: number, cy: number, o: RockBakeOpts): { texture
 
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = ROCK_N;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d')!;
   ctx.putImageData(new ImageData(data, ROCK_N, ROCK_N), 0, 0);
   // cut to the outline: every rock tile's top as one path, filled once (no seams where tiles meet)
   ctx.globalCompositeOperation = 'destination-in';

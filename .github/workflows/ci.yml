@@ -17,15 +17,21 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint
+        run: npm run lint
       - name: Unit tests
         run: npm test
       - name: Build
         run: npm run build
+      - name: Bundle size budget
+        run: npm run check:size
       - name: Build single-file test page
         run: npm run build:single
       - name: Install browser for end-to-end tests
         run: npx playwright-core install --with-deps chromium
-      - name: End-to-end smoke test
+      - name: Performance budget
+        run: npm run check:perf
+      - name: End-to-end tests
         run: npm run test:e2e
       - name: Upload single-file build
         uses: actions/upload-artifact@v4

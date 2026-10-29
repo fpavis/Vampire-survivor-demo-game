@@ -32,6 +32,7 @@ for (const kind of kinds) {
       g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
       for (const e of [...g.state.enemies]) e.dead = true; g.reap();
       for (let i = 0; i < 60; i++) g.gameLoop(1);
+      // oxlint-disable-next-line no-self-assign -- the setter refreshes the docks
       if (kind === 'dock') g.towers.complete = g.towers.complete;
       return { tx, ty, plan: res.plan };
     }

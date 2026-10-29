@@ -1,4 +1,3 @@
-// @ts-nocheck -- Pixi display objects are walked and patched in place
 // Bakes static vector art into a shared texture atlas. Monsters, gems, bolts and blades are drawn with
 // PIXI.Graphics (many vertices, one draw call each); after baking, each Graphics keeps its transform (so the
 // animations that rotate wings or swing legs still work) but draws a sprite cut from the atlas instead, and
@@ -9,6 +8,9 @@ import * as PIXI from 'pixi.js';
 
 // Graphics up to this many points go through the batcher instead of a draw call of their own (Pixi's default is 100).
 PIXI.GraphicsGeometry.BATCHABLE_SIZE = 1000;
+
+/** A Graphics whose drawing was swapped for an atlas sprite (its first child). */
+type Baked = PIXI.Container & { baked?: PIXI.Sprite };
 
 const PAGE = 1024;          // logical size of an atlas page
 const RES = 2;              // texels per logical pixel (sharp at the zooms we use)
@@ -83,10 +85,10 @@ export class PartAtlas {
           s.tint = o.tint;
           o.clear();
           o.addChildAt(s, 0);
-          o.baked = s;
+          (o as Baked).baked = s;
         }
       }
-      if (o.children) for (const c of o.children.slice()) if (c !== o.baked) visit(c);
+      if (o instanceof PIXI.Container) for (const c of o.children.slice()) if (c !== (o as Baked).baked) visit(c);
     };
     visit(root);
     return root;

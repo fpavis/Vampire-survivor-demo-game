@@ -308,7 +308,7 @@ export function UpgradesPage() {
                   <div>
                     <div class="tg"><Icon name={path.icon} /> {path.name.toUpperCase()} · {def.mastery ? 'MASTERY' : r.name.toUpperCase()} · {c.isNew ? 'NEW' : `RANK ${c.toLevel - 1} → ${c.toLevel}`}</div>
                     <div class="nm">{def.name}</div>
-                    {c.lines.map((l) => <div class="ln">{l}</div>)}
+                    {c.lines.map((l, k) => <div key={k} class="ln">{l}</div>)}
                   </div>
                   {!onPad() && <div class="kb">[{PICK_KEYS[i]}]</div>}
                 </button>

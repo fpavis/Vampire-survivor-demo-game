@@ -1,0 +1,12 @@
+# What every file here has in common. Indentation is left to each file: the older modules use four spaces and the
+# newer two, and reformatting them all would bury the history (so there is no Prettier config either).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false

@@ -195,9 +195,12 @@ if (want('haptics')) {
   await ev(() => window.game.ui.openMenu('settings'));
   await until(() => !!document.querySelector('.vs-pause [data-tab="controls"]'));
   await ev(() => document.querySelector('.vs-pause [data-tab="controls"]').click());
-  const slider = () => '[...document.querySelectorAll(".vs-pause input[type=range]")].find((x) => /Vibration strength/.test(x.closest("label").innerText))';
-  await until(new Function(`return !!${slider()}`));
-  const setStrength = (v) => ev(([sel, v]) => { const el = eval(sel); el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, [slider(), v]);
+  await until(() => [...document.querySelectorAll('.vs-pause input[type=range]')].some((x) => /Vibration strength/.test(x.closest('label').innerText)));
+  const setStrength = (v) => ev((v) => {
+    const el = [...document.querySelectorAll('.vs-pause input[type=range]')].find((x) => /Vibration strength/.test(x.closest('label').innerText));
+    el.value = String(v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, v);
   await ev(() => { window.__rumble = []; });
   await page.waitForTimeout(300);
   await setStrength(0.3);

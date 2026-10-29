@@ -1,4 +1,3 @@
-// @ts-nocheck -- Pixi-bound renderer helper
 // The player's boat: a back half (hull interior, mast, sail) drawn behind the hero and a front rim drawn over their legs.
 import * as PIXI from 'pixi.js';
 import { shade } from './decorArt';

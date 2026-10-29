@@ -1,7 +1,37 @@
-// @ts-nocheck -- legacy JS, typed progressively as modules are rewritten (see docs/IMPLEMENTATION_PLAN.md)
 import { INITIAL_STATE } from '../core/config';
 
+// The live entities are Pixi containers carrying game fields; they stay loosely typed until the sim is split out.
+type Entity = any;
+
 class GameState {
+    health!: number;
+    maxHealth!: number;
+    level!: number;
+    experience!: number;
+    nextLevel!: number;
+    playerSpeed!: number;
+    score!: number;
+    levelUp!: boolean;
+    gameOver!: boolean;
+    paused!: boolean;
+    keys!: Record<string, boolean>;
+    time!: number;
+    kills!: number;
+    bossesDefeated!: number;
+    byType!: Record<string, number>;
+    distance!: number;
+    goldEarned!: number;
+    deaths!: number;
+    picks!: Record<string, number>;
+    wallet!: { gold: number; wood: number; stone: number; iron: number };
+    lootFilter!: string;
+    pending!: number;
+    pointerPosition!: { x: number; y: number } | null;
+    pointerDown!: boolean;
+    player!: Entity | null;
+    enemies!: Entity[];
+    gems!: Entity[];
+
     constructor() {
         this.reset();
     }

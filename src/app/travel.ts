@@ -1,43 +1,46 @@
-// @ts-nocheck -- game glue in the style of the other app systems
 // Fast travel over the network of teleporters: every town the party has entered has one (it is attuned on the
 // first visit), and every waypoint the party built is a node too. Using either opens the world map in travel mode;
 // picking a destination there pays the fare (free only between two waypoints) and moves the party.
 import { ui as uiBridge } from '../ui/bridge';
 import { WORLD_CONFIG } from '../core/config';
-import { destinations, townNodeId, travelFare } from '../core/world/travel';
+import { destinations, townNodeId, travelFare, type TravelNode } from '../core/world/travel';
+
+type Game = any;                     // the game object is untyped until the sim is split out
+type Node = TravelNode & { poiId?: string };
 
 const T = WORLD_CONFIG.tile;
 
 export class TravelSystem {
-    constructor(game) {
+    game: Game;
+    constructor(game: Game) {
         this.game = game;
     }
 
     /** Every node the party can travel between: attuned town teleporters and built waypoints. */
-    nodes() {
-        const g = this.game, out = [];
+    nodes(): Node[] {
+        const g = this.game, out: Node[] = [];
         for (const c of g.session.cities) out.push({ id: townNodeId(c.id), kind: 'town', name: c.name, tx: Math.floor(c.ex / T), ty: Math.floor(c.ey / T), poiId: c.id });
         for (const r of g.towers.waypoints()) out.push({ id: r.id, kind: 'waypoint', name: this.waypointName(r), tx: r.tx, ty: r.ty });
         return out;
     }
 
-    node(id) { return this.nodes().find((n) => n.id === id) || null; }
+    node(id: string): Node | null { return this.nodes().find((n) => n.id === id) || null; }
 
     /** A waypoint is named after the region it stands in ("Waypoint, the Amber Reach"). */
-    waypointName(r) {
+    waypointName(r: { tx: number; ty: number }): string {
         const ow = this.game.overworld;
         const reg = ow && ow.region ? ow.region(ow.regionId(r.tx, r.ty)) : null;
         return reg ? `Waypoint, ${reg.name}` : `Waypoint at ${r.tx}, ${r.ty}`;
     }
 
     /** Where one can go from a node, nearest first, each with its fare. */
-    from(id) {
+    from(id: string) {
         const here = this.node(id);
         return here ? destinations(here, this.nodes()) : [];
     }
 
     /** Open the world map to pick a destination, standing at node `id`. */
-    open(id) {
+    open(id: string) {
         const g = this.game;
         if (!this.node(id) || g.busy) return;
         g.audio.play('equip');
@@ -45,7 +48,7 @@ export class TravelSystem {
     }
 
     /** Pay and go. Returns false (with a reason on screen) when the trip cannot be made. */
-    go(fromId, toId) {
+    go(fromId: string, toId: string): boolean {
         const g = this.game;
         const a = this.node(fromId), b = this.node(toId);
         if (!a || !b || a.id === b.id || g.busy || g.boat) return false;

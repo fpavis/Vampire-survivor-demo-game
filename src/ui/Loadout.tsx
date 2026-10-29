@@ -272,7 +272,7 @@ export function SpellsPage() {
     const names = [...set.auto, ...set.active].filter(Boolean).map((u: string) => (sp.item(u) ? TEMPLATES[sp.item(u).tpl].name : 'salvaged spell'));
     return names.length ? names.join(', ') : 'Nothing equipped';
   };
-  const useSet = (n: number) => {
+  const applySet = (n: number) => {
     const r = sp.loadPreset(n);
     if (!r.ok) return;
     game.audio.play('equip');
@@ -422,7 +422,7 @@ export function SpellsPage() {
         <span class="vs-sec">LOADOUT SETS</span>
         {[0, 1, 2].map((n) => (
           <span key={n} class="vs-set">
-            <button class="vs-btn" data-set={n} disabled={!heroRec?.presets?.[n]} title={setNames(n)} onClick={() => useSet(n)}>Set {n + 1}</button>
+            <button class="vs-btn" data-set={n} disabled={!heroRec?.presets?.[n]} title={setNames(n)} onClick={() => applySet(n)}>Set {n + 1}</button>
             <button class="vs-btn vs-mini" data-keep={n} title={`Keep the current loadout as set ${n + 1}`} aria-label={`Keep as set ${n + 1}`} onClick={() => keepSet(n)}><Icon name="save" /></button>
           </span>
         ))}

@@ -35,7 +35,7 @@ export class StoryDirector {
     play(lines, opts = {}) {
         const g = this.game;
         if (settings.storyScenes === 'cards' || this.current || !lines.length) return false;
-        this.current = { id: ++this.seq, lines, index: 0, shown: 0, at: opts.at || null, then: opts.then || null, wasPaused: g.state.paused };
+        this.current = { id: ++this.seq, lines, index: 0, shown: 0, at: opts.at || null, after: opts.after || null, wasPaused: g.state.paused };
         g.state.paused = true;
         g.state.keys = {};
         g.state.pointerDown = false;
@@ -86,7 +86,7 @@ export class StoryDirector {
         this.current = null;
         uiBridge.scene.value = null;
         if (!sc.wasPaused && !uiBridge.pauseOpen.value) g.state.paused = false;
-        if (sc.then) sc.then();
+        if (sc.after) sc.after();
     }
 
     /** The Elder's interlude for the latest chapter closed, once (earlier untold ones are passed over). */
@@ -156,7 +156,7 @@ export class StoryDirector {
         if (this.pendingEnding && !uiBridge.dialog.value && !g.busy && !uiBridge.ending.value) {
             this.pendingEnding = false;
             // the Elder leads into the ending (with cards only, it simply begins)
-            if (!this.play([this.elderLine(INTERLUDES.ch6)], { at: this.elderAt(), then: () => this.ending() })) this.ending();
+            if (!this.play([this.elderLine(INTERLUDES.ch6)], { at: this.elderAt(), after: () => this.ending() })) this.ending();
             return;
         }
         // the Elder's word between chapters, once the party is in town and nothing else is open
