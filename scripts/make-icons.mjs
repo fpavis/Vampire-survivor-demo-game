@@ -3,6 +3,7 @@
 // Writes public/icons/icon-192.png, icon-512.png, icon-maskable-512.png, apple-touch-icon.png, public/favicon.svg
 // and public/og.jpg (the title screen at 1200 x 630). The files are committed; run again only to change them.
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -29,7 +30,7 @@ function svg(size, { inset = 0.2, round = 0.22 } = {}) {
 mkdirSync('public/icons', { recursive: true });
 writeFileSync('public/favicon.svg', svg(64, { inset: 0.14, round: 0.2 }));
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: findChromium(), args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const shoot = async (file, size, opts) => {
   await page.setViewportSize({ width: size, height: size });

@@ -1,29 +1,10 @@
 // Phase 1 end-to-end checks: resident camps, enemy sight and leash, persistence across reloads, respawn.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4181;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-const stop = () => { try { process.kill(-preview.pid); } catch { /* ignore */ } };
-process.on('exit', stop);
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1100, height: 650 } });
-const errors = [];
-const watch = (page) => {
-  page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-};
-let page = await context.newPage();
-watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+const h = await suite('phase1', { viewport: { width: 1100, height: 650 } });
+const { check } = h;
+let page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
@@ -121,9 +102,8 @@ const before = await page.evaluate(async () => {
   await g.requestSave('test', true);
   return out;
 });
-page = await context.newPage();
-watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1200);
 await page.keyboard.press('Enter');     // Continue
@@ -161,7 +141,4 @@ const respawn = await page.evaluate(async () => {
 check('party death shows the death flow', respawn.died);
 check('respawns at the last visited town with the party revived', respawn.alive && respawn.near && respawn.label === 'Testtown', JSON.stringify(respawn));
 
-check('no console or page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-stop();
-process.exit(failed ? 1 : 0);
+await h.finish();

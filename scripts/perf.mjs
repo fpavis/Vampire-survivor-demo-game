@@ -6,6 +6,7 @@
 // and object counts.
 // Rendering runs on a software GPU here, so its numbers are only useful relative to each other.
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { spawn } from 'node:child_process';
 
 const FRAMES = Number(process.argv[2]) || 600;
@@ -14,7 +15,7 @@ const pv = spawn('npx', ['vite', 'preview', '--port', '4199', '--strictPort'], {
 const stop = () => { try { process.kill(-pv.pid); } catch {} };
 process.on('exit', stop);
 await new Promise((r) => setTimeout(r, 2500));
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.on('pageerror', (e) => console.log('ERR', e.message));
 await p.addInitScript(() => { window.__forceSeed = 2024; });

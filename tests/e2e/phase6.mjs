@@ -1,28 +1,10 @@
-// Phase 6 end-to-end checks: build mode, construction, spire, ward, beacon, waypoint, climbing tower, bridge, dock, boat, island caches.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+// Phase 6 end-to-end checks: build mode, construction, spire, ward, beacon, waypoint, Expedition Mine, bridge, dock, boat, island caches.
+import { suite } from './harness.mjs';
 
-const PORT = 4186;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1200, height: 760 } });
-const errors = [];
-const SEED = Number(process.env.SEED) || 2024;
-await context.addInitScript((seed) => { window.__forceSeed = seed; }, SEED);
-console.log('seed', SEED);
-let page = await context.newPage();
-const watch = (pg) => { pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); }); };
-watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+const h = await suite('phase6', { viewport: { width: 1200, height: 760 } });
+const { check } = h;
+let page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
@@ -233,9 +215,9 @@ const arrived = await ev(({ b, gold0 }) => {
 check('the waypoint is the interaction target', trav.tgt === 'tower', JSON.stringify(trav));
 check('travelling between two waypoints is free and lands the hero at the other one', trav.ok && arrived.d < 160 && arrived.paid === 0, JSON.stringify(arrived));
 
-// ---- 7. climbing tower opens a plateau
+// ---- 7. the Expedition Mine (kind 'climb') opens a plateau
 const climbSpot = await ev(() => window.findSpot('climb', 20));
-check('a climbing tower spot exists', !!climbSpot && !!climbSpot.plan, JSON.stringify(climbSpot));
+check('an Expedition Mine spot exists', !!climbSpot && !!climbSpot.plan, JSON.stringify(climbSpot));
 const reach = (rec) => {
   // BFS over tile centres: can the hero walk from the foot of the tower onto the plateau (a free plateau tile)?
   const g = window.game, T = 48, { plateauCentre, DIRS } = window.__dev.towersApi, pc = plateauCentre(rec);
@@ -263,7 +245,7 @@ const climbBefore = await ev(() => window.reachFn(window.game.towers.byId(window
 await ev(() => { const g = window.game; window.rich(); g.towers.deliver(g.towers.byId(window.__climbId)); for (let i = 0; i < 4; i++) g.gameLoop(1); });
 const climbAfter = await ev(() => window.reachFn(window.game.towers.byId(window.__climbId)));
 check('the plateau is unreachable before the tower is built', !climbBefore.found && climbBefore.centreBiome !== 17, JSON.stringify(climbBefore));
-check('the climbing tower opens a walkable path to the plateau', climbAfter.found && climbAfter.centreBiome === 17, JSON.stringify(climbAfter));
+check('the Expedition Mine opens a walkable path to the plateau', climbAfter.found && climbAfter.centreBiome === 17, JSON.stringify(climbAfter));
 
 // ---- 8. bridge tower
 const bridgeSpot = await ev(() => window.findSpot('bridge', 20));
@@ -370,8 +352,8 @@ const before = await ev(() => {
   };
 });
 await ev(async () => { await window.game.requestSave('test', true); });
-page = await context.newPage(); watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1200);
 await page.keyboard.press('Enter');
@@ -402,8 +384,4 @@ check('the beacon-revealed fog survives a reload', after.beacon);
 check('the opened island treasure stays opened', after.cache);
 check('the boat and the sailing state survive a reload', after.sailing && JSON.stringify(after.boats) === JSON.stringify(before.boat), JSON.stringify({ after: after.boats, before: before.boat }));
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

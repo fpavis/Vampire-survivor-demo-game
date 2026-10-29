@@ -1,36 +1,17 @@
 // 9f end-to-end checks: towers that rise in levels, sieges, building on claimed ground (and later steps: quests
 // and story scenes). Sections can be picked with ONLY=towers,siege,...; SHOTS=<dir> saves screenshots;
 // THROTTLE=n slows the CPU like a busy CI runner.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4194;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const want = (section) => !ONLY || ONLY.includes(section);
+const h = await suite('phase9f', { viewport: { width: 1280, height: 720 }, args: ['--autoplay-policy=no-user-gesture-required'] });
+const { check, want } = h;
 const SHOTS = process.env.SHOTS || null;
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--autoplay-policy=no-user-gesture-required']
-});
-const errors = [];
-const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-await context.addInitScript(() => { window.__forceSeed = 2024; });
-const page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
+const page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const until = (fn, arg, timeout = 8000) => page.waitForFunction(fn, arg, { timeout }).then(() => true, () => false);
 const logHas = (re) => ev((src) => window.__dev.ui.log.value.some((l) => new RegExp(src).test(l.text)), re.source);
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player && window.__dev);
@@ -522,6 +503,23 @@ if (want('scene')) {
   const once = await ev(() => { for (let i = 0; i < 10; i++) window.game.gameLoop(1); return { scene: !!window.__dev.ui.scene.value, flag: !!window.game.quests.state.flags['interlude.ch0'] }; });
   check('...once', !once.scene && once.flag, JSON.stringify(once));
   await leave();
+  // the last chapter: the Elder's last word first, and the ending only once it has been read (or skipped)
+  await ev(() => window.game.events.emit('QuestCompleted', { id: 'm6_sovereign' }));
+  const lastWord = await until(() => /The Elder/.test(document.querySelector('.vs-scene .who')?.innerText || '') && /Sit with me a while/.test(document.querySelector('.vs-scene')?.innerText || ''));
+  const waiting = await ev(() => ({ ending: !!window.__dev.ui.ending.value, paused: window.game.state.paused }));
+  check('the Sovereign falling brings the Elder\'s last word, and the ending waits for it', lastWord && !waiting.ending && waiting.paused, JSON.stringify(waiting));
+  await ev(() => window.game.story.advance());
+  await ev(() => window.game.story.advance());
+  const rolled = await until(() => !!document.querySelector('.vs-ending .vs-roll') && !document.querySelector('.vs-scene'));
+  check('...and reading it leads into the ending', rolled);
+  await page.keyboard.press('Escape');
+  check('...which can be skipped, and play goes on', await until(() => !document.querySelector('.vs-ending') && !window.game.state.paused));
+  await ev(() => window.game.events.emit('QuestCompleted', { id: 'm6_sovereign' }));
+  await until(() => !!document.querySelector('.vs-scene'));
+  await page.keyboard.press('Escape');
+  check('skipping the Elder\'s last word with Esc still leads into the ending', await until(() => !!document.querySelector('.vs-ending .vs-roll')));
+  await page.keyboard.press('Escape');
+  await until(() => !document.querySelector('.vs-ending') && !window.game.state.paused);
   // cards only: a card over play instead, and nothing holds
   await ev(() => window.__dev.setSettings({ storyScenes: 'cards' }));
   const cards = await ev(() => { const g = window.game; g.story.bossIntro(window.__lord); return { scene: !!window.__dev.ui.scene.value, paused: g.state.paused }; });
@@ -530,7 +528,4 @@ if (want('scene')) {
   await ev(() => { const e = window.__lord; e.dead = true; e.silent = true; window.game.reap(); window.__dev.setSettings({ storyScenes: 'full' }); });
 }
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

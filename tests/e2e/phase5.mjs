@@ -1,28 +1,10 @@
 // Phase 5 end-to-end checks: surfaces, claim zones, ambush plates, gathering, merchant, inn, townsfolk.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4185;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1200, height: 760 } });
-const errors = [];
-const SEED = Number(process.env.SEED) || (Math.random() * 1e9) | 0;
-await context.addInitScript((seed) => { window.__forceSeed = seed; }, SEED);
-console.log('seed', SEED);
-let page = await context.newPage();
-const watch = (pg) => { pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); }); };
-watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+const h = await suite('phase5', { viewport: { width: 1200, height: 760 } });
+const { check } = h;
+let page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
@@ -181,8 +163,8 @@ check('the harvested tree is removed from the world', gath && !gath.still);
 
 // ---- 6. persistence of every delta
 await ev(async () => { await window.game.requestSave('test', true); });
-page = await context.newPage(); watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1200);
 await page.keyboard.press('Enter');
@@ -218,7 +200,7 @@ const gemTest = await page.evaluate((p) => {
   return { n: window.__gemsBefore, lvl: g.state.level };
 }, poi);
 await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 8000 }).catch(async (e) => {
-  console.log('stuck entering the town', JSON.stringify(await page.evaluate(() => { const g = window.game; return { mode: g.mode, busy: g.busy, paused: g.state.paused, pause: !!document.querySelector('.vs-pause'), focus: document.hasFocus(), hidden: document.hidden, fade: [g.ui.fadeAlpha, g.ui.fadeTarget, !!g.ui.fadeCb], frame: g.frame, ticker: [g.app.ticker.started, g.app.ticker.maxFPS, g.app.ticker.FPS], over: g.state.gameOver }; })), errors.slice(0, 3));
+  console.log('stuck entering the town', JSON.stringify(await page.evaluate(() => { const g = window.game; return { mode: g.mode, busy: g.busy, paused: g.state.paused, pause: !!document.querySelector('.vs-pause'), focus: document.hasFocus(), hidden: document.hidden, fade: [g.ui.fadeAlpha, g.ui.fadeTarget, !!g.ui.fadeCb], frame: g.frame, ticker: [g.app.ticker.started, g.app.ticker.maxFPS, g.app.ticker.FPS], over: g.state.gameOver }; })), h.errors.slice(0, 3));
   await page.waitForTimeout(1000);
   console.log('a second later', JSON.stringify(await page.evaluate(() => { const g = window.game; return { busy: g.busy, fade: [g.ui.fadeAlpha, g.ui.fadeTarget, !!g.ui.fadeCb], frame: g.frame, fps: g.app.ticker.FPS }; })));
   throw e;
@@ -276,8 +258,4 @@ const talk = await page.evaluate(() => {
 await page.waitForTimeout(200);
 check('townsfolk talk', talk.tgt === 'npc' && (await page.locator('.vs-dialog .say').count()) === 1, JSON.stringify(talk));
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

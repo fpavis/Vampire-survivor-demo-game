@@ -1,28 +1,11 @@
 // Phase 7 end-to-end checks: dungeons (floors, seals, boss, chest, persistence, plateau and sea), quests, story, bounties.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4188;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1200, height: 760 } });
-const errors = [];
-const SEED = Number(process.env.SEED) || 2024;
-await context.addInitScript((seed) => { window.__forceSeed = seed; }, SEED);
-let page = await context.newPage();
-const watch = (pg) => { pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); }); };
-watch(page);
+const h = await suite('phase7', { viewport: { width: 1200, height: 760 } });
+const { check } = h;
+let page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
@@ -129,7 +112,7 @@ const plat = await ev(() => {
   const near = g.world.nearestPoi(poi.ex, poi.ey, 72);
   return { id: poi.id, name: poi.name, found: !!near && near.id === poi.id, realm: poi.dungeon.realm, floors: poi.dungeon.floors, target: g.target && g.target.kind, text: g.target && g.target.text };
 });
-check('a climbing tower plateau hosts a Skyvault entrance the world knows about', plat.found && plat.realm === 'plateau' && plat.floors === 3, JSON.stringify(plat));
+check('an Expedition Mine plateau hosts a Skyvault entrance the world knows about', plat.found && plat.realm === 'plateau' && plat.floors === 3, JSON.stringify(plat));
 check('walking up to it offers to enter', plat.target === 'enter' && /Skyvault/.test(plat.text), plat.text);
 await ev(() => { const g = window.game; g.enterPlace(g.world.nearestPoi(g.state.player.wx, g.state.player.wy, 72)); });
 await waitInside();
@@ -331,8 +314,8 @@ check('a dungeon that was already cleared counts for a quest taken afterwards', 
 // ---- 7. everything survives a reload
 const snap = await ev(() => { const q = window.game.quests.state; return { done: [...q.done], flags: { ...q.flags }, active: Object.keys(q.active).sort(), boards: JSON.parse(JSON.stringify(q.bounties)), bossDead: window.game.visited[window.__poi.id].bossDead }; });
 await ev(async () => { await window.game.requestSave('test', true); });
-page = await context.newPage(); watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1500);
 await page.keyboard.press('Enter');
@@ -341,8 +324,4 @@ const reload = await page.evaluate(() => { const q = window.game.quests.state; r
 check('quests, story flags, bounty rotations and dungeon progress survive a reload', JSON.stringify(reload.done) === JSON.stringify(snap.done) && JSON.stringify(reload.flags) === JSON.stringify(snap.flags) && JSON.stringify(reload.active) === JSON.stringify(snap.active) && JSON.stringify(reload.boards) === JSON.stringify(snap.boards) && reload.bossDead === snap.bossDead, JSON.stringify({ snap, reload }));
 check('the tracker is back after a reload', (await page.locator('.vs-tracker').count()) === 1 || reload.active.length === 0);
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

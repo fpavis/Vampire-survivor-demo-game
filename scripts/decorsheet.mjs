@@ -1,13 +1,14 @@
 // Visual check: every baked decoration sprite (trees, rocks, props, landmarks) on one sheet, at 1.5x.
 // Usage: npm run build && node scripts/decorsheet.mjs <out-dir> [tag] [filter] [scale]
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'decor'; const FILTER = process.argv[4] || ''; const SCALE = Number(process.argv[5]) || 1.5;
 mkdirSync(OUT, { recursive: true });
 const pv = spawn('npx', ['vite', 'preview', '--port', '4198', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 1500, height: 1100 } });
 p.on('pageerror', (e) => console.log('ERR', e.message));
 await p.goto('http://localhost:4198/'); await p.waitForFunction(() => !!window.game);

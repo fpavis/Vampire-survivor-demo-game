@@ -2,6 +2,7 @@
 // built on a walk) have tight budgets; the simulation step has a loose one, as CI runners vary in speed.
 // Usage: npm run build && node scripts/perf-check.mjs   (exits 1 when anything is over budget)
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { spawn } from 'node:child_process';
 
 const BUDGET = {
@@ -17,7 +18,7 @@ const pv = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPor
 const stop = () => { try { process.kill(-pv.pid); } catch { /* gone */ } };
 process.on('exit', stop);
 for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));

@@ -1,37 +1,18 @@
 // Phase 11 end-to-end checks: balance (experience against the hero's level, small card steps, mastery, the
 // refund of old picks), the game menu, the training ground and per-skill DPS. Sections can be picked with
 // ONLY=balance,menu,yard,dps; SHOTS=<dir> saves screenshots; THROTTLE=n slows the CPU like a busy CI runner.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4193;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const want = (section) => !ONLY || ONLY.includes(section);
+const h = await suite('phase11', { viewport: { width: 1280, height: 720 }, args: ['--autoplay-policy=no-user-gesture-required'] });
+const { check, want } = h;
 const SHOTS = process.env.SHOTS || null;
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--autoplay-policy=no-user-gesture-required']
-});
-const errors = [];
-const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-await context.addInitScript(() => { window.__forceSeed = 2024; });
-const page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
+const page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
 // panels follow the game's own ticker, slow on a software GPU: wait for the state, never a fixed time
 const until = (fn, arg, timeout = 8000) => page.waitForFunction(fn, arg, { timeout }).then(() => true, () => false);
 const logHas = (re) => ev((src) => window.__dev.ui.log.value.some((l) => new RegExp(src).test(l.text)), re.source);
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player && window.__dev);
@@ -294,7 +275,4 @@ if (want('dps')) {
   await outside();
 }
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

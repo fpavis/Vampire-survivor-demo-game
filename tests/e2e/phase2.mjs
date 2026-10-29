@@ -1,25 +1,10 @@
 // Phase 2 end-to-end checks: spells, mana, non-interrupting level-ups, loadout UI, loot, persistence.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4182;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1100, height: 650 } });
-const errors = [];
-let page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-await page.goto(`http://localhost:${PORT}/`);
+const h = await suite('phase2', { viewport: { width: 1100, height: 650 } });
+const { check } = h;
+let page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
@@ -152,9 +137,8 @@ const saved = await page.evaluate(async () => {
   await g.requestSave('test', true);
   return out;
 });
-page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1200);
 await page.keyboard.press('Enter');
@@ -166,8 +150,4 @@ const loaded = await page.evaluate(() => {
 check('loadout and runes survive a reload', loaded.spells === saved.spells && loaded.runes === saved.runes && loaded.wide === 'wide' && loaded.auto === saved.auto, JSON.stringify(loaded));
 check('pending picks and stat picks persist', loaded.pending === 2 && loaded.res === 2 && loaded.maxMana === 80, JSON.stringify(loaded));
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

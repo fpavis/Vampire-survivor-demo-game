@@ -1,35 +1,16 @@
 // Phase 12 end-to-end checks: the second round of playtest fixes (hero switching and timers, building,
 // reach and walls, the travel map, mountain outlines). Sections can be picked with ONLY=party,building,...;
 // SHOTS=<dir> saves screenshots; THROTTLE=n slows the CPU like a busy CI runner.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4195;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const want = (section) => !ONLY || ONLY.includes(section);
+const h = await suite('phase12', { viewport: { width: 1280, height: 720 }, args: ['--autoplay-policy=no-user-gesture-required'] });
+const { check, want } = h;
 const SHOTS = process.env.SHOTS || null;
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--autoplay-policy=no-user-gesture-required']
-});
-const errors = [];
-const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-await context.addInitScript(() => { window.__forceSeed = 2024; });
-const page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
+const page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const until = (fn, arg, timeout = 8000) => page.waitForFunction(fn, arg, { timeout }).then(() => true, () => false);
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player && window.__dev);
@@ -288,13 +269,47 @@ if (want('mountains')) {
     return null;
   });
   check('a mountain\'s outer corner is round: the hero can stand where the square used to be', !!corner && corner.free && corner.edge, JSON.stringify(corner));
+  // the tops of the rock are baked per chunk into one smooth texture (one sprite per tile row), with snow on the peaks
+  const bake = await ev(() => {
+    const g = window.game, w = g.world, B = window.__dev.BIOME;
+    const is = (tx, ty, b) => w.biomeAt(tx, ty) === b;
+    const all = (tx, ty, b, r) => { for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (!is(tx + i, ty + j, b)) return false; return true; };
+    const none = (tx, ty, b, r) => { for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (is(tx + i, ty + j, b)) return false; return true; };
+    let peak = null, rock = null;
+    for (let r = 6; r < 300 && !(peak && rock); r++) for (let a = 0; a < 6.28 && !(peak && rock); a += 0.03) {
+      const tx = Math.round(Math.cos(a) * r), ty = Math.round(Math.sin(a) * r);
+      if (!peak && is(tx, ty, B.PEAK) && all(tx, ty, B.PEAK, 1)) peak = { tx, ty };
+      if (!rock && is(tx, ty, B.MOUNTAIN) && all(tx, ty, B.MOUNTAIN, 1) && none(tx, ty, B.PEAK, 2)) rock = { tx, ty };
+    }
+    if (!peak || !rock) return { peak: !!peak, rock: !!rock };
+    const T = 48, n = 12;                                    // a tile in world units; tiles per chunk edge
+    const look = (spot) => {
+      window.goTo((spot.tx + 0.5) * T, (spot.ty + 4) * T);
+      const cx = Math.floor(spot.tx / n), cy = Math.floor(spot.ty / n);
+      const view = [...w.views.values()].find((v) => v.cx === cx && v.cy === cy);
+      if (!view || !view.rockTex) return null;
+      const tex = view.rockTex, SZ = tex.width / n, ctx = tex.baseTexture.resource.source.getContext('2d');   // SZ: texels per tile
+      const px = (tx, ty) => { const d = ctx.getImageData(Math.floor(((tx - cx * n) + 0.5) * SZ), Math.floor(((ty - cy * n) + 0.5) * SZ), 1, 1).data; return { rgb: [d[0], d[1], d[2]], a: d[3], lum: 0.3 * d[0] + 0.59 * d[1] + 0.11 * d[2] }; };
+      let open = null;
+      for (let j = 0; j < n && !open; j++) for (let i = 0; i < n && !open; i++) if (![B.MOUNTAIN, B.PEAK].includes(w.biomeAt(cx * n + i, cy * n + j))) open = { tx: cx * n + i, ty: cy * n + j };
+      let rows = 0;
+      for (let j = 0; j < n; j++) { let any = false; for (let i = 0; i < n; i++) if ([B.MOUNTAIN, B.PEAK].includes(w.biomeAt(cx * n + i, cy * n + j))) any = true; if (any) rows++; }
+      const sprites = view.objects.filter((o) => o.texture && o.texture.baseTexture === tex.baseTexture);
+      return {
+        size: [tex.width, tex.height], square: tex.width === tex.height && Number.isInteger(SZ), at: px(spot.tx, spot.ty), openAlpha: open ? px(open.tx, open.ty).a : null, rows, sprites: sprites.length,
+        frames: sprites.every((o) => o.texture.frame.width === tex.width && o.texture.frame.height === SZ)
+      };
+    };
+    return { peak: look(peak), rock: look(rock) };
+  });
+  check('a chunk of mountains bakes its rock tops into one square texture', !!bake.peak && !!bake.rock && bake.peak.square && bake.rock.square, JSON.stringify([bake.peak && bake.peak.size, bake.rock && bake.rock.size]));
+  check('...a sprite for each tile row that has rock, each a slice of it', !!bake.peak && bake.peak.sprites === bake.peak.rows && bake.peak.frames && bake.rock.sprites === bake.rock.rows && bake.rock.frames, JSON.stringify([bake.peak && [bake.peak.sprites, bake.peak.rows], bake.rock && [bake.rock.sprites, bake.rock.rows]]));
+  check('...opaque where there is rock and clear on open ground', !!bake.peak && bake.peak.at.a === 255 && bake.rock.at.a === 255 && (bake.peak.openAlpha === null || bake.peak.openAlpha === 0) && (bake.rock.openAlpha === null || bake.rock.openAlpha === 0), JSON.stringify([bake.peak && [bake.peak.at.a, bake.peak.openAlpha], bake.rock && [bake.rock.at.a, bake.rock.openAlpha]]));
+  check('...snow on the peaks, bare grey rock below', !!bake.peak && bake.peak.at.lum > bake.rock.at.lum + 40, JSON.stringify([bake.peak && bake.peak.at, bake.rock && bake.rock.at]));
   if (SHOTS) {
     await ev((c) => { const g = window.game, T = 48, p = g.state.player; p.wx = (c.tx + 0.5) * T; p.wy = (c.ty + 4) * T; g.cam.x = p.wx; g.cam.y = p.wy - 2 * T; g.world.update(g.cam.x, g.cam.y, 1600, 1000, true); for (let i = 0; i < 4; i++) g.gameLoop(1); }, corner);
     await page.screenshot({ path: `${SHOTS}/mountains.png` });
   }
 }
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

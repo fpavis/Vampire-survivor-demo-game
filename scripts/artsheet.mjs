@@ -1,13 +1,14 @@
 // Visual check: every hero, enemy, pickup and spell sprite laid out on one sheet.
 // Usage: npm run build && node scripts/artsheet.mjs <out-dir> [tag]
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'sheet';
 mkdirSync(OUT, { recursive: true });
 const pv = spawn('npx', ['vite', 'preview', '--port', '4197', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 1500, height: 1180 } });
 p.on('pageerror', (e) => console.log('ERR', e.message));
 await p.goto('http://localhost:4197/'); await p.waitForFunction(() => !!window.game);

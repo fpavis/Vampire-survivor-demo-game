@@ -1,25 +1,10 @@
 // Phase 3 end-to-end checks: wallet pickups, drag and drop, salvage, filters, persistence.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4183;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1200, height: 760 } });
-const errors = [];
-let page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-await page.goto(`http://localhost:${PORT}/`);
+const h = await suite('phase3', { viewport: { width: 1200, height: 760 } });
+const { check } = h;
+let page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player);
@@ -147,9 +132,8 @@ const saved = await page.evaluate(async () => {
   await g.requestSave('test', true);
   return true;
 });
-page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1200);
 await page.keyboard.press('Enter');
@@ -157,8 +141,4 @@ await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000
 const loaded = await page.evaluate(() => { const g = window.game; return { w: g.state.wallet, f: g.state.lootFilter, lock: g.spells.spells.find((s) => s.tpl === 'bolt').locked, nova: g.spells.spells.find((s) => s.tpl === 'nova').runes }; });
 check('wallet, filter and locks survive a reload', loaded.w.gold === 777 && loaded.w.iron === 7 && loaded.f === 'basic' && loaded.lock === true && loaded.nova[0] === 'heavy', JSON.stringify(loaded));
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

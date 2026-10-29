@@ -1,30 +1,10 @@
 // Phase 9 end-to-end checks: the SVG icon set and fonts (no emoji anywhere on screen), and the later Phase 9 steps.
 // Sections can be picked with ONLY=icons,...; SHOTS=<dir> saves screenshots.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4191;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const want = (section) => !ONLY || ONLY.includes(section);
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--autoplay-policy=no-user-gesture-required']
-});
-const errors = [];
-const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-await context.addInitScript(() => { window.__forceSeed = 2024; });
-const page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-// THROTTLE=4 slows the CPU like a busy CI runner, to reproduce timing failures locally
-if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
+const h = await suite('phase9', { viewport: { width: 1280, height: 720 }, args: ['--autoplay-policy=no-user-gesture-required'] });
+const { check, want } = h;
+const page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
 // the game menu (Esc) on one of its pages; and the Load panel from its Save & Load page
 const openMenuOn = async (pg) => {
@@ -43,7 +23,7 @@ const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 4000 }).then
 // scene changes (respawn, travel) run a fade on the game's own ticker: allow them longer on a slow runner
 const untilLong = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 }).then(() => true, () => false);
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 // every text the player can see: the DOM and each canvas text in the scene
 const emojiOnScreen = () => ev(() => {
@@ -742,8 +722,4 @@ if (want('front')) {
   check('Continue starts the newest save', await ev(() => window.game.state.byType.SLIME >= 3));
 }
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} check(s) failed` : '\nAll phase 9 checks passed');
-process.exit(failed ? 1 : 0);
+await h.finish();

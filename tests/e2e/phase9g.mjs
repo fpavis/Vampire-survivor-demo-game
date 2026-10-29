@@ -1,41 +1,25 @@
 // Phase 9g end-to-end checks: the input deferrals. A controller the browser cannot lay out is set up by hand
 // and then works like a standard pad. Sections can be picked with ONLY=profile,haptics,map; THROTTLE=n slows the CPU
 // like a busy CI runner.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4196;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const want = (section) => !ONLY || ONLY.includes(section);
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const errors = [];
-const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
 const PAD_ID = 'Generic USB Joystick (Vendor: 0079 Product: 0006)';
-await context.addInitScript((id) => {
-  window.__forceSeed = 2024;
+const h = await suite('phase9g', {
+  viewport: { width: 1280, height: 720 },
   // a controller with no standard mapping: twelve buttons and the d-pad on a hat (axes 4 and 5)
-  window.__pad = {
-    id, index: 0, connected: true, mapping: '',
-    axes: [0, 0, 0, 0, 0, 0], buttons: Array.from({ length: 12 }, () => ({ pressed: false, value: 0 })),
-    vibrationActuator: { playEffect: (...a) => { (window.__rumble = window.__rumble || []).push(a); return Promise.resolve('complete'); } }
-  };
-  window.__padOn = false;
-  navigator.getGamepads = () => (window.__padOn ? [window.__pad, null, null, null] : [null, null, null, null]);
-}, PAD_ID);
-const page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
+  initArg: PAD_ID,
+  init: (id) => {
+    window.__pad = {
+      id, index: 0, connected: true, mapping: '',
+      axes: [0, 0, 0, 0, 0, 0], buttons: Array.from({ length: 12 }, () => ({ pressed: false, value: 0 })),
+      vibrationActuator: { playEffect: (...a) => { (window.__rumble = window.__rumble || []).push(a); return Promise.resolve('complete'); } }
+    };
+    window.__padOn = false;
+    navigator.getGamepads = () => (window.__padOn ? [window.__pad, null, null, null] : [null, null, null, null]);
+  }
+});
+const { check, want } = h;
+let page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const until = (fn, arg, timeout = 8000) => page.waitForFunction(fn, arg, { timeout }).then(() => true, () => false);
 
@@ -50,7 +34,7 @@ const pad = (o = {}) => ev((o) => {
 const released = () => { const i = window.game.input; return i.setup ? i.setup.armed : i.frame.held.size === 0; };
 const press = async (o, seen, arg) => { await until(released); await pad(o); const ok = await until(seen, arg); await pad(); await until(released); return ok; };
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player && window.__dev);
@@ -329,7 +313,4 @@ if (want('map')) {
   check('pins come back with the save', after === before, `${before} -> ${after}`);
 }
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
-process.exit(failed ? 1 : 0);
+await h.finish();

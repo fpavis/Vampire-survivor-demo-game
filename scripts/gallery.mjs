@@ -1,13 +1,14 @@
 // Visual check: screenshots of the menu, every biome, combat, far regions, interiors and a boss.
 // Usage: npm run build && node scripts/gallery.mjs <out-dir> [tag]   (CHROMIUM_PATH may point at a Chromium binary)
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'shot';
 mkdirSync(OUT, { recursive: true });
 const pv = spawn('npx', ['vite', 'preview', '--port', '4195', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise(r => setTimeout(r, 2500));
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.on('pageerror', (e) => console.log('ERR', e.message));
 await p.goto('http://localhost:4195/'); await p.waitForFunction(() => !!window.game);

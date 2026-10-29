@@ -1,39 +1,23 @@
 // Phase 8a end-to-end checks: the HUD never covers an open panel on small screens, the loadout is fully usable with a
 // controller (X equips, Y locks, sockets open a rune picker, X does not cast inside the panel, LB / RB switch hero),
 // level tags only on monsters that matter, and the depth helpers (fading decor, silhouette, floating labels).
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4190;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const SEED = Number(process.env.SEED) || 2024;
-const errors = [];
+const h = await suite('phase8');
+const { check } = h;
 
 async function open(width, height) {
-  const context = await browser.newContext({ viewport: { width, height } });
-  await context.addInitScript((seed) => {
-    window.__forceSeed = seed;
+  const context = await h.newContext({ width, height });
+  await context.addInitScript(() => {
     window.__pad = {
       id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', index: 0, connected: true, mapping: 'standard',
       axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 }))
     };
     window.__padOn = false;
     navigator.getGamepads = () => (window.__padOn ? [window.__pad, null, null, null] : [null, null, null, null]);
-  }, SEED);
-  const page = await context.newPage();
-  page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-  await page.goto(`http://localhost:${PORT}/`);
+  });
+  const page = await h.newPage(context);
+  await page.goto(h.url);
   await page.waitForFunction(() => !!window.game);
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.game.state.player);
@@ -244,9 +228,4 @@ check('a wall in front of the hero shows the hero as a silhouette', ghost && sil
 const npcLabels = await ev(() => { const g = window.game; return g.interactables.filter((i) => i.npc).every((i) => i.sprite.label && i.sprite.label.parent === g.occlusion.layer); });
 check('town names float above the stalls', npcLabels);
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await context.close();
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} check(s) failed` : '\nAll phase 8 checks passed');
-process.exit(failed ? 1 : 0);
+await h.finish();

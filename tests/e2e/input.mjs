@@ -1,39 +1,22 @@
 // Input end-to-end checks: a faked gamepad drives the title screen, movement, skills, panels, the pause menu and
 // build mode; the keyboard and mouse paths through the same panels; hints that follow the device in use.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { suite } from './harness.mjs';
 
-const PORT = 4187;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
-const context = await browser.newContext({ viewport: { width: 1200, height: 760 } });
-const errors = [];
-const SEED = Number(process.env.SEED) || 2024;
-await context.addInitScript((seed) => {
-  window.__forceSeed = seed;
+const h = await suite('input', {
+  viewport: { width: 1200, height: 760 },
   // a controller that the test moves by hand
-  window.__pad = {
-    id: 'Xbox 360 Controller (STANDARD GAMEPAD Vendor: 045e Product: 028e)', index: 0, connected: true, mapping: 'standard',
-    axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
-    vibrationActuator: { playEffect: (...a) => { (window.__rumble = window.__rumble || []).push(a); return Promise.resolve('complete'); } }
-  };
-  window.__padOn = false;
-  navigator.getGamepads = () => (window.__padOn ? [window.__pad, null, null, null] : [null, null, null, null]);
-}, SEED);
-
-let page = await context.newPage();
-if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
-const watch = (pg) => { pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); }); };
-watch(page);
+  init: () => {
+    window.__pad = {
+      id: 'Xbox 360 Controller (STANDARD GAMEPAD Vendor: 045e Product: 028e)', index: 0, connected: true, mapping: 'standard',
+      axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
+      vibrationActuator: { playEffect: (...a) => { (window.__rumble = window.__rumble || []).push(a); return Promise.resolve('complete'); } }
+    };
+    window.__padOn = false;
+    navigator.getGamepads = () => (window.__padOn ? [window.__pad, null, null, null] : [null, null, null, null]);
+  }
+});
+const { check } = h;
+let page = await h.newPage();
 const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const pad = (o = {}) => page.evaluate((o) => {
@@ -54,7 +37,7 @@ const focusInfo = () => ev(() => { const a = document.activeElement; return a &&
 const focusSettled = () => page.waitForFunction(() => { const a = document.activeElement; return !!a && a !== document.body && !!a.closest('.vs-panel'); }, null, { timeout: 4000 });
 const device = () => ev(() => document.documentElement.dataset.input);
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 
 // ---- 0. the title screen takes the pad
@@ -343,8 +326,8 @@ check('unplugging the controller falls back to keyboard hints', (await device())
 // ---- 11. the title screen with a save: pad and keyboard choose between Continue and New Game
 await ev(() => { window.game.state.wallet.gold = 777; });
 await ev(async () => { await window.game.requestSave('test', true); });
-page = await context.newPage(); watch(page);
-await page.goto(`http://localhost:${PORT}/`);
+page = await h.newPage();
+await page.goto(h.url);
 await page.waitForFunction(() => !!window.game);
 await page.waitForTimeout(1500);
 const sel = () => page.evaluate(() => window.game.input.menus[0] && window.game.input.menus[0].index);
@@ -364,8 +347,4 @@ await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000
 const loaded = await page.evaluate(() => window.game.state.wallet.gold);
 check('Continue loads the saved game', loaded === 777, String(loaded));
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-process.kill(-preview.pid);
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();

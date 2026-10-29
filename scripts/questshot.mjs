@@ -1,13 +1,14 @@
 // Visual check of the quest UI: the elder and the board in town, the dialogue, the journal, the board panel, the tracker.
 // Usage: npm run build && node scripts/questshot.mjs <out-dir> [tag]
 import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'qs';
 mkdirSync(OUT, { recursive: true });
 const pv = spawn('npx', ['vite', 'preview', '--port', '4208', '--strictPort'], { stdio: 'ignore', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
-const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
 await ctx.addInitScript(() => { window.__forceSeed = 2024; });
 const p = await ctx.newPage();

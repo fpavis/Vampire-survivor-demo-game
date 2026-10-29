@@ -1,36 +1,13 @@
 // Phase 9h end-to-end checks: robustness. A crash shows a screen with a report and keeps the last good save;
-// storage that will not save says so. Sections can be picked with ONLY=crash,storage,pwa,perf; THROTTLE=n slows the CPU.
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+// storage that will not save says so. Sections can be picked with ONLY=crash,storage,title,pwa,perf; THROTTLE=n slows the CPU.
+import { suite } from './harness.mjs';
 
-const PORT = 4193;
-const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-preview.pid); } catch { /* ignore */ } });
-for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch { /* retry */ } await new Promise((r) => setTimeout(r, 250)); }
-
-let failed = 0;
-const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); if (!ok) failed++; };
-const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const want = (section) => !ONLY || ONLY.includes(section);
-
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']
-});
+const h = await suite('phase9h');
+const { check, want, context } = h;
 // errors the tests cause on purpose are expected; anything else is a failure
-const PLANTED = /test crash|background oops|rejected oops|\[crash\]|storage test/;
-const errors = [];
-const newPage = async (context) => {
-  const page = await context.newPage();
-  page.on('pageerror', (e) => { if (!PLANTED.test(e.message)) errors.push(e.message); });
-  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text()) && !PLANTED.test(m.text())) errors.push(m.text()); });
-  if (process.env.THROTTLE) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
-  return page;
-};
-const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `http://localhost:${PORT}` });
-await context.addInitScript(() => { window.__forceSeed = 2024; });
-let page = await newPage(context);
+h.allowErrors(/test crash|background oops|rejected oops|\[crash\]|storage test/);
+await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(h.url).origin });
+let page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
 const until = (fn, arg, timeout = 8000) => page.waitForFunction(fn, arg, { timeout }).then(() => true, () => false);
 const start = async (cont = false) => {
@@ -39,7 +16,7 @@ const start = async (cont = false) => {
   await page.waitForFunction(() => window.game.state.player && window.__dev);
 };
 
-await page.goto(`http://localhost:${PORT}/`);
+await page.goto(h.url);
 await start();
 
 // ---- 9h.1: a crash in a frame stops the game on a screen that says so; the last good save is kept
@@ -123,15 +100,17 @@ if (want('storage')) {
   // no storage at all: a page where IndexedDB and localStorage both refuse (the first page is closed, so the two
   // do not share the software GPU)
   await page.close();
-  const bare = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const bare = await h.newContext();
   await bare.addInitScript(() => {
-    window.__forceSeed = 2024;
     Object.defineProperty(window, 'indexedDB', { get() { throw new Error('storage test: blocked'); } });
     Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage test: blocked'); } });
   });
-  const p2 = await newPage(bare);
-  await p2.goto(`http://localhost:${PORT}/`);
+  const p2 = await h.newPage(bare);
+  await p2.goto(h.url);
   await p2.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  // on the title screen already, before there is anything to lose
+  const onTitle = await p2.waitForFunction(() => /not letting the game save/.test(document.querySelector('.vs-storage')?.innerText || '') && !window.game.state.player, null, { timeout: 8000 }).then(() => true, () => false);
+  check('with no storage at all, the title screen already says so', onTitle);
   await p2.keyboard.press('Enter');
   await p2.waitForFunction(() => window.game.state.player, null, { timeout: 30000 });
   const mem = await p2.waitForFunction(() => /not letting the game save/.test(document.querySelector('.vs-storage')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
@@ -141,11 +120,27 @@ if (want('storage')) {
   await bare.close();
 }
 
+// ---- 9h.1: an error on the title screen shows the crash screen there too, and no game starts behind it
+if (want('title')) {
+  const ctx = await h.newContext();
+  const pg = await h.newPage(ctx);
+  await pg.goto(h.url);
+  await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  await pg.evaluate(() => { window.game.menuLoop = () => { throw new Error('test crash on the title screen'); }; });
+  const shown = await pg.waitForFunction(() => /test crash on the title screen/.test(document.querySelector('.vs-crash')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
+  const st = await pg.evaluate(() => ({ fatal: !!window.game.crashed?.fatal, reload: !!document.querySelector('[data-act="crash-reload"]'), keep: !!document.querySelector('[data-act="crash-keep"]') }));
+  check('an error on the title screen shows the crash screen there too, with only Reload', shown && st.fatal && st.reload && !st.keep, JSON.stringify(st));
+  await pg.keyboard.press('Enter');
+  await pg.waitForTimeout(800);
+  check('...and Enter does not start a game behind it', await pg.evaluate(() => !window.game.state.player && !!document.querySelector('.vs-crash')));
+  await ctx.close();
+}
+
 // ---- 9h.2: installable, playable offline, fullscreen, and a hint to turn a phone sideways
 if (want('pwa')) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  const pg = await newPage(ctx);
-  await pg.goto(`http://localhost:${PORT}/`);
+  const ctx = await h.newContext();
+  const pg = await h.newPage(ctx);
+  await pg.goto(h.url);
   await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
   const man = await pg.evaluate(async () => {
     const href = document.querySelector('link[rel="manifest"]')?.getAttribute('href');
@@ -179,9 +174,9 @@ if (want('pwa')) {
   await ctx.close();
 
   // a phone held upright is asked to turn; sideways it is not
-  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
-  const pp = await newPage(phone);
-  await pp.goto(`http://localhost:${PORT}/`);
+  const phone = await h.newContext({ width: 390, height: 844 }, { hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  const pp = await h.newPage(phone);
+  await pp.goto(h.url);
   await pp.waitForFunction(() => !!window.game, null, { timeout: 30000 });
   const asked = await pp.waitForFunction(() => /Turn your device sideways/.test(document.querySelector('.vs-turn')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
   check('a phone held upright is asked to turn sideways', asked);
@@ -197,11 +192,11 @@ if (want('pwa')) {
 
 // ---- 9h.3: pools, monsters off screen, dynamic resolution, the first-run pick
 if (want('perf')) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  await ctx.addInitScript(() => { window.__forceSeed = 2024; window.__autoTune = { skip: 2, frames: 12 }; });
-  const pg = await newPage(ctx);
+  const ctx = await h.newContext();
+  await ctx.addInitScript(() => { window.__autoTune = { skip: 2, frames: 12 }; });
+  const pg = await h.newPage(ctx);
   const pev = (fn, arg) => pg.evaluate(fn, arg);
-  await pg.goto(`http://localhost:${PORT}/`);
+  await pg.goto(h.url);
   // a first start: the title scene is timed and a preset picked and saved
   const picked = await pg.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('vs.settings.v1') || 'null')?.quality; } catch { return null; } }, null, { timeout: 30000 }).then((h) => h.jsonValue(), () => null);
   check('a first start picks a quality preset for the device and keeps it', ['high', 'medium', 'low'].includes(picked), String(picked));
@@ -275,7 +270,4 @@ if (want('perf')) {
   await ctx.close();
 }
 
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-await browser.close();
-console.log(failed ? `\n${failed} FAILED` : '\nALL PASSED');
-process.exit(failed ? 1 : 0);
+await h.finish();
