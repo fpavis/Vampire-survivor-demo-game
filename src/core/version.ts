@@ -1,15 +1,16 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.14.0';
+export const GAME_VERSION = '0.15.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'Controllers, vibration and the world map',
+  title: 'Installable, steadier and faster',
   notes: [
-    'A controller the browser does not recognise can be set up button by button in Settings, Controls',
-    'Vibration has its own strength, a test, and more moments to feel: crits, big kills, chests, boss entrances',
-    'On the world map the D-pad (or Q and E) goes from place to place, with a card naming each',
-    'Drop your own pins on the world map with Y, P or a right-click; they show on the minimap and are saved',
-    'From 0.13: mountains with natural edges, spells that stop at walls, the Expedition Mine'
+    'The game can be installed, and plays offline once it has loaded; Video settings have a Fullscreen switch',
+    'If something goes wrong, a crash screen offers an error report and keeps your last good save',
+    'A warning when the browser will not let the game save, with a way to export your progress',
+    'Dynamic resolution keeps the frame rate up, and a first start picks the graphics quality for your device',
+    'Fights run a little lighter: spent bolts and sparks are reused, and monsters far off screen rest',
+    'From 0.14: controller setup, vibration strength and pins on the world map'
   ]
 };
 
