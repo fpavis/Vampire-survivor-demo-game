@@ -35,11 +35,11 @@ CI run you can open; nothing here is ticked from memory.
 | Engine | Tested | Result |
 |---|---|---|
 | Chromium | all 19 suites, every push | passes |
-| WebKit (Safari's engine) | `smoke` and `input`, every push (`.github/workflows/cross-browser.yml`) | __WEBKIT__ |
-| Firefox | the same | __FIREFOX__ |
+| WebKit (Safari's engine) | `smoke` and `input`, every push (`.github/workflows/cross-browser.yml`) | passes (64 checks) |
+| Firefox | the same, in a window on a virtual display: headless Firefox cannot create WebGL on a runner without a GPU | passes (64 checks) |
 
 What the other engines found (and was fixed): an element with `id="game"` shadows `window.game` before the game
-exists; Safari does not report `movementX` on pointer events, so a moving mouse went unnoticed. Real devices, touch
+exists; Safari does not report `movementX` on pointer events, so a moving mouse went unnoticed; a browser without WebGL showed a blank page and now says why. Real devices, touch
 screens and Safari on iOS have not been tried: the touch controls are tested only through emulation.
 
 ## Data and privacy

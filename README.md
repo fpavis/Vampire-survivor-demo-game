@@ -76,7 +76,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
 ### Prerequisites
 
 - Node.js 20 or newer
-- A modern web browser (Chrome, Firefox, Safari, Edge)
+- A modern web browser with WebGL. Chrome and Edge are what the game is developed and tested in; Firefox and Safari's engine (WebKit) start the game and pass the input tests on every push. Real iPhones, iPads and Android devices have not been tried
 
 ### Run it
 
