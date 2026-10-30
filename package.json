@@ -30,6 +30,7 @@
     "@iconify-json/game-icons": "^1.2.4",
     "@iconify-json/mdi": "^1.2.3",
     "@types/node": "^26.6.5",
+    "axe-core": "4.13.0",
     "oxlint": "1.87.0",
     "playwright-core": "^1.64.0",
     "typescript": "^7.0.2",

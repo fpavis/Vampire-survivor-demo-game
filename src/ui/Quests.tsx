@@ -95,7 +95,7 @@ function Codex() {
         <>
           <div class="vs-sec">REGIONS</div>
           {!g.regionsSeen?.size && <div class="vs-empty">None yet.</div>}
-          <div class="vs-kinds">{[...(g.regionsSeen ?? [])].map((id: string) => { const r = g.overworld.region(id); return <span key={id}><b>{r.name}</b> {r.title}</span>; })}</div>
+          <div class="vs-kinds">{[...(g.regionsSeen ?? [])].map((id: string) => { const r = g.overworld.region(id); return <span key={id}><b>{r.title.charAt(0).toUpperCase() + r.title.slice(1)}</b></span>; })}</div>
           <div class="vs-sec">PLACES</div>
           {!pois.length && <div class="vs-empty">None yet. Places appear on the map as you explore.</div>}
           {pois.map((p) => {
@@ -227,7 +227,7 @@ export function BoardPanel() {
   if (!ui.boardOpen.value || !b || !game) return null;
   const mins = Math.floor(b.nextIn / 60), secs = String(b.nextIn % 60).padStart(2, '0');
   return (
-    <div class="vs-panel vs-board hit">
+    <div class="vs-panel vs-board hit" role="dialog" aria-label="Bounty board">
       <button class="vs-btn vs-x" onClick={() => game.closeNpcPanels()} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="board" /> {b.town} bounty board</h2>
       <div class="sub">Side jobs, never required. New postings in {mins}:{secs}. Press {glyph('cancel')} to close.</div>

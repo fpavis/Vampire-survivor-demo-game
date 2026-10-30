@@ -45,7 +45,7 @@ const HOW_TO: [string, string][] = [
   ['Survive', 'Your spells cast themselves at whatever comes close. Move to stay out of reach, and pick up the gems monsters drop: they are experience.'],
   ['Grow', 'Each level gives an upgrade card: passives in small steps, listed on the Party page of the game menu (Esc). Monsters far below your level give little experience, so move on to harder lands. Spells and runes drop from monsters, chests and bosses; equip them and socket runes on the Spells page.'],
   ['Explore', 'Regions get harder the further you go from the start. Roads lead between towns; caves, ruins and dungeons hold treasure and bosses.'],
-  ['Towns', 'Healers revive and heal the party, merchants sell spells and runes, the elder gives the story quests and the board gives bounties.'],
+  ['Towns', 'Healers revive and heal the party, merchants sell spells and runes, the Elder gives the story quests and the board gives bounties.'],
   ['Build', 'Wood, stone and iron from trees, rocks and monsters build towers that cast spells for you, and docks with boats to cross the sea.'],
   ['Party', 'Three heroes travel together. Switch who fights; the others rest, lend their aura and catch up on experience.']
 ];
@@ -271,7 +271,7 @@ export function OptionsPanel() {
   if (!ui.optionsOpen.value || !ui.game) return null;
   const close = () => (ui.optionsOpen.value = false);
   return (
-    <div class="vs-panel vs-pause vs-options hit">
+    <div class="vs-panel vs-pause vs-options hit" role="dialog" aria-label="Options">
       <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="settings" /> Options</h2>
       <SettingsTabs title={true} />

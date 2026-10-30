@@ -31,7 +31,7 @@ export function RebindPanel() {
   const kind = ui.padKind.value;
   const b = input.mapper.bindings;
   return (
-    <div class="vs-panel vs-rebind hit">
+    <div class="vs-panel vs-rebind hit" role="dialog" aria-label="Keys and buttons">
       <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="keyboard" /> Keys and buttons</h2>
       <div class="sub">Choose an action, then press the new key or controller button. Taking a key that is already used swaps the two.</div>

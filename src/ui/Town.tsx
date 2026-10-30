@@ -18,7 +18,7 @@ export function Shop() {
   const gold = ui.wallet.value.gold;
   const mins = Math.floor(s.nextIn / 60), secs = String(s.nextIn % 60).padStart(2, '0');
   return (
-    <div class="vs-panel vs-shop hit">
+    <div class="vs-panel vs-shop hit" role="dialog" aria-label="Merchant">
       <button class="vs-btn vs-x" onClick={() => game.closeNpcPanels()} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="merchant" /> {s.town} Market</h2>
       <div class="sub">Spells and runes for gold. New wares in {mins}:{secs}. <Icon name="res-gold" /> You have {gold}.{s.discount ? ` ${Math.round(s.discount * 100)}% off: the town trusts you.` : ''}</div>
@@ -94,7 +94,7 @@ export function Inn() {
   const heroes = ui.party.value.heroes;
   const needs = heroes.some((h) => h.dead || h.hp < h.maxHp || h.mana < h.maxMana);
   return (
-    <div class="vs-panel vs-inn hit">
+    <div class="vs-panel vs-inn hit" role="dialog" aria-label="Inn">
       <button class="vs-btn vs-x" onClick={() => game.closeNpcPanels()} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="innkeeper" /> The Inn</h2>
       <div class="sub">“A warm bed mends the whole party — even the fallen. We’ll note your progress in the ledger, too.”</div>
@@ -120,7 +120,7 @@ export function Dialog() {
   const close = () => game.closeNpcPanels();
   if (d.script) {
     return (
-      <div class="vs-panel vs-dialog hit">
+      <div class="vs-panel vs-dialog hit" role="dialog" aria-label={d.speaker}>
         <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
         <div class="who"><span class="ic"><Icon name={d.icon} /></span><b>{d.speaker}</b></div>
         <div class="say">“{d.text}”</div>
@@ -133,7 +133,7 @@ export function Dialog() {
     );
   }
   return (
-    <div class="vs-panel vs-dialog hit">
+    <div class="vs-panel vs-dialog hit" role="dialog" aria-label={d.speaker}>
       <button class="vs-btn vs-x" onClick={() => (ui.dialog.value = null)} aria-label="Close"><Icon name="close" /></button>
       <div class="who"><span class="ic"><Icon name={d.icon} /></span><b>{d.speaker}</b></div>
       <div class="say">“{d.text}”</div>

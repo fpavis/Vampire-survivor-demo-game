@@ -15,15 +15,18 @@ Four layers, from the fastest to the slowest. Everything below runs in CI on eve
 `src/core` as pure functions: world generation and its determinism, regions, roads, towns, dungeons and
 puzzles, quests and the story, spells and runes, loot and progression, saves (codec, validation, migrations),
 input (pad mapping, key bindings, profiles, haptics, spatial navigation), audio, settings and auto-tuning,
-the crash report, the service worker the build writes, and the browser test runner's own helpers.
+the crash report, the service worker the build writes, the colour contrast of the interface and every palette
+(`contrast.test.ts`), the rules of the written text (`text.test.mjs`, see `GLOSSARY.md`), and the browser test
+runner's own helpers.
 
 A rule that can be written as a pure function should be tested here, not in the browser: it runs in
 milliseconds and fails with a precise message.
 
 ## Browser tests
 
-Each file in `tests/e2e/` is a *suite*: `smoke`, `phase1` … `phase12`, `phase9f`, `phase9g`, `phase9h`
-and `input`. They share one harness (`harness.mjs`) and one runner (`run.mjs`).
+Each file in `tests/e2e/` is a *suite*: `smoke`, `phase1` … `phase12`, `phase9f`, `phase9g`, `phase9h`, `phase9i`
+and `input`. They share one harness (`harness.mjs`) and one runner (`run.mjs`). `screens.mjs` (every DOM screen with a
+way to open it) and `a11y.mjs` (axe-core and a contrast measure) are helpers for the accessibility audit.
 
 ```
 npm run build                               # the suites test dist/, so build first
@@ -115,6 +118,7 @@ differ. For a real comparison between two builds use `node scripts/perf.mjs`, ru
 | Hero switching, timers, building, reach and walls, the travel map, mountain outlines and their baked tops (12) | `phase12` (`party`, `building`, `reach`, `travel`, `mountains`) | `rockShape`, `party`, `mapview`, `travel` |
 | Controller setup, haptics, map stepping and pins (9g) | `phase9g` (`profile`, `haptics`, `map`) | `input`, `bindings`, `mapview`, `save` |
 | Crash screen, storage warnings, offline and install, fullscreen, performance (9h) | `phase9h` (`crash`, `storage`, `title`, `pwa`, `perf`) | `crash`, `app-shell`, `autotune`, `settings` |
+| Accessibility of every screen: names, contrast, dialogs, keyboard focus, text at 140%, the page (9i) | `phase9i` (`names`, `contrast`, `dialogs`, `focus`, `text140`, `page`) | `contrast`, `text` |
 | Keyboard, mouse and pad on every screen | `input` | `input`, `bindings`, `nav` |
 | Saves, migrations, slots | `phase1`, `phase9` (`slots`) | `save`, `slots`, `codex` |
 | The test runner itself | | `e2e-runner` |

@@ -164,7 +164,7 @@ export class StoryDirector {
             const ch = this.interlude;
             this.interlude = null;
             const text = INTERLUDES[ch];
-            if (!this.play([this.elderLine(text)], { at: this.elderAt() })) g.ui.toast(`The Elder: "${text}"`, 'elder');
+            if (!this.play([this.elderLine(text)], { at: this.elderAt() })) g.ui.toast(`The Elder: “${text}”`, 'elder');
         }
     }
 

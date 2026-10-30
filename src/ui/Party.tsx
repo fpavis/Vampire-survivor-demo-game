@@ -45,7 +45,7 @@ export function Healer() {
   const total = quotes.reduce((a, q) => a + q.cost, 0);
   const canAny = quotes.some((q) => q.cost > 0 && q.cost <= gold);
   return (
-    <div class="vs-panel vs-heal hit">
+    <div class="vs-panel vs-heal hit" role="dialog" aria-label="Healer">
       <button class="vs-btn vs-x" onClick={() => (ui.healerOpen.value = false)} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="healer" /> Healer</h2>
       <div class="sub vs-says">“{healerLine(quotes, gold, visit)}”</div>

@@ -18,7 +18,7 @@ export function BuildPage() {
       <h2><Icon name="hammer" /> Build</h2>
       <div class="sub">Towers are monumental and permanent. Lay a site, then haul in the materials and press {glyph('interact')} at the site. No limit on how many, only on what you can gather.</div>
       {where && <div class="vs-note"><Icon name="warning" /> {where}</div>}
-      <div class="vs-note"><Icon name="flag" /> Towers raised on claimed ground (round a flag you held) cost {Math.round((1 - CLAIMED_DISCOUNT) * 100)}% less. Spires, obelisks and beacons can be raised to level {MAX_TOWER_LEVEL} later.</div>
+      <div class="vs-note"><Icon name="flag" /> Towers raised on claimed ground (around a flag you held) cost {Math.round((1 - CLAIMED_DISCOUNT) * 100)}% less. Spires, obelisks and beacons can be raised to level {MAX_TOWER_LEVEL} later.</div>
       <div class="vs-goods">
         {TOWER_KINDS.map((k) => {
           const d = TOWER_DEFS[k];
@@ -91,7 +91,7 @@ export function TowerPanel() {
     );
   };
   return (
-    <div class="vs-panel vs-tpanel hit">
+    <div class="vs-panel vs-tpanel hit" role="dialog" aria-label={def.name}>
       <button class="vs-btn vs-x" onClick={() => (ui.towerPanel.value = null)} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name={def.icon} /> {def.name} <span class="vs-tlv" aria-label={`level ${lv} of ${MAX_TOWER_LEVEL}`}>{Array.from({ length: MAX_TOWER_LEVEL }, (_, i) => <i key={i} class={i < lv ? 'on' : ''} />)}</span></h2>
       <div class="sub">{def.blurb}{rec.claimed ? ' Built on claimed ground.' : ''}</div>

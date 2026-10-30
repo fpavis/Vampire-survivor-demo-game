@@ -197,7 +197,7 @@ export class TowerSystem {
         const g = this.game;
         g.audio.play('place');
         g.fx.burst((rec.tx + 0.5) * T, (rec.ty + 0.5) * T, 20, 0xffe27a, 18, 3, { size: 0.9, life: 28, glow: true });
-        g.ui.toast(`Construction site laid: ${TOWER_DEFS[rec.kind].name}${rec.claimed ? ' on claimed ground' : ''}. Bring ${costText(towerCost(rec))} and press E`);
+        g.ui.toast(`Construction site laid: ${TOWER_DEFS[rec.kind].name}${rec.claimed ? ' on claimed ground' : ''}. Bring ${costText(towerCost(rec))} and press [E]`);
         g.map.dirty = true;
         g.requestSave('build', true);
         return true;

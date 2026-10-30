@@ -10,7 +10,7 @@ export const KEY_ACTIONS: { id: KeyAction; label: string }[] = [
   { id: 'up', label: 'Move up' }, { id: 'down', label: 'Move down' }, { id: 'left', label: 'Move left' }, { id: 'right', label: 'Move right' },
   { id: 'interact', label: 'Interact · talk · enter' }, { id: 'skill1', label: 'Skill 1 (Dash …)' }, { id: 'skill2', label: 'Skill 2' },
   { id: 'skill3', label: 'Skill 3' }, { id: 'nextHero', label: 'Next hero' }, { id: 'map', label: 'World map' },
-  { id: 'spells', label: 'Spells and runes' }, { id: 'upgrades', label: 'Level-up cards' }, { id: 'journal', label: 'Journal' },
+  { id: 'spells', label: 'Spells and runes' }, { id: 'upgrades', label: 'Upgrades' }, { id: 'journal', label: 'Journal' },
   { id: 'build', label: 'Build menu' }, { id: 'party', label: 'Party and stats' }
 ];
 

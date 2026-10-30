@@ -12,7 +12,7 @@ const line = (o) => `PASS  something\n${RESULT_TAG}${JSON.stringify(o)}\n`;
 describe('the browser test runner', () => {
   it('knows every suite file, and no file that is not one', () => {
     const files = readdirSync(new URL('./e2e/', import.meta.url)).filter((f) => f.endsWith('.mjs')).map((f) => f.replace(/\.mjs$/, ''));
-    const support = new Set(['harness', 'run', 'runner-lib']);
+    const support = new Set(['harness', 'run', 'runner-lib', 'screens', 'a11y']);
     expect(files.filter((f) => !support.has(f)).sort()).toEqual([...SUITES].sort());
     expect(new Set(SUITES).size).toBe(SUITES.length);
   });

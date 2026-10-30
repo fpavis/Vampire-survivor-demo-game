@@ -475,7 +475,7 @@ function RunePicker({ item, slot, close }: { item: SpellItem; slot: number; clos
   const count = (id: string) => (sp.runes as string[]).filter((r) => r === id).length;
   const tpl = TEMPLATES[item.tpl];
   return (
-    <div class="vs-panel vs-picker hit">
+    <div class="vs-panel vs-picker hit" role="dialog" aria-label="Choose a rune">
       <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name={tpl.icon} /> {tpl.name} · socket {slot + 1}</h2>
       <div class="sub">Runes that fit this socket. {misfit > 0 ? `${misfit} other rune${misfit > 1 ? 's' : ''} in your bag ${misfit > 1 ? 'don’t' : 'doesn’t'} fit.` : ''}</div>

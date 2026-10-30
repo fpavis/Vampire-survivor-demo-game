@@ -13,7 +13,7 @@ export function pickSeed(env = process.env, own = DEFAULT_SEED) {
 /** Every browser suite, in the order they run (earlier phases first). */
 export const SUITES = [
   'smoke', 'phase1', 'phase2', 'phase3', 'phase4', 'phase5', 'phase6', 'phase7', 'phase8', 'phase8b', 'phase9',
-  'phase10', 'phase11', 'phase9f', 'phase12', 'phase9g', 'phase9h', 'input'
+  'phase10', 'phase11', 'phase9f', 'phase12', 'phase9g', 'phase9h', 'phase9i', 'input'
 ];
 
 /**

@@ -147,7 +147,7 @@ export function SlotsPanel() {
   if (!mode || !ui.game) return null;
   const close = () => (ui.slotsOpen.value = null);
   return (
-    <div class={`vs-panel vs-slots hit${busy ? ' busy' : ''}`}>
+    <div class={`vs-panel vs-slots hit${busy ? ' busy' : ''}`} role="dialog" aria-label={mode === 'save' ? 'Save game' : 'Load game'}>
       <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name={mode === 'save' ? 'save' : 'journal'} /> {mode === 'save' ? 'Save game' : 'Load game'}</h2>
       <div class="sub">{mode === 'save'

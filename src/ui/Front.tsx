@@ -24,7 +24,7 @@ export function TitleExtras() {
           ? <><span>World seed</span><input class="vs-in" value={seed} placeholder="random" maxLength={24}
               onInput={(e) => (ui.newGameSeed.value = (e.target as HTMLInputElement).value.trim())}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); setSeedOpen(false); } }} />
-            <button class="vs-btn" onClick={() => setSeedOpen(false)}><Icon name="check" /></button></>
+            <button class="vs-btn" onClick={() => setSeedOpen(false)} aria-label="Done"><Icon name="check" /></button></>
           : <button class="vs-btn vs-link" tabIndex={-1} onClick={() => setSeedOpen(true)}>New game seed: <b>{seed || 'random'}</b></button>}
       </div>
       {news && (
@@ -42,7 +42,7 @@ export function CreditsPanel() {
   if (!ui.creditsOpen.value) return null;
   const close = () => (ui.creditsOpen.value = false);
   return (
-    <div class="vs-panel vs-credits hit">
+    <div class="vs-panel vs-credits hit" role="dialog" aria-label="Credits">
       <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name="star" /> Credits</h2>
       {CREDITS.map((c) => (

@@ -436,6 +436,7 @@ export class UIManager {
 
     /** A small message at the bottom left, with an optional icon. */
     toast(text, icon = '') {
+        text = localize(text);                                 // "[E]" becomes the interact button in use
         this.logMessage(text, icon, false);
         this.toastText.set(icon, text);
         this.toastText.visible = true;

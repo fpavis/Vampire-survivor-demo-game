@@ -69,6 +69,7 @@ A fast-paced, browser-based survival game built with PixiJS where you fight endl
   - A controller the browser does not lay out itself (no "standard" mapping) can be set up in Settings, Controls: press each button as it is named, d-pad included (a hat works too); the setup is kept for that controller
   - Vibration follows what happens (hits taken, crits, big kills, chests, level-ups, boss entrances, dashes, switching heroes) with its own strength, and stays a light tick when crits stream in
   - Settings (a page of the game menu, and Options on the title screen) have volume sliders, controller vibration and its strength, stick dead zone, the touch joystick options, accessibility options, rebinding, tips, a How to play page and a table of every control
+- **Accessibility**: text size 90–140%, three colour-blind-safe palettes with shape cues, reduced motion, rebindable keys and buttons, every screen usable with keyboard, mouse, touch or controller, and every panel a named dialog that keeps Tab inside it. All 46 screens are audited by a test (axe-core, contrast, keyboard focus, text at 140% on a phone); see [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) for what it covers and what it does not
 
 ## Getting Started
 

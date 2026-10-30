@@ -7,7 +7,7 @@ import {
 } from '../core/input/gamepad';
 import { KeyMap } from '../core/input/bindings';
 import { ui as uiBridge } from '../ui/bridge';
-import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navWantsArrows, navTab } from '../ui/nav';
+import { isTyping, navAction, navActive, navBack, navConfirm, navModal, navMove, navScope, navTab, navTrap, navWantsArrows } from '../ui/nav';
 
 const PREFS_KEY = 'vs.input.v1';
 const ARROW_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
@@ -178,6 +178,8 @@ export class InputSystem {
                 e.preventDefault(); e.stopImmediatePropagation();
                 return;
             }
+            // Tab walks a modal panel's controls (the Spells page keeps it for showing the next hero)
+            if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && !(uiBridge.pauseOpen.value && uiBridge.menuPage.value === 'spells') && navTrap(e.shiftKey)) { e.preventDefault(); return; }
             if (isTyping(e.target)) { if (e.key !== 'Escape') e.stopImmediatePropagation(); return; }
             // a story scene takes the keys: Enter, Space or E reads on, Esc skips it
             if (g.story && g.story.current) {

@@ -152,6 +152,22 @@ export function navAction(button: PadFace): boolean {
 /** Panels that sit beside the action (marked .vs-cards) let unhandled skill buttons through; the others do not. */
 export const navModal = () => { const s = navScope(); return !!s && !s.classList.contains('vs-cards'); };
 
+/**
+ * Tab (and Shift+Tab) walk the controls of a modal panel and wrap round, so the HUD behind it is out of reach and
+ * focus is never dropped on the page. Returns true when the panel took the key. Panels beside the action (the level-up
+ * cards) leave Tab alone.
+ */
+export function navTrap(back: boolean): boolean {
+  if (!navModal()) return false;
+  const scope = navScope()!;
+  const items = candidates(scope);
+  if (!items.length) return false;
+  const cur = current(scope);
+  const i = cur ? items.indexOf(cur) : -1;
+  focusEl(items[back ? (i <= 0 ? items.length - 1 : i - 1) : (i < 0 || i >= items.length - 1 ? 0 : i + 1)]);
+  return true;
+}
+
 /** LB / RB on a controller: flip the game menu's pages, or step the tabs of the top panel (Options on the title). */
 export function navTab(dir: number): boolean {
   const scope = navScope();

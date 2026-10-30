@@ -11,7 +11,7 @@ export function mountUi(game: any) {
   document.head.appendChild(style);
   const root = document.createElement('div');
   root.id = 'ui-root';
-  document.body.appendChild(root);
+  (document.getElementById('game') ?? document.body).appendChild(root);
   ui.game = game;
   render(<App />, root);
   installNav();

@@ -165,7 +165,7 @@ export function Passives({ picks }: { picks: Picks }) {
                 <div key={id} class={`vs-pcard${r ? '' : ' none'}${r >= c.max ? ' max' : ''}`} data-card={id} title={c.desc}>
                   <span class="ic"><Icon name={c.icon} /></span>
                   <span class="nm">{c.name}</span>
-                  <span class="pips" aria-label={`rank ${r} of ${c.max}`}>{Array.from({ length: c.max }, (_, i) => <i key={i} class={i < r ? 'on' : ''} />)}</span>
+                  <span class="pips" role="img" aria-label={`rank ${r} of ${c.max}`}>{Array.from({ length: c.max }, (_, i) => <i key={i} class={i < r ? 'on' : ''} />)}</span>
                   <span class="v">{r ? `${c.label} ${c.fmt(c.value(r))}` : c.label}</span>
                 </div>
               );

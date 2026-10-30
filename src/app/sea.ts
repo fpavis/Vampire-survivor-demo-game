@@ -113,7 +113,7 @@ export class SeaSystem {
         g.fx.burst(b.x, b.y, 14, 0xdff4ff, 14, 2.4, { size: 0.8, life: 22, glow: true });
         g.fx.shockwave(b.x, b.y, 60, 0xdff4ff, 18, 4);
         g.audio.play('sail');
-        g.ui.toast('All aboard! Steer with WASD. Press E near a shore to step off');
+        g.ui.toast('All aboard! Steer as you walk. Press [E] near a shore to step off');
         return true;
     }
 
