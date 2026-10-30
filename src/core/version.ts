@@ -1,16 +1,16 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.15.0';
+export const GAME_VERSION = '0.16.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'Installable, steadier and faster',
+  title: 'Words and access',
   notes: [
-    'The game can be installed, and plays offline once it has loaded; Video settings have a Fullscreen switch',
-    'If something goes wrong, a crash screen offers an error report and keeps your last good save',
-    'A warning when the browser will not let the game save, with a way to export your progress',
-    'Dynamic resolution keeps the frame rate up, and a first start picks the graphics quality for your device',
-    'Fights run a little lighter: spent bolts and sparks are reused, and monsters far off screen rest',
-    'From 0.14: controller setup, vibration strength and pins on the world map'
+    'All the text read through and corrected: bounties name monsters properly, spelling is British throughout',
+    'Every screen checked for accessibility: named dialogs, Tab stays inside an open panel, better contrast',
+    'Text size 140% now fits on a phone held sideways, with bars and badges that grow with the text',
+    'Colour-blind palettes lightened where a colour was hard to read on the dark panels',
+    'Key names in hints and messages follow your own key bindings',
+    'From 0.15: installable and offline, a crash screen that keeps your save, dynamic resolution'
   ]
 };
 

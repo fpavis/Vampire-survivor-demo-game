@@ -102,3 +102,26 @@ describe('the installable app', () => {
     expect(root('scripts/make-artifact.mjs')).toMatch(/manifest\|icon\|apple-touch-icon/);
   });
 });
+
+describe('the release files agree on the version', () => {
+  const version = /GAME_VERSION = '([^']+)'/.exec(root('src/core/version.ts'))![1];
+
+  it('package.json and the lock file carry the game version', () => {
+    expect(JSON.parse(root('package.json')).version).toBe(version);
+    expect(JSON.parse(root('package-lock.json')).version).toBe(version);
+  });
+
+  it('the changelog starts with this version and the licence names a holder', () => {
+    expect(root('CHANGELOG.md')).toMatch(new RegExp(`^## ${version.replace(/\./g, '\\.')} · \\d{4}-\\d{2}-\\d{2}`, 'm'));
+    expect(root('LICENSE')).not.toMatch(/\[Your Name\]/);
+  });
+
+  it('the first changelog entry is the newest one', () => {
+    const entries = [...root('CHANGELOG.md').matchAll(/^## (\d+)\.(\d+)\.(\d+) ·/gm)].map((m) => m.slice(1).map(Number));
+    expect(entries[0].join('.')).toBe(version);
+    for (let i = 1; i < entries.length; i++) {
+      const [a, b] = [entries[i - 1], entries[i]];
+      expect(a[0] * 1e6 + a[1] * 1e3 + a[2], `${a.join('.')} before ${b.join('.')}`).toBeGreaterThan(b[0] * 1e6 + b[1] * 1e3 + b[2]);
+    }
+  });
+});
