@@ -545,8 +545,15 @@ class Game {
         window.addEventListener('keyup', (e) => { gameState.keys[normKey(e.key)] = false; });
         window.addEventListener('blur', () => {
             gameState.keys = {};
-            // leaving the window pauses the game (setting)
-            if (settings.pauseOnBlur && gameState.player && !gameState.gameOver && !uiBridge.pauseOpen.value && !this.busy) this.ui.openMenu();
+            // leaving the window pauses the game (setting), but only if it really left: a page that takes the focus for
+            // a moment when Escape is pressed must not open the menu again as Escape closes it
+            if (!settings.pauseOnBlur) return;
+            const justEscaped = performance.now() - (this.input.lastEscAt || 0) < 800;
+            if (justEscaped) { try { window.focus(); } catch { /* not allowed here */ } }
+            setTimeout(() => {
+                if (document.hasFocus()) return;
+                if (gameState.player && !gameState.gameOver && !uiBridge.pauseOpen.value && !this.busy) this.ui.openMenu();
+            }, justEscaped ? 400 : 150);
         });
 
         this.app.stage.eventMode = 'static';

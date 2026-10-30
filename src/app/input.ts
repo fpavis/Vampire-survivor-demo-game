@@ -322,6 +322,14 @@ export class InputSystem {
     escape() {
         const g = this.game;
         if (!g.state.player || g.state.gameOver) return false;
+        // in a search box or drop-down of the game menu, one press is enough: leave the field and close the menu
+        // (unless a panel sits on top of the menu, which closes first)
+        const a = document.activeElement as HTMLElement | null;
+        if (uiBridge.pauseOpen.value && a && (a instanceof HTMLSelectElement || a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && a.type !== 'range' && a.type !== 'checkbox')) && navScope()?.classList.contains('vs-menu')) {
+            a.blur();
+            g.ui.closeMenu();
+            return true;
+        }
         if (this.back()) return true;
         if (g.ui.mapOverlay) { g.ui.toggleMap(g); return true; }
         g.ui.toggleMenu();

@@ -1,5 +1,7 @@
-// A small frame-rate readout (F3 or the video settings): frames per second, simulation time per frame and draw calls.
+// A small frame-rate readout (F3 or the video settings): frames per second, simulation time per frame and draw calls,
+// and the last key pressed with the state of the menu and the window (to see where a key went when it did nothing).
 // Draw calls are counted by wrapping the WebGL draw functions only while the overlay is shown.
+import { ui } from '../ui/bridge';
 
 export class PerfOverlay {
   shown = false;
@@ -9,9 +11,13 @@ export class PerfOverlay {
   private frames = 0;
   private last = performance.now();
   private unwrap: (() => void) | null = null;
+  private lastKey = 'none';
 
   constructor(private game: any) {
-    window.addEventListener('keydown', (e) => { if (e.key === 'F3') { e.preventDefault(); this.toggle(); } });
+    window.addEventListener('keydown', (e) => {
+      this.lastKey = `${e.key}${e.isTrusted ? '' : ' (script)'}`;
+      if (e.key === 'F3') { e.preventDefault(); this.toggle(); }
+    }, true);
   }
 
   toggle(on = !this.shown) {
@@ -45,7 +51,8 @@ export class PerfOverlay {
     const secs = (now - this.last) / 1000;
     const avg = this.steps.reduce((a, b) => a + b, 0) / this.steps.length;
     const g = this.game;
-    this.el.textContent = `${Math.round(this.frames / secs)} fps · step ${avg.toFixed(1)} ms · ${Math.round(this.draws / this.frames)} draws · ${g.state.enemies.length} foes`;
+    this.el.textContent = `${Math.round(this.frames / secs)} fps · step ${avg.toFixed(1)} ms · ${Math.round(this.draws / this.frames)} draws · ${g.state.enemies.length} foes`
+      + `\nkey ${this.lastKey} · menu ${ui.pauseOpen.value ? 'open' : 'closed'} · window ${document.hasFocus() ? 'focused' : 'not focused'}`;
     this.frames = 0; this.draws = 0; this.steps.length = 0; this.last = now;
   }
 }

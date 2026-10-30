@@ -296,7 +296,7 @@ html[data-input="pad"] .vs-hint-key{display:none}
 @keyframes vs-coach-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 .vs-choices{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .vs-choices .vs-btn{text-align:left}
-.vs-perf{position:absolute;right:56px;top:22px;font:11px/1.2 ui-monospace,Consolas,monospace;color:#bfffcf;background:rgba(0,0,0,.6);padding:3px 7px;border-radius:6px;pointer-events:none;z-index:30}
+.vs-perf{white-space:pre;position:absolute;right:56px;top:22px;font:11px/1.2 ui-monospace,Consolas,monospace;color:#bfffcf;background:rgba(0,0,0,.6);padding:3px 7px;border-radius:6px;pointer-events:none;z-index:30}
 .vs-rebind{background:rgba(12,16,30,.99);left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:22}
 .vs-binds{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 14px}
 .vs-bind{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--c-soft)}

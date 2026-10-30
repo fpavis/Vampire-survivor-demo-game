@@ -39,7 +39,11 @@ export class UIManager {
         this.createJoystick();
 
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.game && this.game.input) this.game.input.escape();
+            // by name or by position: not every keyboard layout or embedding page reports the same key name
+            if ((e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27) && !e.repeat && this.game && this.game.input) {
+                this.game.input.lastEscAt = performance.now();
+                this.game.input.escape();
+            }
         });
         // Pixi resizes the canvas on the next animation frame after the window changes; the renderer's own
         // 'resize' event fires after that, when app.screen holds the new size (a window listener would read the old one)
@@ -791,6 +795,7 @@ export class UIManager {
 
     closeMenu() {
         if (!uiBridge.pauseOpen.value) return;
+        this.menuClosedAt = performance.now();
         if (uiBridge.menuPage.value === 'spells') this.leaveSpells();
         uiBridge.pauseOpen.value = false;
         uiBridge.slotsOpen.value = null;      // and whatever it had opened on top

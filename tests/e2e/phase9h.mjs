@@ -1,5 +1,5 @@
 // Phase 9h end-to-end checks: robustness. A crash shows a screen with a report and keeps the last good save;
-// storage that will not save says so. Sections can be picked with ONLY=crash,storage,title,nogl,pwa,perf; THROTTLE=n slows the CPU.
+// storage that will not save says so. Sections can be picked with ONLY=crash,storage,title,nogl,menu,pwa,perf; THROTTLE=n slows the CPU.
 import { suite } from './harness.mjs';
 
 const h = await suite('phase9h');
@@ -153,6 +153,47 @@ if (want('nogl')) {
   check('a browser without WebGL says so in plain words', shown && info.kind === 'webgl' && /cannot draw the game/.test(info.heading) && info.role === 'alert', JSON.stringify(info));
   check('...with a Reload button that has the focus, and no half-started game', info.button && info.focus === 'BUTTON' && info.game === 'undefined', JSON.stringify(info));
   await ctx.close();
+}
+
+// ---- Escape and the menu button: one press closes the game menu, and a window that blinks does not open it again
+if (want('menu')) {
+  page = await h.newPage();
+  await page.goto(h.url);
+  await start();
+  const menuOpen = () => ev(() => window.__dev.ui.pauseOpen.value);
+  const bad = [];
+  for (const pg of ['party', 'spells', 'upgrades', 'journal', 'build', 'save', 'settings']) {
+    await ev((p) => window.game.ui.openMenu(p), pg);
+    await page.waitForTimeout(250);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    if (await menuOpen()) bad.push(pg);
+  }
+  check('Escape closes the game menu on every page', bad.length === 0, bad.join(','));
+  await ev(() => window.game.ui.openMenu('spells'));
+  await page.focus('.vs-load input.vs-in');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check('one Escape in the Spells search box leaves it and closes the menu', !(await menuOpen()));
+  await ev(() => window.game.ui.openMenu('party'));
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Escape');
+  // the page loses the focus for a moment as Escape closes the menu, as an embedding page can make it do
+  await ev(() => { window.dispatchEvent(new Event('blur')); setTimeout(() => window.dispatchEvent(new Event('focus')), 100); });
+  await page.waitForTimeout(1000);
+  check('a window that blinks as Escape closes the menu does not bring it back', !(await menuOpen()));
+  await ev(() => { window.__hasFocus = document.hasFocus; document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await page.waitForTimeout(700);
+  const paused = await menuOpen();
+  await ev(() => { document.hasFocus = window.__hasFocus; });
+  check('a window that really lost the focus still pauses the game', paused === true);
+  const gear = await ev(() => { const p = window.game.ui.settingsButton.getGlobalPosition(); return { x: p.x, y: p.y }; });
+  await page.mouse.click(gear.x, gear.y);
+  await page.waitForTimeout(300);
+  check('the gear in the corner closes the menu too', !(await menuOpen()), JSON.stringify(gear));
+  await ev(() => window.game.perf.toggle(true));
+  await page.keyboard.press('Escape');                          // opens the menu again, and is the last key the overlay saw
+  await page.waitForFunction(() => /key Escape · menu open · window focused/.test(document.querySelector('.vs-perf')?.textContent || ''), null, { timeout: 8000 }).then(() => check('the F3 overlay names the last key, the menu and the window focus', true), () => check('the F3 overlay names the last key, the menu and the window focus', false, document.querySelector('.vs-perf')?.textContent || 'no overlay'));
 }
 
 // ---- 9h.2: installable, playable offline, fullscreen, and a hint to turn a phone sideways
