@@ -76,7 +76,7 @@ const installHelpers = () => {
       const bs = api.boatSpot(api.newTower('dock', tx, ty, res.plan));
       const wp = window.waterPath(Math.floor(bs.x / 48), Math.floor(bs.y / 48), 130, 40000);
       if (wp) return { tx, ty, plan: res.plan, pathLen: wp.path.length, cache: wp.cache.id };
-      if (tried.length > 30) return null;
+      if (tried.length > 400) return null;
     }
     return null;
   };
