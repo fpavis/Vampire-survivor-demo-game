@@ -5,6 +5,28 @@ update; the longer reasons and the design are in [docs/IMPLEMENTATION_PLAN.md](d
 Saves from every earlier version still load: each change of the save format came with a migration, from the first
 format on (`src/core/save/migrations.ts`).
 
+## 0.17.0 · 2026-10-30 · Towns, names and a tracker
+
+Playtest round three.
+
+- **The tracker points the way.** The tracked quest shows an arrow, the next place's name and how far it is
+  (“Go to Hollow Vault 83 tiles northeast”), live, under the objective; the journal's quest cards show the same, and the
+  minimap puts an arrow on its edge when the place is off the view. A finished quest points at where it is
+  handed in (the nearest town you know for the Elder, a board or an inn; the job's own town for a townsperson's job),
+  and when the Elder has something to say and nothing is under way, at the nearest town, seen or not.
+- **Camera zoom** moved from a three-step option to the mouse wheel, the + and - keys (rebindable) and the controller
+  (R3 zooms in, L3 out, rebindable); Options has a Camera zoom slider (80% to 160%) for the same value.
+- **Names in the world** (town roles, the bounty board, monster level tags, an escorted traveller) are drawn sharp
+  and at the same size on the screen at every zoom, scaled with the text size setting.
+- **Towns on the map.** A town (or any place) the party has entered is always on the minimap and the world map, and the
+  map looks again at the places near the hero whenever the explored area grows (a place could be missed when the tile
+  that was revealed lay in another chunk than its gate).
+- **A teleporter that explains itself.** Travel stays clickable when the fare is short, says “Need 36 more gold · you
+  have 10” and answers a click; a refusal because of a boat, an escort or a screen change is spoken too.
+- **Escape** closes the game menu from anywhere in it, and the window blinking (an extension or the browser taking
+  focus for a moment) no longer opens it again at once; the F3 overlay shows the last key, the menu state and the
+  window focus, for the case it still misbehaves.
+
 ## 0.16.0 · 2026-10-30 · Words and access
 
 - All the game's text read through and corrected: monsters in the plural (“Cull the Wolves”), British spelling,

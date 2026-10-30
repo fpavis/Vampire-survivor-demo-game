@@ -38,6 +38,7 @@ The words the player reads, and how they are written. `tests/text.test.mjs` chec
 | **Resonance** | the rune whose kills cast the next auto spell | |
 | **salvage** | turn a spell or rune into gold | sell, destroy |
 | **gold** | the money; **wood**, **stone** and **iron** are materials | coins (only for the pickups on the ground) |
+| **tracker** | the box under the party's portraits that follows one quest: its next objective, and an arrow with the place's name and how far it is (“83 tiles northeast”) | quest log, compass |
 | **upgrade** | a card picked at a level-up | perk, talent |
 | **tower** | any structure the party builds outdoors: Arcane Spire, Warding Obelisk, Beacon, Waypoint, Bridge Tower, Dock, Expedition Mine | |
 | **Expedition Mine** | the structure that opens a mountain’s plateau (the old “climbing tower”) | tower you climb |

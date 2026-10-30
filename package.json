@@ -1,7 +1,7 @@
 {
   "name": "survival-game",
   "private": true,
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Three heroes, one endless, demon-haunted world: a browser action RPG with spells, dungeons and towns.",
   "license": "MIT",
   "type": "module",

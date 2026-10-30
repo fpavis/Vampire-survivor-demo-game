@@ -29,6 +29,7 @@ the whole plan is implemented and tested.** A private hosted test page is republ
 | 10 Playtest feedback | **Done** | After two hours of play the owner asked for eleven changes; they came first, before 9f–9i. **10a**: every full-screen layer follows a window resize (Pixi resizes on the next frame, so all layouts listen to the renderer's own resize); dev tools for gold, resources, a build kit, finishing sites, places to jump to and an export box; a dock **recalls** your boat; ambushes raise half again as many monsters (6–15) on a 380–480 px ring with one side open, shown first and closing in group by group; experimental **click to use** (a setting) for anything already in reach. **10b**: the world map is a DOM panel to pan (drag, keys, stick) and zoom (wheel, keys, shoulders) over explored land only, with hover names; dungeon floors keep their explored fog in the save; Visited and Cleared badges. **10c**: a place is cleared when every floor is cleared, every chest (vault and boss too) opened and the boss down (`core/world/completion.ts`, from the seed, so unvisited floors count); banner, stinger, event, badge, journal progress; an exit portal by the boss arena in multi-floor dungeons. **10d**: towns per seed (`core/world/towns.ts`): three sizes, three street plans, houses on lots, decor; services where they belong, sides varied; `verifyTown` proves every service and the exit reachable and uncrowded, with retries and the old town as a fallback; generator version 3. **10e**: a teleporter in every town (attuned on entry); the world map's travel mode with ringed destinations, a list and a confirm bar; free between waypoints, otherwise a fare by distance (`core/world/travel.ts`); the waypoint panel is gone. **10f**: the pixel art style by default (one `WorldGradeFilter` pass draws the world at the ground's 2 px grain, cells in whole device pixels, the camera snapped to them; fine, medium, chunky or smooth), screen filters (pixelate, CRT with click warping, film grain) and colour grades on a `sceneRoot` under the names and HUD; the ground felt on screen (`core/world/surfaceFx.ts`: tint, desaturation, edge glow, heat shimmer, eased, scaled by the flash setting, no shimmer under reduced motion). **10g**: corrupted lands (`core/world/corruption.ts`: about 8% of land in large patches past 150 tiles, cached a chunk at a time with a safe chunk skip); drained violet ground, dead trees among blight spires and crystals, violet ash, a darker violet day, the dark music and a drone; camps 2.5 times as common and bigger, more roamers; a discovery banner once; generator version 4. World events (`core/world/worldEvents.ts`, `app/worldEvents.ts`): warbands, swarms and hunters every 2.5–4.5 minutes (a third of that in the blight), never near the start, a town, at sea, in a fight or a safe zone; off-screen spawns, a banner with the direction, a map marker, a reward, and they give up if you get away. |
 | 11 Balance, game menu, per-skill DPS | **Done** | See the Phase 11 section below: experience weighed against the hero's level, sixteen ten-rank cards and mastery, auras at a quarter, one game menu hub, a three-dummy training ground with a per-skill meter. Version 0.11.0. |
 | 12 Playtest feedback (second round) | **Done** | See the Phase 12 section below: hero switching that leaked health and mana, timers that outlived a loaded save, the teleporter map, building fixes (bridge, plaque, trapped hero, the Expedition Mine), shorter auto-cast reach, projectiles that stop at walls, and smooth rock (rounded outlines, baked tops with a wandering snowline, gradient cliff faces). Version 0.13.0. Next: 9g–9i. |
+| 13 Playtest feedback (third round) | **Done** (release candidate 0.17.0; merge to main waits for the owner) | See the Phase 13 section below: Escape and the menu, camera zoom on the wheel and the controller, towns on the map, a teleporter that explains itself, readable names, a tracker that points the way. |
 
 ## 1. Goals and hard constraints
 
@@ -866,6 +867,33 @@ Acceptance
   world units.
 - The bridge can be walked across from its gatehouse side; a site laid on the hero leaves them free.
 - Mountain edges show no 90-degree outer corners; draw calls and step time unchanged.
+
+### Phase 13: Playtest feedback, third round (M)
+
+After 0.16.0 the owner reported six things. Each was traced in the code and, where possible, in a browser (headless
+Chromium and a windowed Chrome under a virtual display). Steps 13a to 13e were committed, checked by CI and
+published one by one (13f is this wrap-up).
+
+| Said | Found | Done |
+|---|---|---|
+| Escape should close the menu (windowed Chrome, always) | Not reproducible: Escape opened and closed the menu on every page in both browsers. One mechanism fits “always”: pause on blur re-opens the menu on any window blur, so a blink of focus as Escape is pressed closes and re-opens it | **13a**: pausing waits 150 ms and only if the window is still unfocused (400 ms after an Escape, with a `window.focus()`); Escape is also recognised by `code` and `keyCode`; from a text field in the menu one press closes it; the F3 overlay shows the last key, menu state and window focus |
+| Camera zoom to the mouse wheel, and the controller | A three-step option applied by `zoomFactor()` | **13b**: `cameraZoom` is a number, 0.8 to 1.6 in 0.1 steps (an old index is converted); wheel over the world (notches summed, blocked under panels, menus, the map, scenes and building), `+`/`-` and R3 / L3 as rebindable actions; a Camera zoom slider stays in Options |
+| A town was there and enterable but not on the minimap or map | The map learns a place only from a chunk that was dirty with its tile revealed at that moment; a place belongs to the chunk of its gate, which can differ from the chunk of the tile that is revealed | **13c**: `MapView.sync` also re-checks the places near the hero whenever the fog grew, and `know()` puts any place the party has entered on both maps (with a small revealed patch round its gate) |
+| Teleporting: pick a town, press Teleport, nothing happens | The button was `disabled` when gold was below the fare, with a small “you have N” beside it; other refusals were silent | **13c**: Travel stays clickable (`aria-disabled`), shows “Need N more gold · you have M”, and every refusal (gold, busy, boat, escort, not on the network) toasts and plays the deny sound; `fareShortfall` and `fareWords` in `core/world/travel.ts` |
+| NPC letters pixelated and unreadable | 13 px text at the renderer's resolution, scaled with the camera zoom | **13d**: `render/labels.ts` `makeLabel` (15 px, outline and shadow), zoom divided out of the scale, texture resolution from the screen's pixels and the text size; used by NPC roles, the board, level tags and the escorted traveller (now floated on the overlay) |
+| Quests send me to towns I cannot find: a tracker with direction and distance | Targets were on the map and in the journal's words but nothing live was on the HUD, and “return to the Elder” had no place | **13e**: `core/quest/aim.ts` (`aimOf`, `nextTarget`, `handInPlace`, `elderPlace`), `QuestSystem.aims()` five times a second into `ui.aims`, the arrow, name and distance in the tracker and journal cards, an edge arrow on the minimap, and the Elder's call at the nearest town when nothing is under way |
+
+Decisions: the zoom slider stays beside the wheel (owner's choice); R3 in, L3 out (owner's choice); the arrow is a
+glance and the words carry the meaning (compass point and tiles); the angle follows the tilted ground
+(`atan2(dy * tilt, dx)`), the distance is in map tiles.
+
+Acceptance
+- One Escape closes the menu from any page, even if the window blinks; a real blur still pauses.
+- The wheel, `+`/`-` and R3/L3 zoom 0.8 to 1.6 and the value persists; nothing zooms under a panel.
+- A town entered without walking to it is on both maps; short of gold, Travel says how much is missing.
+- A name above a character is the same height on the screen at zoom 0.8, 1 and 1.6.
+- A quest with a place shows an arrow, the name and a distance that follows the hero, gives way at the door, and
+  points at the hand-in when done.
 
 ## 7. What happens to the current code
 

@@ -1,16 +1,16 @@
 // The game's version and the notes shown once after an update ("What's new" on the title screen).
-export const GAME_VERSION = '0.16.0';
+export const GAME_VERSION = '0.17.0';
 
 export const WHATS_NEW: { version: string; title: string; notes: string[] } = {
   version: GAME_VERSION,
-  title: 'Words and access',
+  title: 'Towns, names and a tracker',
   notes: [
-    'All the text read through and corrected: bounties name monsters properly, spelling is British throughout',
-    'Every screen checked for accessibility: named dialogs, Tab stays inside an open panel, better contrast',
-    'Text size 140% now fits on a phone held sideways, with bars and badges that grow with the text',
-    'Colour-blind palettes lightened where a colour was hard to read on the dark panels',
-    'Key names in hints and messages follow your own key bindings',
-    'From 0.15: installable and offline, a crash screen that keeps your save, dynamic resolution'
+    'The quest tracker points the way: an arrow, the place’s name and how far (“83 tiles northeast”), and an arrow on the minimap’s edge',
+    'Camera zoom moved to the mouse wheel, the + and - keys and the controller (R3 in, L3 out); Options keeps a slider',
+    'Names above townsfolk and monsters are sharp and the same size at every zoom',
+    'The teleporter says when you are short of gold and how much; a town you have entered is always on the map',
+    'Escape closes the menu, and a blink of the window no longer opens it again',
+    'From 0.16: all text proofread, every screen checked for accessibility'
   ]
 };
 

@@ -14,6 +14,8 @@ What the game offers, what was checked for 1.0 and how, and what it does not do.
 | Colour blindness | Standard, Red-green safe and Blue-yellow safe palettes (the Okabe-Ito set) for how dangerous a monster is, how rare an item is, good and bad. Shapes repeat the meaning (a ▲ before the level of a strong monster, rarity letters), so colour is never the only cue | Options, Accessibility |
 | Motion and flashing | Reduced motion (on at the start if the system asks for it) stops shaking, flashing, easing and pulsing; screen shake and damage flash have their own sliders down to 0; film grain and CRT filters are off by default | Options, Accessibility and Video |
 | Pace | Dialogue can be set to Cards only so play never holds; the training ground lets you try a build without risk; pausing is a button, and the game pauses when the window loses focus | Options, Game and Video |
+| Finding a place | The tracker names the next place and says how far it is and in which compass direction, in words; the arrow beside it is a glance, never the only cue. The same words are in the journal | Options, Game (Quest tracker) |
+| Camera distance | Zoom 80% to 160% with the mouse wheel, + and - (rebindable), R3 and L3 or a slider; names above characters keep one size on the screen at any zoom and follow the text size setting | Options, Video; Controls |
 | Reading tips | Short tips appear once, can be hidden for good, and shown again | Options, Help |
 
 The browser's own zoom works. Pinch-zoom of the page is switched off on purpose: playing with two thumbs on a

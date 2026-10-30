@@ -120,6 +120,7 @@ differ. For a real comparison between two builds use `node scripts/perf.mjs`, ru
 | Controller setup, haptics, map stepping and pins (9g) | `phase9g` (`profile`, `haptics`, `map`) | `input`, `bindings`, `mapview`, `save` |
 | Crash screen, storage warnings, a browser without WebGL, offline and install, fullscreen, performance (9h) | `phase9h` (`crash`, `storage`, `title`, `nogl`, `pwa`, `perf`) | `crash`, `app-shell`, `autotune`, `settings` |
 | Accessibility of every screen: names, contrast, dialogs, keyboard focus, text at 140%, the page (9i) | `phase9i` (`names`, `contrast`, `dialogs`, `focus`, `text140`, `page`) | `contrast`, `text` |
+| Escape and the menu, camera zoom, towns on the map, the teleporter's refusals, readable names, the tracker's arrow (13) | `phase9h` (`menu`), `phase9` (`zoom`), `input`, `phase10` (`travel`), `phase8`, `phase7`, `phase9f` (`townsfolk`) | `settings`, `bindings`, `input`, `mapview.places`, `travel`, `aim` |
 | Keyboard, mouse and pad on every screen | `input` | `input`, `bindings`, `nav` |
 | Saves, migrations, slots | `phase1`, `phase9` (`slots`) | `save`, `slots`, `codex` |
 | The test runner itself | | `e2e-runner` |
