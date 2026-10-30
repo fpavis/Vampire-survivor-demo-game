@@ -10,14 +10,14 @@ CI run you can open; nothing here is ticked from memory.
 |---|---|---|---|
 | [x] | Types | `npm run typecheck` | clean (`@ts-nocheck` remains in 33 older files) |
 | [x] | Lint | `npm run lint` | oxlint, 0 errors |
-| [x] | Unit tests | `npm test` | __UNIT__ |
+| [x] | Unit tests | `npm test` | 54 files, 481 tests (about 15 seconds) |
 | [x] | Written text | `tests/text.test.mjs`, `docs/GLOSSARY.md` | every player-facing string read; the rules are tests |
 | [x] | Build and size | `npm run build && npm run check:size` | JavaScript 489 KB gzipped of 560, CSS 0.2 KB of 20 |
 | [x] | Performance | `npm run check:perf` | 25 draw calls (budget 40), 985 world objects (1400), 445 particles (460), 31 chunk builds (60), step 4.8 ms (30) |
-| [x] | Browser tests | `npm run test:e2e` | __E2E__ |
-| [x] | CI on the final commit | [the run](__CIRUN__) | check, perf and four e2e shards green |
+| [x] | Browser tests | `npm run test:e2e` | 19 suites, 901 checks on the fixed world (seed 2024), all passing: 26 minutes in one go locally, about 8 minutes on CI in four shards |
+| [x] | CI on the final commit | [the run](https://github.com/fpavis/Vampire-survivor-demo-game/actions/runs/41081920036) | check, perf and four e2e shards green |
 | [x] | Visual scripts | `node scripts/<name>.mjs <dir>` | all eleven (`gallery`, `layoutshot`, `inputshot`, `questshot`, `buildshot`, `dungeonshot`, `towershot`, `surfaceshot`, `spellshot`, `artsheet`, `decorsheet`) run to the end; the title, HUD, loadout, settings, bounty board and no-WebGL screens looked at |
-| [x] | Random worlds | `SEED=random npm run test:e2e -- --only phase1,phase5,phase6,phase7` | __RANDOM__ |
+| [x] | Random worlds | `SEED=random npm run test:e2e -- --only phase1,phase5,phase6,phase7` | two rounds of four worlds nobody chose (seeds 627405577, 89311778, 980991496, 397474395, then 104188939, 909990325, 591261017, 275231831). The first round found one test that assumed a layout (a dock that reaches an island treasure, `phase6`), fixed; the second round passed everything |
 
 ## Quality
 
