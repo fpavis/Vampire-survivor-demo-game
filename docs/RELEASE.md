@@ -1,21 +1,21 @@
 # Release checklist: 1.0
 
-**Version 0.16.0 is the release candidate.** Everything below was checked on it. 1.0.0 is set, and the work is
+**Version 0.17.0 is the release candidate.** Everything below was checked on it. 1.0.0 is set, and the work is
 merged to `main`, only when the owner decides so (see *Releasing* at the end). Evidence is a command you can run or a
 CI run you can open; nothing here is ticked from memory.
 
 ## Gates
 
-| | Check | Command | Result at 0.16.0 |
+| | Check | Command | Result at 0.17.0 |
 |---|---|---|---|
 | [x] | Types | `npm run typecheck` | clean (`@ts-nocheck` remains in 33 older files) |
 | [x] | Lint | `npm run lint` | oxlint, 0 errors |
-| [x] | Unit tests | `npm test` | 54 files, 481 tests (about 15 seconds) |
+| [x] | Unit tests | `npm test` | 56 files, 504 tests (about 15 seconds) |
 | [x] | Written text | `tests/text.test.mjs`, `docs/GLOSSARY.md` | every player-facing string read; the rules are tests |
-| [x] | Build and size | `npm run build && npm run check:size` | JavaScript 489 KB gzipped of 560, CSS 0.2 KB of 20 |
-| [x] | Performance | `npm run check:perf` | 25 draw calls (budget 40), 985 world objects (1400), 445 particles (460), 31 chunk builds (60), step 4.8 ms (30) |
-| [x] | Browser tests | `npm run test:e2e` | 19 suites, 901 checks on the fixed world (seed 2024), all passing: 26 minutes in one go locally, about 8 minutes on CI in four shards |
-| [x] | CI on the final commit | [the run](https://github.com/fpavis/Vampire-survivor-demo-game/actions/runs/41081920036) | check, perf and four e2e shards green |
+| [x] | Build and size | `npm run build && npm run check:size` | JavaScript 493 KB gzipped of 560, CSS 0.2 KB of 20 |
+| [x] | Performance | `npm run check:perf` | 25 draw calls (budget 40), 931 world objects (1400), 441 particles (460), 31 chunk builds (60), step 4.1 ms (30) |
+| [x] | Browser tests | `npm run test:e2e` | 19 suites, 934 checks on the fixed world (seed 2024), all passing: 26 minutes in one go locally, about 8 minutes on CI in four shards |
+| [x] | CI on the final commit | [the run](https://github.com/fpavis/Vampire-survivor-demo-game/actions/runs/41098699646) | check, perf and four e2e shards green |
 | [x] | Visual scripts | `node scripts/<name>.mjs <dir>` | all eleven (`gallery`, `layoutshot`, `inputshot`, `questshot`, `buildshot`, `dungeonshot`, `towershot`, `surfaceshot`, `spellshot`, `artsheet`, `decorsheet`) run to the end; the title, HUD, loadout, settings, bounty board and no-WebGL screens looked at |
 | [x] | Random worlds | `SEED=random npm run test:e2e -- --only phase1,phase5,phase6,phase7` | two rounds of four worlds nobody chose (seeds 627405577, 89311778, 980991496, 397474395, then 104188939, 909990325, 591261017, 275231831). The first round found one test that assumed a layout (a dock that reaches an island treasure, `phase6`), fixed; the second round passed everything |
 
@@ -35,8 +35,8 @@ CI run you can open; nothing here is ticked from memory.
 | Engine | Tested | Result |
 |---|---|---|
 | Chromium | all 19 suites, every push | passes |
-| WebKit (Safari's engine) | `smoke` and `input`, every push (`.github/workflows/cross-browser.yml`) | passes (64 checks) |
-| Firefox | the same, in a window on a virtual display: headless Firefox cannot create WebGL on a runner without a GPU | passes (64 checks) |
+| WebKit (Safari's engine) | `smoke` and `input`, every push (`.github/workflows/cross-browser.yml`) | passes (65 checks) |
+| Firefox | the same, in a window on a virtual display: headless Firefox cannot create WebGL on a runner without a GPU | passes (65 checks) |
 
 What the other engines found (and was fixed): an element with `id="game"` shadows `window.game` before the game
 exists; Safari does not report `movementX` on pointer events, so a moving mouse went unnoticed; a browser without WebGL showed a blank page and now says why. Real devices, touch
