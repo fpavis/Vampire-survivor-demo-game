@@ -1,6 +1,6 @@
 // Player settings at run time: loaded from this browser, applied to the renderer, camera, effects and HUD, and
 // published to the DOM UI. Systems read the current values from `settings`.
-import { DEFAULT_SETTINGS, MINIMAP_SCALE, QUALITY, ZOOMS, sanitizeSettings, type Settings } from '../core/settings/settings';
+import { DEFAULT_SETTINGS, MINIMAP_SCALE, QUALITY, sanitizeSettings, type Settings } from '../core/settings/settings';
 import { ui as uiBridge } from '../ui/bridge';
 
 const KEY = 'vs.settings.v1';
@@ -26,7 +26,7 @@ export function setSettings(game: any, patch: Partial<Settings>) {
 }
 
 /** Camera zoom factor for the current setting. */
-export const zoomFactor = () => ZOOMS[settings.zoom] ?? 1;
+export const zoomFactor = () => settings.cameraZoom;
 
 export function applySettings(game: any) {
   uiBridge.settings.value = { ...settings };

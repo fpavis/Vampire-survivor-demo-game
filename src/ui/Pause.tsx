@@ -4,6 +4,7 @@ import { padGlyph } from '../core/input/gamepad';
 import { PALETTES } from '../core/access/palettes';
 import { setAccess } from '../app/access';
 import { setSettings } from '../app/settings';
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../core/settings/settings';
 import { Icon } from './Icon';
 import { FullscreenToggle } from './Device';
 
@@ -28,6 +29,7 @@ export function Controls() {
     ['Journal and quests', key('journal'), 'D-pad →'],
     ['Flip the menu’s pages', 'Click a page, or its key', `${pad('prevHero')} · ${pad('nextHero')}`],
     ['World map', key('map'), pad('map')],
+    ['Camera zoom', `Mouse wheel · ${key('zoomOut')} ${key('zoomIn')}`, `${pad('zoomOut')} ${pad('zoomIn')}`],
     ['On the map: from place to place · pin', 'Q E · P or right-click', `D-pad · ${pad('skill2')}`],
     ['Back · close · cancel', 'Esc', pad('cancel')],
     ['Equip · lock on the Spells page', 'F · L', `${pad('skill1')} · ${pad('skill2')}`],
@@ -144,7 +146,7 @@ function SettingsTabs({ title }: { title: boolean }) {
             <Slider label="Render scale" min={0.5} max={1} step={0.05} value={s.renderScale} fmt={pct} onInput={(v) => set({ renderScale: v })} />
             <Toggle label="Lower the resolution a little when the game cannot keep up" on={s.dynRes} set={(v) => set({ dynRes: v })} icon="gauge" />
             <Choice label="Frame rate limit" value={s.fpsCap} options={[[0, 'None'], [60, '60 fps'], [30, '30 fps (saves battery)']]} set={(v) => set({ fpsCap: v })} />
-            <Choice label="Camera" value={s.zoom} options={[[0, 'Far'], [1, 'Normal'], [2, 'Close']]} set={(v) => set({ zoom: v })} />
+            <Slider label="Camera zoom" min={ZOOM_MIN} max={ZOOM_MAX} step={ZOOM_STEP} value={s.cameraZoom} fmt={pct} onInput={(v) => set({ cameraZoom: v })} />
             <Choice label="Art style" value={s.artStyle} options={[['pixel', 'Pixel art (everything at the ground’s grain)'], ['smooth', 'Smooth']]} set={(v) => set({ artStyle: v })} />
             {s.artStyle === 'pixel' && <Choice label="Pixel size" value={s.pixelSize} options={[[2, 'Fine'], [3, 'Medium'], [4, 'Chunky']]} set={(v) => set({ pixelSize: v })} />}
             <Choice label="Screen filter" value={s.postFx} options={[['none', 'None'], ['pixelate', 'Pixelate'], ['crt', 'CRT screen'], ['grain', 'Film grain']]} set={(v) => set({ postFx: v })} />

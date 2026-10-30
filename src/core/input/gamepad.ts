@@ -3,7 +3,7 @@
 
 export type PadAction =
   | 'interact' | 'cancel' | 'skill1' | 'skill2' | 'skill3'
-  | 'prevHero' | 'nextHero' | 'map' | 'menu'
+  | 'prevHero' | 'nextHero' | 'map' | 'menu' | 'zoomIn' | 'zoomOut'
   | 'up' | 'down' | 'left' | 'right';
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
@@ -22,6 +22,7 @@ export const DEFAULT_BINDINGS: Record<PadAction, number[]> = {
   skill1: [BTN.X], skill2: [BTN.Y], skill3: [BTN.RT],
   prevHero: [BTN.LB], nextHero: [BTN.RB],
   map: [BTN.BACK], menu: [BTN.START],
+  zoomIn: [BTN.R3], zoomOut: [BTN.L3],
   up: [BTN.UP], down: [BTN.DOWN], left: [BTN.LEFT], right: [BTN.RIGHT]
 };
 
@@ -134,14 +135,15 @@ export const padGlyph = (kind: PadKind, action: PadAction, bindings = DEFAULT_BI
 
 export const KEY_GLYPH: Record<PadAction, string> = {
   interact: 'E', cancel: 'Esc', skill1: 'Space', skill2: 'Q', skill3: 'R', prevHero: 'Shift+Tab', nextHero: 'Tab',
-  map: 'M', menu: 'Esc', up: '↑', down: '↓', left: '←', right: '→'
+  map: 'M', menu: 'Esc', zoomIn: '+', zoomOut: '-', up: '↑', down: '↓', left: '←', right: '→'
 };
 
 /** Actions a player may move to another button. The d-pad stays fixed: it moves through menus. */
-export const PAD_REBINDABLE: PadAction[] = ['interact', 'cancel', 'skill1', 'skill2', 'skill3', 'prevHero', 'nextHero', 'map', 'menu'];
+export const PAD_REBINDABLE: PadAction[] = ['interact', 'cancel', 'skill1', 'skill2', 'skill3', 'prevHero', 'nextHero', 'map', 'menu', 'zoomIn', 'zoomOut'];
 export const PAD_ACTION_LABEL: Partial<Record<PadAction, string>> = {
   interact: 'Interact · confirm', cancel: 'Back · cancel', skill1: 'Skill 1', skill2: 'Skill 2', skill3: 'Skill 3',
-  prevHero: 'Previous hero', nextHero: 'Next hero', map: 'World map', menu: 'Pause'
+  prevHero: 'Previous hero', nextHero: 'Next hero', map: 'World map', menu: 'Pause',
+  zoomIn: 'Camera zoom in', zoomOut: 'Camera zoom out'
 };
 
 /**

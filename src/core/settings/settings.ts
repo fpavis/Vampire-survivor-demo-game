@@ -19,7 +19,7 @@ export interface Settings {
   renderScale: number;          // 0.5 .. 1 of the display resolution
   dynRes: boolean;              // lower the resolution a little while frames run long (core/settings/autotune)
   fpsCap: 0 | 30 | 60;          // 0: as fast as the display allows
-  zoom: number;                 // camera zoom index into ZOOMS
+  cameraZoom: number;           // ZOOM_MIN .. ZOOM_MAX in steps of ZOOM_STEP: the mouse wheel, the keys and the pad change it
   shake: number;                // 0 .. 1
   flash: number;                // 0 .. 1
   damageNumbers: DamageNumbers;
@@ -40,11 +40,16 @@ export interface Settings {
   mouseInteract: boolean;       // experimental: clicking something within reach uses it, like pressing E
 }
 
-export const ZOOMS = [0.8, 1, 1.2];
+/** The camera: how much of the world a screen shows. 0.8 is as far as the old "Far", and no farther so the chunk budget holds. */
+export const ZOOM_MIN = 0.8, ZOOM_MAX = 1.6, ZOOM_STEP = 0.1;
+const LEGACY_ZOOMS = [0.8, 1, 1.2];            // the old setting was an index: Far, Normal, Close
+export const roundZoom = (z: number): number => Number((Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)) / ZOOM_STEP) * ZOOM_STEP).toFixed(2));
+/** The zoom `notches` steps in (positive) or out (negative) from `z`. */
+export const stepZoom = (z: number, notches: number): number => roundZoom(z + notches * ZOOM_STEP);
 
 export const DEFAULT_SETTINGS: Settings = {
   autoPick: false, confirmSalvage: false, pauseOnBlur: true,
-  quality: 'high', renderScale: 1, dynRes: true, fpsCap: 0, zoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
+  quality: 'high', renderScale: 1, dynRes: true, fpsCap: 0, cameraZoom: 1, shake: 1, flash: 1, damageNumbers: 'all',
   artStyle: 'pixel', pixelSize: 2, postFx: 'none', colorGrade: 'none',
   hudScale: 1, minimap: 'medium', minimapOpacity: 1, healthBars: 'hurt', tracker: true, storyScenes: 'full',
   clickToMove: false, aimAtCursor: false, mouseInteract: false
@@ -54,6 +59,9 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const num = (v: unknown, d: number, a: number, b: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, a, b) : d);
 const pick = <T extends string | number>(v: unknown, options: readonly T[], d: T): T => (options.includes(v as T) ? (v as T) : d);
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
+
+/** A zoom saved by an older game: an index (0, 1 or 2) into Far, Normal and Close. */
+const legacyZoom = (v: unknown, d: number): number => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < LEGACY_ZOOMS.length ? LEGACY_ZOOMS[v] : d);
 
 /** Settings from stored data: unknown keys dropped, bad values replaced by defaults, numbers clamped. */
 export function sanitizeSettings(raw: unknown): Settings {
@@ -67,7 +75,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     renderScale: num(r.renderScale, d.renderScale, 0.5, 1),
     dynRes: bool(r.dynRes, d.dynRes),
     fpsCap: pick(r.fpsCap, [0, 30, 60] as const, d.fpsCap),
-    zoom: Math.round(num(r.zoom, d.zoom, 0, ZOOMS.length - 1)),
+    cameraZoom: roundZoom(typeof r.cameraZoom === 'number' ? num(r.cameraZoom, d.cameraZoom, ZOOM_MIN, ZOOM_MAX) : legacyZoom(r.zoom, d.cameraZoom)),
     shake: num(r.shake, d.shake, 0, 1),
     flash: num(r.flash, d.flash, 0, 1),
     damageNumbers: pick(r.damageNumbers, ['all', 'crits', 'off'] as const, d.damageNumbers),

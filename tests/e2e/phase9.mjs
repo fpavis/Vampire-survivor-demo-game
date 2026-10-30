@@ -94,7 +94,7 @@ if (want('settings')) {
   await pick('Quality', 'low');
   await pick('Render scale', '0.7');
   await pick('Frame rate limit', '30');
-  await pick('Camera', '2');
+  await pick('Camera zoom', '1.2');
   await pick('Screen shake', '0');
   await pick('Damage numbers', 'off');
   await pick('HUD size', '1.2');
@@ -120,17 +120,63 @@ if (want('settings')) {
   check('camera zoom scales the world', Math.abs(v.zoom - 1.2) < 1e-6, JSON.stringify(v));
   check('screen shake off and damage numbers off take effect', v.shake === 0 && v.popups === 0, JSON.stringify(v));
   check('HUD size, minimap size and health bars take effect', v.hs === '1.2' && v.map === 1.3 && v.bar === true, JSON.stringify(v));
-  check('settings are remembered', v.saved.quality === 'low' && v.saved.fpsCap === 30 && v.saved.zoom === 2 && v.saved.healthBars === 'always', JSON.stringify(v.saved));
+  check('settings are remembered', v.saved.quality === 'low' && v.saved.fpsCap === 30 && v.saved.cameraZoom === 1.2 && v.saved.healthBars === 'always', JSON.stringify(v.saved));
   // the world still maps the pointer correctly when zoomed: the screen centre is the hero
   const centre = await ev(() => { const g = window.game, p = g.state.player; g.applyCamera(); const w = g.screenToWorld(g.app.screen.width / 2, g.app.screen.height / 2); return Math.hypot(w.x - g.cam.x, w.y - g.cam.y); });
   check('screen-to-world follows the zoom', centre < 2, String(centre));
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/settings-video.png` });
   // back to the defaults so the rest of the run looks normal
   await ev(() => { localStorage.removeItem('vs.settings.v1'); });
-  await pick('Quality', 'high'); await pick('Render scale', '1'); await pick('Frame rate limit', '0'); await pick('Camera', '1');
+  await pick('Quality', 'high'); await pick('Render scale', '1'); await pick('Frame rate limit', '0'); await pick('Camera zoom', '1');
   await pick('Screen shake', '1'); await pick('Damage numbers', 'all'); await pick('HUD size', '1'); await pick('Minimap', 'medium'); await pick('Monster health bars', 'hurt');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
+}
+
+// ---- 13b: the camera zoom is on the mouse wheel and the + and - keys, and Options shows the same value
+if (want('zoom')) {
+  await ev(() => { const g = window.game; g.godMode = true; g.ui.closeMenu(); window.__dev.setSettings({ cameraZoom: 1 }); });
+  await page.waitForTimeout(200);
+  const zoom = () => ev(() => ({ s: window.__dev.ui.settings.value.cameraZoom, world: Math.round(window.game.worldContainer.scale.x * 100) / 100 }));
+  const near = (z, v) => Math.abs(z.s - v) < 1e-6 && Math.abs(z.world - v) < 0.01;
+  await page.mouse.move(640, 360);
+  await page.mouse.wheel(0, -100); await page.waitForTimeout(300);
+  let z = await zoom();
+  check('a notch of the wheel up zooms in one step', near(z, 1.1), JSON.stringify(z));
+  await page.mouse.wheel(0, 100); await page.waitForTimeout(100); await page.mouse.wheel(0, 100); await page.waitForTimeout(300);
+  z = await zoom();
+  check('two notches down zoom out two steps', near(z, 0.9), JSON.stringify(z));
+  await page.keyboard.press('='); await page.waitForTimeout(150);
+  await page.keyboard.press('+'); await page.waitForTimeout(250);
+  z = await zoom();
+  check('the + and = keys zoom in', near(z, 1.1), JSON.stringify(z));
+  await page.keyboard.press('-'); await page.waitForTimeout(250);
+  z = await zoom();
+  check('the - key zooms out', near(z, 1), JSON.stringify(z));
+  for (let i = 0; i < 9; i++) { await page.mouse.wheel(0, -100); await page.waitForTimeout(60); }
+  await page.waitForTimeout(300);
+  z = await zoom();
+  check('the wheel stops at the close limit', near(z, 1.6), JSON.stringify(z));
+  for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 100); await page.waitForTimeout(60); }
+  await page.waitForTimeout(300);
+  z = await zoom();
+  check('and at the far limit', near(z, 0.8), JSON.stringify(z));
+  await page.mouse.wheel(0, -100); await page.waitForTimeout(250);
+  const saved = await ev(() => JSON.parse(localStorage.getItem('vs.settings.v1') || '{}'));
+  check('the zoom is remembered, and an old "zoom" index is not written any more', Math.abs(saved.cameraZoom - 0.9) < 1e-6 && saved.zoom === undefined, JSON.stringify(saved));
+  // the Options slider shows the same value
+  await openMenuOn('settings');
+  await ev(() => document.querySelector('.vs-pause [data-tab="video"]').click());
+  await page.waitForTimeout(200);
+  const slider = await ev(() => { const row = [...document.querySelectorAll('.vs-pause .vs-row')].find((r) => r.querySelector('span')?.innerText === 'Camera zoom'); return row && { value: Number(row.querySelector('input').value), shown: row.querySelector('.v').innerText }; });
+  check('Options shows the zoom on a slider', slider && Math.abs(slider.value - 0.9) < 1e-6 && slider.shown === '90%', JSON.stringify(slider));
+  // with the menu open the wheel does nothing
+  await page.mouse.move(640, 360);
+  await page.mouse.wheel(0, -100); await page.waitForTimeout(250);
+  z = await zoom();
+  check('the wheel does not zoom the world while a panel is open', Math.abs(z.s - 0.9) < 1e-6, JSON.stringify(z));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(250);
+  await ev(() => window.__dev.setSettings({ cameraZoom: 1 }));
 }
 
 // ---- save slots, backups, export and import

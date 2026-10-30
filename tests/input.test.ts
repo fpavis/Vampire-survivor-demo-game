@@ -48,6 +48,20 @@ describe('pad mapper', () => {
     for (const a of ['skill1', 'skill2', 'skill3', 'prevHero', 'nextHero', 'map', 'menu', 'cancel'] as const) expect(f.pressed.has(a)).toBe(true);
   });
 
+  it('R3 zooms the camera in and L3 out, one step to a press', () => {
+    expect(DEFAULT_BINDINGS.zoomIn).toEqual([BTN.R3]);
+    expect(DEFAULT_BINDINGS.zoomOut).toEqual([BTN.L3]);
+    const m = new PadMapper();
+    const f = m.update(snap({ down: [BTN.R3] }), 0);
+    expect(f.pressed.has('zoomIn')).toBe(true);
+    expect(f.pressed.has('zoomOut')).toBe(false);
+    expect(m.update(snap({ down: [BTN.R3] }), 16).pressed.has('zoomIn')).toBe(false);     // held: not again
+    expect(m.update(snap({ down: [BTN.L3] }), 32).pressed.has('zoomOut')).toBe(true);
+    // the stick clicks are not taken by anything else
+    const taken = Object.entries(DEFAULT_BINDINGS).filter(([a, b]) => b.some((i) => i === BTN.L3 || i === BTN.R3) && a !== 'zoomIn' && a !== 'zoomOut');
+    expect(taken).toEqual([]);
+  });
+
   it('treats an analog trigger as pressed past half way', () => {
     const m = new PadMapper();
     const s = snap();

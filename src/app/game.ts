@@ -30,7 +30,7 @@ import { AudioManager } from './audio';
 import { pickTrack } from '../core/audio/music';
 import { STEP_SOUND, STRIDE, ambientFor, footstepFor } from '../core/audio/ambience';
 import { mountUi } from '../ui/mount';
-import { ui as uiBridge } from '../ui/bridge';
+import { ui as uiBridge, panelOpen } from '../ui/bridge';
 import { OverworldSource } from '../core/world/terrain';
 import { createInterior } from '../core/world/interiors';
 import { Hazards } from './hazards';
@@ -78,6 +78,7 @@ const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
 import { FONT_UI as FONT, FONT_DISPLAY as SERIF } from '../ui/fonts';
 import { settings, loadSettings, applySettings, setSettings } from './settings';
+import { stepZoom } from '../core/settings/settings';
 import { showDamageNumber } from '../core/settings/settings';
 import { formatPlayTime, listSlots, newestSlot, shouldRotate, slotLabel, writeSlot } from '../core/save/slots';
 import { discover, emptyCodex } from '../core/codex/codex';
@@ -541,7 +542,20 @@ class Game {
             else if (act === 'skill3' && !e.repeat) this.spells.cast(2);
             else if (act === 'interact') this.interact();
             else if (act === 'map') this.toggleMap();
+            else if (act === 'zoomIn' && !e.repeat && !e.ctrlKey && !e.metaKey) this.zoomBy(1);
+            else if (act === 'zoomOut' && !e.repeat && !e.ctrlKey && !e.metaKey) this.zoomBy(-1);
         });
+        // the mouse wheel over the world is the camera zoom, one step to a notch (a trackpad's small scrolls add up)
+        let wheelSum = 0, wheelAt = 0;
+        this.app.view.addEventListener('wheel', (e) => {
+            if (!gameState.player || gameState.gameOver || this.busy || gameState.paused || uiBridge.worldMap.value || panelOpen() || this.story.current || this.towers.build) return;
+            e.preventDefault();
+            const now = performance.now();
+            if (now - wheelAt > 300 || Math.sign(e.deltaY) !== Math.sign(wheelSum)) wheelSum = 0;
+            wheelAt = now;
+            wheelSum += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY;
+            while (Math.abs(wheelSum) >= 100) { this.zoomBy(wheelSum < 0 ? 1 : -1); wheelSum -= Math.sign(wheelSum) * 100; }
+        }, { passive: false });
         window.addEventListener('keyup', (e) => { gameState.keys[normKey(e.key)] = false; });
         window.addEventListener('blur', () => {
             gameState.keys = {};
@@ -924,6 +938,12 @@ class Game {
         }
         this.fx.emitLights(L);
         L.render(this.worldContainer);
+    }
+
+    /** The camera one step in (positive) or out (negative); it is a setting, so it is kept and the slider follows. */
+    zoomBy(notches) {
+        const z = stepZoom(settings.cameraZoom, notches);
+        if (z !== settings.cameraZoom) setSettings(this, { cameraZoom: z });
     }
 
     toggleMap() {

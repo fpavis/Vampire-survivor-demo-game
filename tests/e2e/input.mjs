@@ -103,6 +103,16 @@ await tap(B.LB);
 const hero0 = await ev(() => window.game.party.active);
 check('RB and LB switch heroes', hero1 === 1 && hero0 === 0, `${hero1} ${hero0}`);
 
+// ---- 3b. the stick clicks zoom the camera
+await ev(() => { window.__dev.setSettings({ cameraZoom: 1 }); });
+await tap(11);
+await step(2);
+const zin = await ev(() => ({ s: window.__dev.ui.settings.value.cameraZoom, world: Math.round(window.game.worldContainer.scale.x * 100) / 100 }));
+await tap(10); await tap(10);
+const zout = await ev(() => window.__dev.ui.settings.value.cameraZoom);
+check('R3 zooms the camera in one step and L3 out', Math.abs(zin.s - 1.1) < 1e-6 && Math.abs(zout - 0.9) < 1e-6, JSON.stringify({ zin, zout }));
+await ev(() => { window.__dev.setSettings({ cameraZoom: 1 }); });
+
 // ---- 4. level-up cards with the d-pad: the game menu opens on its Upgrades page
 await ev(() => { const g = window.game; g.state.nextLevel = 20; g.state.experience = 20; g.checkLevelUp(); g.state.nextLevel = 1e12; });
 await tap(B.DOWN);
@@ -243,8 +253,12 @@ const typed = await (async () => {
 })();
 check('typing in the search field is not read as hotkeys', typed.value === 'qru e' && typed.open && typed.mana === typed.max, JSON.stringify(typed));
 await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
 const stillOpen = await ev(() => !!document.querySelector('.vs-load'));
-check('Esc leaves the field first, the panel stays', stillOpen);
+check('one Esc in the search field leaves it and closes the menu', !stillOpen);
+// open it again for the rest
+await page.keyboard.press('i');
+await page.waitForSelector('.vs-load');
 
 // equip with the keyboard alone: select a spell, then its Equip button, Enter
 await page.locator('.vs-load input.vs-in').first().fill('');

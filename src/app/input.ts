@@ -428,6 +428,8 @@ export class InputSystem {
         if (has('prevHero')) g.party.cycle(-1);
         if (has('nextHero')) g.party.cycle(1);
         if (has('map')) g.toggleMap();
+        if (has('zoomIn')) g.zoomBy(1);
+        if (has('zoomOut')) g.zoomBy(-1);
         if (has('cancel')) this.back() || g.tips.dismiss();
         if (has('interact')) {
             if (g.towers.build) g.towers.confirmBuild();

@@ -17,6 +17,17 @@ describe('key bindings', () => {
     }
   });
 
+  it('+ and = zoom the camera in, - and _ zoom it out, and a player can move them', () => {
+    const m = new KeyMap();
+    for (const k of ['+', '=']) expect(m.actionFor(k), k).toBe('zoomIn');
+    for (const k of ['-', '_']) expect(m.actionFor(k), k).toBe('zoomOut');
+    expect(m.label('zoomIn')).toBe('+');
+    expect(m.label('zoomOut')).toBe('-');
+    expect(m.assign('zoomIn', 'z')).toBe(true);
+    expect(m.actionFor('z')).toBe('zoomIn');
+    expect(m.keysFor('zoomIn')).toEqual(['z', '=']);
+  });
+
   it('reads a key press as an action, whatever its case, and knows when it means nothing', () => {
     const m = new KeyMap();
     expect(m.actionFor('w')).toBe('up');
