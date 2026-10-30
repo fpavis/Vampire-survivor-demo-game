@@ -56,12 +56,13 @@ export async function suite(name, opts = {}) {
     await new Promise((r) => setTimeout(r, 250));
   }
   // Chromium is the engine the suites are written against; Firefox and WebKit run the ones that make sense there
-  // (BROWSER=firefox node tests/e2e/smoke.mjs), without Chromium's flags or its CPU throttling
+  // (BROWSER=firefox node tests/e2e/smoke.mjs), without Chromium's flags or its CPU throttling. Headless Firefox on a
+  // machine with no GPU cannot create a WebGL context: HEADED=1 runs it in a window, which a virtual display (xvfb-run) provides
   const engine = process.env.BROWSER || 'chromium';
   if (!['chromium', 'firefox', 'webkit'].includes(engine)) throw new Error(`BROWSER must be chromium, firefox or webkit, not ${engine}`);
   const browser = engine === 'chromium'
     ? await chromium.launch({ executablePath: findChromium(), args: launchArgs(opts.args) })
-    : await { firefox, webkit }[engine].launch(engine === 'firefox' ? { firefoxUserPrefs: { 'webgl.disabled': false, 'webgl.force-enabled': true, 'webgl.enable-webgl2': true, 'gfx.webrender.software': true, 'layers.acceleration.disabled': true } } : {});
+    : await { firefox, webkit }[engine].launch(engine === 'firefox' ? { headless: !process.env.HEADED, firefoxUserPrefs: { 'webgl.disabled': false, 'webgl.force-enabled': true, 'webgl.enable-webgl2': true, 'gfx.webrender.software': true, 'layers.acceleration.disabled': true } } : {});
   console.log(`browser ${engine} ${browser.version()}`);
 
   const init = async (context) => {

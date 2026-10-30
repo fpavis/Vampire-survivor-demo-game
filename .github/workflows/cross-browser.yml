@@ -18,6 +18,11 @@ jobs:
       fail-fast: false
       matrix:
         browser: [firefox, webkit]
+        include:
+          # Firefox draws WebGL in software only in a window: give it a virtual display
+          - browser: firefox
+            prefix: xvfb-run -a
+            headed: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,7 +36,9 @@ jobs:
       - name: Browser tests
         env:
           BROWSER: ${{ matrix.browser }}
-        run: node tests/e2e/run.mjs --only smoke,input --title "Browser tests in ${{ matrix.browser }}" --json e2e-results.json
+          HEADED: ${{ matrix.headed }}
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: ${{ matrix.prefix }} node tests/e2e/run.mjs --only smoke,input --title "Browser tests in ${{ matrix.browser }}" --json e2e-results.json
       - name: Keep the results
         if: always()
         uses: actions/upload-artifact@v4
