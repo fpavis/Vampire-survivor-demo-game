@@ -287,6 +287,11 @@ html[data-input="pad"] .vs-hint-key{display:none}
 .vs-tracker .t{font-weight:700;font-size:13px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vs-tracker .o.done{color:var(--c-dim);text-decoration:line-through}
 .vs-tracker .r{color:var(--c-good);margin-top:2px}
+.vs-aim{display:flex;align-items:flex-start;gap:6px;margin-top:3px;color:#7ad8ff;line-height:1.3}
+.vs-aim .arr{width:16px;height:16px;flex:none;margin-top:1px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.vs-aim .w{color:var(--c-muted);font-weight:600}
+.vs-aim .d{color:var(--c-muted);font-weight:600}
+.vs-aim b{font-weight:800}
 .vs-coach{position:relative;display:flex;gap:8px;align-items:flex-start;width:min(250px,calc(100vw - 32px));background:rgba(20,16,6,.86);border:1px solid #7a6a3a;border-left:3px solid var(--c-gold);border-radius:8px;padding:7px 5px 7px 9px;font-size:12px;line-height:1.4;text-shadow:0 1px 2px #000;animation:vs-coach-in .35s ease-out}
 .vs-coach .ic{flex:none;font-size:18px;line-height:1}
 .vs-coach .tx{flex:1;min-width:0}

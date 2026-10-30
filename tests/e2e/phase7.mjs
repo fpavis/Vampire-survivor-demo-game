@@ -135,6 +135,14 @@ check('islands can hold a drowned shrine, which stands in the world instead of t
 
 // ---- 4. towns: the elder, the board, the story chain
 const town = await ev(() => { const src = window.game.overworld; for (let r = 0; r < 60; r++) for (let cy = -r; cy <= r; cy++) for (let cx = -r; cx <= r; cx++) { if (Math.max(Math.abs(cx), Math.abs(cy)) !== r) continue; const q = src.poiForCell(cx, cy); if (q && q.type === 'city') return { id: q.id, name: q.name }; } return null; });
+// before the story begins the tracker points at the nearest town, so the Elder can be found
+const call = await ev(async () => {
+  const g = window.game; g.quests.refreshAim();
+  await new Promise((r) => setTimeout(r, 600));                  // the page redraws a moment after the signal changes
+  const a = window.__dev.ui.aims.value.elder;
+  return { a: a && { ...a }, bar: (document.querySelector('.vs-tracker') || {}).innerText || '', map: g.map.aim && { ...g.map.aim }, waits: g.quests.elderWaits(), want: window.__dev.tools.nearestPlaces('city', 1)[0].name };
+});
+check('before the story begins the tracker sends the party to the nearest town to find the Elder', call.waits && !!call.a && call.a.name === call.want && call.a.tiles > 4 && /Speak with the Elder/.test(call.bar) && call.bar.includes(call.want) && /tiles/.test(call.bar), JSON.stringify(call));
 const enterTown = async () => {
   await ev((id) => { const g = window.game; g.state.player.wx = 0; for (let cy = -40; cy <= 40; cy++) for (let cx = -40; cx <= 40; cx++) { const q = g.overworld.poiForCell(cx, cy); if (q && q.id === id) { g.enterPlace(q); return; } } }, town.id);
   await waitInside();
@@ -160,6 +168,7 @@ check('nothing is forced: the story has not begun yet', (await ev(() => window.g
 await clickChoice('We will fight them');
 const begun = await ev(() => { const q = window.game.quests.state; return { begun: q.flags.begun, active: Object.keys(q.active) }; });
 check('accepting starts the story and the first quest', begun.begun === true && begun.active.includes('m0_omen'), JSON.stringify(begun));
+check('...and the Elder no longer calls', !(await ev(() => window.game.quests.elderWaits())));
 await page.locator('.vs-dialog .vs-choices button').first().click();      // "Farewell"
 await page.waitForTimeout(80);
 check('the tracker shows the quest', (await page.locator('.vs-tracker').innerText()).includes('An Omen in the Sky'));
@@ -310,6 +319,48 @@ const pre = await ev(() => {
   return g.quests.questView('t.pre').ready;
 });
 check('a dungeon that was already cleared counts for a quest taken afterwards', pre === true);
+
+// ---- 6b. the tracker points the way: where the next place lies, how far and in which direction
+const aimAt = (tiles) => ev(async (t) => {
+  const g = window.game, poi = window.__aimPoi, T = 48;
+  window.stand((poi.tx - t + 0.5) * T, (poi.ty + 0.5) * T);
+  g.quests.refreshAim();
+  await new Promise((r) => setTimeout(r, 500));                  // the page redraws a moment after the signal changes
+  const a = window.__dev.ui.aims.value['a.go'];
+  const bar = document.querySelector('.vs-tracker .vs-aim');
+  return { a: a && { ...a }, bar: bar && bar.innerText, rot: bar && bar.querySelector('svg').style.transform, map: g.map.aim && { ...g.map.aim }, poi: { tx: poi.tx, ty: poi.ty, name: poi.name } };
+}, tiles);
+await ev(() => {
+  const g = window.game;
+  g.quests.start({ id: 'a.go', title: 'Aim test', summary: 'Go there', kind: 'bounty', giver: 'board', objectives: [{ type: 'enter', target: { kind: 'ruins', nth: 2 } }], rewards: { gold: 1 } });
+  g.quests.track('a.go');
+  window.__aimPoi = g.quests.poiById(g.quests.state.active['a.go'].targets[0]);
+});
+await page.waitForSelector('.vs-tracker');
+const far = await aimAt(120);
+check('the tracker names the place, its distance and its direction', far.a && far.a.name === far.poi.name && Math.abs(far.a.tiles - 120) <= 1 && far.a.dir === 'east' && far.a.why === 'objective' && /120 tiles east/.test(far.bar || '') && (far.bar || '').includes(far.poi.name), JSON.stringify(far));
+check('its arrow points the way on the tilted screen', far.a && Math.abs(far.a.angle) < 0.06 && /rotate\(/.test(far.rot || ''), JSON.stringify(far));
+check('the minimap is told where it points', far.map && far.map.tx === far.poi.tx && far.map.ty === far.poi.ty, JSON.stringify(far.map));
+const closer = await aimAt(50);
+check('the distance follows the hero', closer.a && Math.abs(closer.a.tiles - 50) <= 1 && /50 tiles/.test(closer.bar || ''), JSON.stringify(closer.a));
+const diag = await ev(() => {
+  const g = window.game, poi = window.__aimPoi, T = 48;
+  window.stand((poi.tx - 60 + 0.5) * T, (poi.ty - 60 + 0.5) * T);       // north-west of it: the place lies to the south-east
+  g.quests.refreshAim();
+  return { ...window.__dev.ui.aims.value['a.go'] };
+});
+check('a place to the south-east leans toward the east on the tilted ground', diag.dir === 'southeast' && Math.abs(diag.angle - Math.atan2(60 * 0.6, 60)) < 0.06 && diag.tiles === 85, JSON.stringify(diag));
+const door = await aimAt(1);
+check('at the door the arrow gives way to the prompt', !door.a && !door.bar, JSON.stringify(door));
+await ev(() => { window.game.enterPlace(window.__aimPoi); });
+await waitInside();
+const handIn = await ev(() => { const g = window.game; g.quests.refreshAim(); const v = g.quests.questView('a.go'); const a = window.__dev.ui.aims.value['a.go']; return { ready: v.ready, a: a && { ...a }, towns: g.session.cities.map((c) => c.name) }; });
+check('a finished quest points at where it is handed in', handIn.ready && handIn.a && handIn.a.why === 'hand-in' && handIn.towns.includes(handIn.a.name), JSON.stringify(handIn));
+await ev(() => { window.game.exitPlace(); });
+await waitOutside();
+await ev(() => { const g = window.game; delete g.quests.state.active['a.go']; g.quests.state.tracked = null; g.quests.publish(); });
+const gone = await ev(() => ({ a: window.__dev.ui.aims.value['a.go'] || null, map: window.game.map.aim }));
+check('a dropped quest takes its arrow with it', !gone.a, JSON.stringify(gone));
 
 // ---- 7. everything survives a reload
 const snap = await ev(() => { const q = window.game.quests.state; return { done: [...q.done], flags: { ...q.flags }, active: Object.keys(q.active).sort(), boards: JSON.parse(JSON.stringify(q.bounties)), bossDead: window.game.visited[window.__poi.id].bossDead }; });

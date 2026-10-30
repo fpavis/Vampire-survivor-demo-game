@@ -15,6 +15,8 @@ export interface QuestView {
   ready: boolean; payable: boolean; tracked: boolean; reward: string; objectives: ObjView[];
   back?: string;                         // where it is handed in
 }
+/** Which way and how far a quest's next place lies: the arrow turns by `angle` (screen, 0 = right, clockwise). */
+export interface AimView { name: string; tiles: number; angle: number; dir: string; why: 'objective' | 'hand-in' }
 /** What a town thinks of the party. */
 export interface StandingView {
   town: string; tier: string; n: number; next: { name: string; at: number } | null; bonus: number; discount: number; freeInn: boolean;
@@ -73,6 +75,7 @@ export const ui = {
   dialog: signal<{ speaker: string; icon: string; text: string; choices?: { text: string; index: number }[]; last?: boolean; script?: boolean; job?: boolean } | null>(null),
   quests: signal<QuestsView | null>(null),
   tracker: signal<QuestView | null>(null),
+  aims: signal<Record<string, AimView>>({}),            // by quest id: where each active quest wants the party to go
   board: signal<BoardView | null>(null),
   boardOpen: signal(false),
   innCost: signal(0),

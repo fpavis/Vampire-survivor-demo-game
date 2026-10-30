@@ -11,7 +11,8 @@ import { BOUNTY_SLOTS, BOUNTY_EPOCH_SECONDS, boardBounties, epochOf } from '../c
 import { innRumour, jobSlot, jobThanks, relicIcon, rumourFee, townJob } from '../core/quest/townsfolk';
 import { iconSprite } from '../render/icons';
 import { findPlace } from '../core/quest/places';
-import { bearing } from '../core/quest/text';
+import { bearing, compass } from '../core/quest/text';
+import { aimOf, elderPlace, nextTarget } from '../core/quest/aim';
 import { CHAPTERS, DEMON_LORDS, DIALOGUES, SOVEREIGN, chapterOfQuest, currentMainQuest, elderScript, lookupMain } from '../core/story/story';
 import { DialogueRunner } from '../core/story/dialogue';
 import { WORLD_CONFIG } from '../core/config';
@@ -29,6 +30,8 @@ export class QuestSystem {
         this.places = new Map();          // place id -> Poi, for names and markers
         this.offerCache = new Map();      // `${quest}:${objective}` -> place id for the postings on a board
         this.runner = null;
+        this.aimTimer = 0;
+        this.trackedId = null;            // the quest the tracker and the minimap's arrow follow
         this.scanTimer = 0;
         this.surviveAcc = 0;
         this.lookup = (id) => lookupMain(id);
@@ -173,6 +176,8 @@ export class QuestSystem {
         if (this.mark && this.mark.sprite && !this.mark.sprite.destroyed) this.mark.sprite.y = -64 + Math.sin(g.frame * 0.08) * 3;
         this.scanTimer -= delta;
         if (this.scanTimer <= 0) { this.scanTimer = 45; this.checkDiscover(); this.syncVisited(); }
+        this.aimTimer -= delta;
+        if (this.aimTimer <= 0) this.refreshAim();
         if (g.mode === 'overworld' && !g.boat) {
             this.surviveAcc += delta / 60;
             if (this.surviveAcc >= 1) {
@@ -181,6 +186,76 @@ export class QuestSystem {
                 if (g.zoneGroup) this.fire({ type: 'survive', seconds: whole, group: g.zoneGroup });
             }
         }
+    }
+
+    // ----------------------------------------------------------------- aim
+    /** What the aim needs to know about the world. */
+    aimEnv() {
+        const g = this.game;
+        const place = (id) => { const p = this.poiById(id); return p ? { id: p.id, name: p.name, tx: p.tx, ty: p.ty } : null; };
+        return {
+            place,
+            townOf: (def) => (def.town ? place(def.town) : null),
+            visited: () => g.session.cities.map((c) => place(c.id)).filter(Boolean),
+            nearestTown: (from) => {
+                const key = `${Math.round(from.tx / 16)},${Math.round(from.ty / 16)}`;
+                if (this.townCache?.key !== key) { const p = findPlace(g.overworld, { kind: 'town', near: from }); this.townCache = { key, place: p ? place(p.id) : null }; }
+                return this.townCache.place;
+            }
+        };
+    }
+
+    /** Where the party stands, for the aim: the gate of the place it is inside, else its own tile. */
+    aimFrom() {
+        const g = this.game, p = g.state.player, inPlace = g.mode === 'interior' ? g.interiorPoi : null;
+        return { inPlace, from: inPlace ? { tx: inPlace.tx, ty: inPlace.ty } : { tx: Math.floor(p.wx / T), ty: Math.floor(p.wy / T) } };
+    }
+
+    /** Whether the Elder has something to say: the first meeting, or the next chapter waiting to be taken on. */
+    elderWaits() {
+        const cur = this.current();
+        return !this.state.flags.begun || (!!cur && cur.status === 'offer');
+    }
+
+    /** Where each active quest wants the party to go next, by quest id (and 'elder' for the Elder's call): distance, screen angle, compass point. */
+    aims() {
+        const out = {};
+        if (!this.game.state.player) return out;
+        const { inPlace, from } = this.aimFrom();
+        const env = this.aimEnv();
+        const add = (key, place, why) => {
+            if (!place || (inPlace && place.id === inPlace.id)) return;            // already there
+            const a = aimOf(from, place, TILT);
+            if (!inPlace && a.tiles < 4) return;                                   // at the door: the prompt takes over
+            out[key] = { name: place.name, tiles: a.tiles, angle: Math.round(a.angle * 20) / 20, dir: compass(place.tx - from.tx, place.ty - from.ty), why };
+        };
+        for (const id of Object.keys(this.state.active)) {
+            const def = defOf(this.state, this.lookup, id), q = this.state.active[id];
+            const t = def && q ? nextTarget(def, q, from, env) : null;
+            if (t) add(id, t.place, t.why);
+        }
+        if (this.elderWaits()) add('elder', elderPlace(from, env), 'objective');
+        return out;
+    }
+
+    /** Publish the aims (when they changed) and tell the minimap where the tracked quest points. */
+    refreshAim() {
+        this.aimTimer = 12;                    // five times a second
+        const aims = this.aims();
+        const text = JSON.stringify(aims);
+        if (text !== this.aimText) { this.aimText = text; uiBridge.aims.value = aims; }
+        const key = this.trackedId && aims[this.trackedId] ? this.trackedId : (!this.trackedId && aims.elder ? 'elder' : null);
+        if (this.game.map) this.game.map.aim = key ? this.aimTarget(key) : null;
+    }
+
+    /** The tile the tracked quest (or the Elder's call) points at, for the minimap's edge arrow. */
+    aimTarget(id) {
+        if (!this.game.state.player) return null;
+        const from = { tx: Math.floor(this.game.state.player.wx / T), ty: Math.floor(this.game.state.player.wy / T) }, env = this.aimEnv();
+        if (id === 'elder') { const p = elderPlace(from, env); return p ? { tx: p.tx, ty: p.ty } : null; }
+        const def = defOf(this.state, this.lookup, id), q = this.state.active[id];
+        const t = def && q ? nextTarget(def, q, from, env) : null;
+        return t ? { tx: t.place.tx, ty: t.place.ty } : null;
     }
 
     // -------------------------------------------------------------- rewards
@@ -635,6 +710,7 @@ export class QuestSystem {
         };
         const trackedId = this.state.tracked && this.state.active[this.state.tracked] ? this.state.tracked : (main ? main.id : (bounties[0] ? bounties[0].id : null));
         uiBridge.tracker.value = trackedId ? this.questView(trackedId) : null;
+        this.trackedId = trackedId;
         // the board shows what the town posts and what you carry
         const poi = this.game.interiorPoi;
         if (uiBridge.boardOpen.value && this.game.mode === 'interior' && poi && poi.type === 'city') {
@@ -648,6 +724,7 @@ export class QuestSystem {
             };
         } else uiBridge.board.value = null;
         if (this.game.mode === 'interior') this.refreshMark();
+        this.refreshAim();
     }
 
     /** quest markers for the world map: where the tracked quest wants you to go (revealed even before you have seen it) */

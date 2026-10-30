@@ -256,6 +256,8 @@ if (want('townsfolk')) {
   await ev(() => { window.__dev.ui.dialog.value = null; });
   const target = await ev((id) => { const g = window.game, q = g.quests.state.active[id]; return g.quests.poiById(q.targets[0]); }, job.id);
   await leave();
+  const toPlace = await ev((id) => { const g = window.game; g.quests.refreshAim(); const a = window.__dev.ui.aims.value[id]; return a && { ...a, want: g.quests.poiById(g.quests.state.active[id].targets[0]).name }; }, job.id);
+  check('outside, the job points at the place it names, with a distance', !!toPlace && toPlace.name === toPlace.want && toPlace.why === 'objective' && toPlace.tiles > 4, JSON.stringify(toPlace));
   await enter(target);
   const relic = await ev(() => {
     const g = window.game, it = g.interactables.find((i) => i.kind === 'relic');
@@ -272,6 +274,8 @@ if (want('townsfolk')) {
   check('picking it up meets the objective', picked.got === 1 && !picked.left, JSON.stringify(picked));
   check('...and says where to take it', await logHas(/all done\. Return to /));
   await leave();
+  const toTown = await ev((a) => { const g = window.game; g.quests.refreshAim(); const v = window.__dev.ui.aims.value[a.id]; return v && { ...v, want: g.quests.townName(a.town) }; }, { id: job.id, town: job.town });
+  check('once picked up it points back at the town that asked', !!toTown && toTown.why === 'hand-in' && toTown.name === toTown.want, JSON.stringify(toTown));
   await enter(target);
   check('it is not there a second time', !(await ev(() => window.game.interactables.some((i) => i.kind === 'relic'))));
   await leave();

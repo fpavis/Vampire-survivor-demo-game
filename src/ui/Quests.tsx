@@ -1,4 +1,4 @@
-import { ui, type QuestView, type StandingView } from './bridge';
+import { ui, type AimView, type QuestView, type StandingView } from './bridge';
 import { glyph } from './hints';
 import { Icon } from './Icon';
 import { useState } from 'preact/hooks';
@@ -23,6 +23,17 @@ function Objectives({ q }: { q: QuestView }) {
   );
 }
 
+/** An arrow turned toward the place, with its name and how far: "Hollowmere · 83 tiles northeast". The words say it all; the arrow is a glance. */
+export function Aim({ aim }: { aim: AimView }) {
+  const what = aim.why === 'hand-in' ? 'Hand in at' : 'Go to';
+  return (
+    <div class="vs-aim" data-aim={aim.why}>
+      <svg class="arr" viewBox="0 0 20 20" aria-hidden="true" style={{ transform: `rotate(${aim.angle}rad)` }}><path d="M2 10h14M10.5 4.5 16.5 10l-6 5.5" /></svg>
+      <span class="tx"><span class="w">{what}</span> <b>{aim.name}</b> <span class="d">{aim.tiles} tiles {aim.dir}</span></span>
+    </div>
+  );
+}
+
 export function QuestCard({ q, children }: { q: QuestView; children?: any }) {
   const from = q.giver === 'townsfolk' ? 'townsfolk' : q.giver === 'inn' ? 'rumour' : '';
   return (
@@ -30,6 +41,7 @@ export function QuestCard({ q, children }: { q: QuestView; children?: any }) {
       <div class="hd"><b>{q.title}</b>{q.level > 0 && <span class="vs-tag">Lv {q.level}</span>}{from && <span class="vs-tag">{from}</span>}{q.ready && <span class="vs-tag ok">ready</span>}</div>
       <div class="sub">{q.summary}</div>
       <Objectives q={q} />
+      {ui.aims.value[q.id] && <Aim aim={ui.aims.value[q.id]} />}
       {q.reward && <div class="rw">Reward: {q.reward}</div>}
       <div class="vs-acts">{children}</div>
     </div>
@@ -181,6 +193,7 @@ export function JournalPage() {
       {tab === 'quests' && (
         <>
       {!v.begun && <div class="sub">Find the Elder in a town: the old stories say someone should speak with you. Nothing here is required, ever.</div>}
+      {!v.begun && ui.aims.value.elder && <Aim aim={ui.aims.value.elder} />}
       {v.chapter && <div class="vs-sec">{v.chapter.title.toUpperCase()}</div>}
       {v.chapter && <div class="sub">{v.chapter.blurb}</div>}
       {v.main && (
@@ -193,6 +206,7 @@ export function JournalPage() {
           <div class="hd"><b>{v.next.title}</b>{v.next.level > 0 && <span class="vs-tag">Lv {v.next.level}</span>}</div>
           <div class="sub">{v.next.summary}</div>
           <div class="rw">{v.next.status === 'offer' ? 'Speak with the Elder in any town to take this on.' : 'Not available yet: grow stronger first.'}</div>
+          {v.next.status === 'offer' && ui.aims.value.elder && <Aim aim={ui.aims.value.elder} />}
         </div>
       )}
       <div class="vs-sec">BOUNTIES AND JOBS ({v.bounties.length})</div>
@@ -261,8 +275,17 @@ export function BoardPanel() {
 
 /** The tracked quest in one or two lines: its title and the next thing to do. Tap it for the journal. */
 export function Tracker() {
-  const q = ui.tracker.value;
-  if (!q || !ui.settings.value.tracker) return null;
+  const q = ui.tracker.value, elder = ui.aims.value.elder;
+  if (!ui.settings.value.tracker) return null;
+  if (!q) {
+    // nothing under way: when the Elder has something to say, the way to the nearest town is the thing to follow
+    return elder ? (
+      <button class="vs-tracker hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.ui.openMenu('journal')}>
+        <div class="t"><Icon name="elder" /> Speak with the Elder</div>
+        <Aim aim={elder} />
+      </button>
+    ) : null;
+  }
   const next = q.objectives.find((o) => !o.done);
   const left = q.objectives.filter((o) => !o.done).length;
   return (
@@ -271,6 +294,7 @@ export function Tracker() {
       {q.ready
         ? <div class="r">{q.back ?? (q.giver === 'elder' ? 'Return to the Elder' : 'Claim at a bounty board')}</div>
         : next && <div class="o"><Icon name="box" /> {next.text}{next.progress ? ` (${next.progress})` : ''}{left > 1 ? <span class="more"> +{left - 1}</span> : null}</div>}
+      {ui.aims.value[q.id] && <Aim aim={ui.aims.value[q.id]} />}
     </button>
   );
 }

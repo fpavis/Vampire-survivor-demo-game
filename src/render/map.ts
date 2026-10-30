@@ -64,6 +64,7 @@ export class MapView {
         this.superTiles = new Map();     // 8x8 chunks composited at one pixel per tile, for the zoomed-out world map
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
+        this.aim = null;                 // { tx, ty }: where the tracked quest points, an arrow on the minimap's edge when it is off the view
         this.scanned = null;             // [fog, version] of the last full look for places round the hero
         this.minimap = document.createElement('canvas');
         this.minimap.width = 170;
@@ -80,6 +81,7 @@ export class MapView {
         this.siteList.clear();
         this.markers = [];
         this.scanned = null;
+        this.aim = null;
         this.dirty = true;
     }
 
@@ -286,7 +288,23 @@ export class MapView {
             const x = ox + m.tx * ppt, y = oy + m.ty * ppt;
             drawIcon(ctx, m.icon, x, y, iconSize);
         }
+        if (mode === 'overworld' && !opts.big && this.aim) this.drawAimArrow(ctx, ox + this.aim.tx * ppt, oy + this.aim.ty * ppt, w, h);
         return { ox, oy };
+    }
+
+    /** A place off the minimap: an arrow on the nearest edge, pointing at it. */
+    drawAimArrow(ctx, x, y, w, h) {
+        const m = 12;
+        if (x >= m && y >= m && x <= w - m && y <= h - m) return;      // on the minimap: its own marker shows
+        const cx = w / 2, cy = h / 2, dx = x - cx, dy = y - cy;
+        const k = Math.min((cx - m) / Math.max(1e-6, Math.abs(dx)), (cy - m) / Math.max(1e-6, Math.abs(dy)));
+        const ax = cx + dx * k, ay = cy + dy * k, ang = Math.atan2(dy, dx);
+        ctx.save();
+        ctx.translate(ax, ay); ctx.rotate(ang);
+        ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, -7); ctx.lineTo(-3, 0); ctx.lineTo(-6, 7); ctx.closePath();
+        ctx.fillStyle = '#7ad8ff'; ctx.strokeStyle = '#06101c'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+        ctx.stroke(); ctx.fill();
+        ctx.restore();
     }
 
     /** A block of 8x8 explored chunks at one pixel per tile (built on first use, dropped when one of them repaints). */
