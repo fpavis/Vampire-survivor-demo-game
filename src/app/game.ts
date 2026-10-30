@@ -88,7 +88,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 class Game {
     constructor() {
         this.app = new PIXI.Application(GAME_CONFIG);
-        (document.getElementById('game') ?? document.body).appendChild(this.app.view);
+        (document.getElementById('vs-main') ?? document.body).appendChild(this.app.view);
         // the world is a drawing: say so, and where the readable parts are
         this.app.view.setAttribute('role', 'img');
         this.app.view.setAttribute('aria-label', 'The game world, drawn on a canvas. Menus and panels are text.');

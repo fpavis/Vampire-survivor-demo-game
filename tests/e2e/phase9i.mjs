@@ -215,11 +215,12 @@ if (want('page')) {
     lang: document.documentElement.lang, title: document.title, mains: document.querySelectorAll('main').length,
     h1: document.querySelectorAll('h1').length, canvasRole: document.querySelector('canvas')?.getAttribute('role'),
     canvasLabel: document.querySelector('canvas')?.getAttribute('aria-label') || '', canvasInMain: !!document.querySelector('main canvas'), uiInMain: !!document.querySelector('main #ui-root'),
-    viewport: document.querySelector('meta[name=viewport]')?.content || ''
+    viewport: document.querySelector('meta[name=viewport]')?.content || '',
+    shadowed: ['game', '__dev'].filter((id) => document.getElementById(id))        // an element with such an id would hide the global
   }));
   const f = await facts();
   check('the page has a language, a title, one main landmark and one heading', f.lang === 'en' && f.title.length > 2 && f.mains === 1 && f.h1 === 1, JSON.stringify(f));
-  check('the canvas says what it is, and sits in the main landmark with the interface', f.canvasRole === 'img' && f.canvasLabel.length > 10 && f.canvasInMain && f.uiInMain, JSON.stringify(f));
+  check('the canvas says what it is, and sits in the main landmark with the interface', f.canvasRole === 'img' && f.canvasLabel.length > 10 && f.canvasInMain && f.uiInMain && f.shadowed.length === 0, JSON.stringify(f));
   const title = await axeViolations(page, null);
   check('the title screen page has no accessibility violations', title.violations.length === 0, title.violations.map((v) => `${v.id} ${v.example}`).join(' | '));
   await startGame(page);

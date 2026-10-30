@@ -125,3 +125,11 @@ describe('the release files agree on the version', () => {
     }
   });
 });
+
+describe('the page', () => {
+  it('has no element whose id would hide a global the game and its tests use', () => {
+    const ids = [...root('index.html').matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+    // window.game is the game: an element with id="game" answers to that name first and every test that waits for it passes too early
+    for (const reserved of ['game', '__dev', 'app', 'ui']) expect(ids, reserved).not.toContain(reserved);
+  });
+});

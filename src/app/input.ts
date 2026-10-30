@@ -195,7 +195,15 @@ export class InputSystem {
         const pointer = (e) => { if (e.isTrusted) { this.pointerLive = true; this.setDevice(e.pointerType === 'touch' ? 'touch' : 'mouse'); } };
         window.addEventListener('pointerdown', (e) => { if (e.isTrusted) g.audio?.unlock(); }, true);
         window.addEventListener('pointerdown', pointer, true);
-        window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && (Math.abs(e.movementX) + Math.abs(e.movementY) > 1)) pointer(e); }, true);
+        // a mouse that really moves, as opposed to a stationary one under a panel that opens. Not every engine reports
+        // movementX and movementY on pointer events (Safari reports none), so the distance is measured here
+        let lastMouse: { x: number; y: number } | null = null;
+        window.addEventListener('pointermove', (e) => {
+            if (e.pointerType !== 'mouse') return;
+            const moved = lastMouse ? Math.abs(e.clientX - lastMouse.x) + Math.abs(e.clientY - lastMouse.y) : Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+            lastMouse = { x: e.clientX, y: e.clientY };
+            if (moved > 1) pointer(e);
+        }, true);
         window.addEventListener('gamepadconnected', (e) => {
             this.padId = e.gamepad.id;
             uiBridge.padKind.value = padKind(e.gamepad.id);

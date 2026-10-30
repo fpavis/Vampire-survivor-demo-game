@@ -33,6 +33,7 @@ await p.locator('.vs-item', { hasText: 'Frost Nova', hasNotText: /on (Aria|Brann
 await shot('loadout');
 await tap(1);
 await tap(9); await shot('pause');
+await p.locator('.vs-pause [data-tab="controls"]').click();
 await p.locator('.vs-pause button', { hasText: 'Show all controls' }).click();
 await p.evaluate(() => { document.activeElement && document.activeElement.blur(); });
 await tap(13); await tap(13); await tap(13);
