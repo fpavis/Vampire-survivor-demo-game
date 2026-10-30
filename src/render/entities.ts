@@ -7,7 +7,7 @@ import { buildHero, animateHero } from './heroArt';
 import { softGlow } from './glow';
 import { access } from '../app/access';
 import { threatColor, threatMark } from '../core/access/palettes';
-import { FONT_UI } from '../ui/fonts';
+import { makeLabel } from './labels';
 import { settings } from '../app/settings';
 import { showHealthBar } from '../core/settings/settings';
 
@@ -195,8 +195,7 @@ export class EntityManager {
         }
         if (tagged && !hp.label) {
             // created lazily so ordinary monsters stay cheap
-            const label = new PIXI.Text(`Lv ${e.level}`, { fontFamily: FONT_UI, fontSize: 11, fontWeight: 'bold', fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
-            label.anchor.set(0.5, 1);
+            const label = makeLabel(`Lv ${e.level}`, 0xffffff, 13);
             label.position.set(0, -2);
             hp.bar.addChild(label);
             hp.label = label;

@@ -5,6 +5,7 @@
 // the hero, whole, whenever the party is out in the world (after loading, or stepping out of a place).
 import * as PIXI from 'pixi.js';
 import { EntityManager } from '../render/entities';
+import { makeLabel } from '../render/labels';
 import { abandonQuest } from '../core/quest/quests';
 import { enemyDamageScale } from '../core/world/difficulty';
 
@@ -70,12 +71,12 @@ export class EscortSystem {
         const hue = j.o.npc.length * 7 + j.o.npc.charCodeAt(0);
         const c = g.critters.create('villager', at.x, at.y, { hue, tame: true, flee: 0 });
         c.follow = true;
-        const name = new PIXI.Text(j.o.npc, { fontFamily: 'system-ui, sans-serif', fontSize: 11, fill: 0xffffff, stroke: 0x101018, strokeThickness: 3 });
-        name.anchor.set(0.5, 1);
+        const name = makeLabel(j.o.npc, 0xffffff);
         name.y = -60;
         this.bar = new PIXI.Graphics();
         this.bar.y = -56;
-        c.addChild(name, this.bar);
+        c.addChild(this.bar);
+        g.occlusion.float(c, name);
         this.c = c;
         this.max = Math.round(BASE_HP * enemyDamageScale(j.def.level || 1));
         this.hp = this.max;

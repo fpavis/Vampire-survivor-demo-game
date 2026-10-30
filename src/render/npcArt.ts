@@ -2,7 +2,7 @@
 // Named town NPCs (healer, merchant, innkeeper): outlined figures with a nameplate and an idle animation.
 import * as PIXI from 'pixi.js';
 import { softGlow } from './glow';
-import { FONT_UI } from '../ui/fonts';
+import { makeLabel } from './labels';
 
 const INK = 0x1e1822;
 const shade = (c, f) => {
@@ -97,8 +97,7 @@ export function createNpc(role) {
         accent = softGlow(18, 0xffb060, 0.3); accent.position.set(0, -24);
         body.addChild(g, mug);
     }
-    const label = new PIXI.Text(ROLES[role].name, { fontFamily: FONT_UI, fontSize: 13, fontWeight: 'bold', fill: ROLES[role].color, stroke: 0x000000, strokeThickness: 3 });
-    label.anchor.set(0.5, 1);
+    const label = makeLabel(ROLES[role].name, ROLES[role].color);
     label.position.set(0, -62);
     c.addChild(shadow, accent, body, label);
     c.label = label;
@@ -139,8 +138,7 @@ export function createBoard() {
     lamp.beginFill(0xffd070); lamp.drawRect(-2, -4, 4, 6); lamp.endFill();
     lamp.position.set(38, -52);
     const accent = softGlow(22, 0xffc060, 0.38); accent.position.set(38, -50);
-    const label = new PIXI.Text('Bounties', { fontFamily: FONT_UI, fontSize: 13, fontWeight: 'bold', fill: 0xffe9a8, stroke: 0x000000, strokeThickness: 3 });
-    label.anchor.set(0.5, 1);
+    const label = makeLabel('Bounties', 0xffe9a8);
     label.position.set(0, -80);
     c.addChild(shadow, accent, g, ...notes, lamp, label);
     c.label = label;

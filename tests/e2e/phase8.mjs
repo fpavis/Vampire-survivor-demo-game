@@ -227,5 +227,15 @@ const sil = await ev(() => {
 check('a wall in front of the hero shows the hero as a silhouette', ghost && sil && sil.on && sil.off, JSON.stringify(sil));
 const npcLabels = await ev(() => { const g = window.game; return g.interactables.filter((i) => i.npc).every((i) => i.sprite.label && i.sprite.label.parent === g.occlusion.layer); });
 check('town names float above the stalls', npcLabels);
+// a name is as big on the screen at every zoom, and its texture is as sharp as the screen needs
+const sizes = await ev(() => {
+  const g = window.game, l = g.interactables.find((i) => i.npc).sprite.label, out = {};
+  for (const z of [0.8, 1, 1.6]) { g.zoom = z; g.applyCamera(); for (let i = 0; i < 3; i++) g.gameLoop(1); const b = l.getBounds(); out[z] = { h: Math.round(b.height * 10) / 10, w: Math.round(b.width * 10) / 10, res: l.resolution }; }
+  g.zoom = 1; g.applyCamera(); g.gameLoop(1);
+  return { out, screen: g.app.renderer.resolution, text: l.style.fontSize };
+});
+const hs = Object.values(sizes.out).map((o) => o.h), ws = Object.values(sizes.out).map((o) => o.w);
+check('a name is the same size on the screen at zoom 0.8, 1 and 1.6', Math.max(...hs) - Math.min(...hs) <= 1.5 && Math.max(...ws) - Math.min(...ws) <= 2.5 && hs[1] >= 15, JSON.stringify(sizes));
+check('a name\'s texture is at least as sharp as the screen', Object.values(sizes.out).every((o) => o.res >= sizes.screen && o.res >= 1) && sizes.text >= 14, JSON.stringify(sizes));
 
 await h.finish();

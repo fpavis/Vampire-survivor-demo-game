@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { WORLD_CONFIG } from '../core/config';
 import { isWallBiome } from '../core/world/biomes';
 import { WALL_HEIGHT } from './world';
+import { tuneLabels } from './labels';
 
 const TILT = WORLD_CONFIG.tilt;
 const T = WORLD_CONFIG.tile;
@@ -57,6 +58,7 @@ export class Occlusion {
         this.layer.position.copyFrom(g.worldContainer.position);
         this.layer.scale.copyFrom(g.worldContainer.scale);
         this.layer.visible = g.worldContainer.visible;
+        tuneLabels(g.zoom || 1, g.app.renderer.resolution);
         this.syncFloats();
         const p = g.state.player;
         if (!p || p.destroyed || !p.parent) { this.restoreAll(); this.setGhost(false); return; }
