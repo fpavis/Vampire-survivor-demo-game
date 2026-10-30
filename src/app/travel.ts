@@ -3,7 +3,7 @@
 // picking a destination there pays the fare (free only between two waypoints) and moves the party.
 import { ui as uiBridge } from '../ui/bridge';
 import { WORLD_CONFIG } from '../core/config';
-import { destinations, townNodeId, travelFare, type TravelNode } from '../core/world/travel';
+import { destinations, fareWords, townNodeId, travelFare, type TravelNode } from '../core/world/travel';
 
 type Game = any;                     // the game object is untyped until the sim is split out
 type Node = TravelNode & { poiId?: string };
@@ -51,11 +51,15 @@ export class TravelSystem {
     go(fromId: string, toId: string): boolean {
         const g = this.game;
         const a = this.node(fromId), b = this.node(toId);
-        if (!a || !b || a.id === b.id || g.busy || g.boat) return false;
+        const refuse = (words: string, icon = 'teleporter') => { g.ui.toast(words, icon); g.audio.play('deny'); return false; };
+        if (!a || !b) return refuse('That teleporter is not on the network yet');
+        if (a.id === b.id) return refuse(`You are already at ${b.name}`);
+        if (g.busy) return refuse('One moment');
+        if (g.boat) return refuse('Leave the boat first, a teleporter needs dry land');
         const esc = g.escort && g.escort.job();
-        if (esc) { g.ui.toast(`${esc.o.npc} will not step into a teleporter: walk there together`, 'person'); g.audio.play('deny'); return false; }
+        if (esc) return refuse(`${esc.o.npc} will not step into a teleporter: walk there together`, 'person');
         const fare = travelFare(a, b);
-        if (g.state.wallet.gold < fare) { g.ui.toast(`The fare is ${fare} gold`, 'res-gold'); g.audio.play('deny'); return false; }
+        if (g.state.wallet.gold < fare) return refuse(fareWords(fare, g.state.wallet.gold), 'res-gold');
         g.state.wallet.gold -= fare;
         uiBridge.wallet.value = { ...g.state.wallet };
         if (uiBridge.worldMap.value) g.ui.toggleMap(g);

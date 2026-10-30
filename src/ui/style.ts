@@ -427,6 +427,9 @@ html.vs-reduced .vs-roll{padding:24px 0}
 .vs-worldmap .dest.waypoint.on{color:#e2c8ff}
 .vs-worldmap .confirm{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--c-line-2);background:rgba(20,26,40,.9)}
 .vs-worldmap .confirm em{color:#ff9a8a;font-style:normal}
+.vs-worldmap .confirm .poor{flex:1;text-align:right;font-weight:700}
+.vs-worldmap .dest small.poor{color:#ff9a8a}
+.vs-worldmap .confirm .go[aria-disabled="true"]{opacity:.55;cursor:not-allowed}
 .vs-worldmap .confirm .vs-icon{width:16px;height:16px;vertical-align:-3px}
 @media (max-width:620px){.vs-worldmap.travel .dests{top:auto;left:8px;width:auto;max-height:40%}}
 .vs-death .box{width:min(440px,100%);text-align:center;margin:auto}

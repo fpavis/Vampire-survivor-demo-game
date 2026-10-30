@@ -885,7 +885,10 @@ class Game {
 
     syncMap() {
         const fog = this.mode === 'overworld' ? this.fog : this.interiorFog;
-        this.map.sync(fog, this.world, this.mode === 'overworld' ? this.popRuntime.population : null, this.session);
+        const overworld = this.mode === 'overworld';
+        const p = this.state.player;
+        const near = overworld && p ? { tx: Math.floor(p.wx / T), ty: Math.floor(p.wy / T), poisNear: (x, y, r) => this.overworld.poisNear(x, y, r) } : null;
+        this.map.sync(fog, this.world, overworld ? this.popRuntime.population : null, this.session, near);
     }
 
     // amount 0 = daylight, ~0.5 = a dim cave. Darkness is a light map: ambient colour plus glowing sources.
@@ -1672,6 +1675,9 @@ class Game {
         const attuned = poi.type === 'city' && !this.session.cities.some((c) => c.id === poi.id);
         if (attuned) this.session.cities.push({ id: poi.id, name: poi.name, ex: poi.ex, ey: poi.ey });
         if (poi.type === 'city') this.session.lastCity = poi.id;
+        // a place the party has been inside is on both maps, whether or not the fog round it was ever drawn
+        this.map.know(poi);
+        this.fog.revealCircle(poi.tx, poi.ty, 6);
         this.events.emit('PlaceEntered', { id: poi.id, name: poi.name, kind: poi.type, dungeon: poi.dungeon ? poi.dungeon.realm : null, group: poi.group });
         this.loadFloor(poi, 0, arrive);
         if (attuned && this.interior.services) {

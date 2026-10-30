@@ -12,6 +12,16 @@ export function travelFare(a: TravelNode, b: TravelNode): number {
   return fareBetween(a, b);
 }
 
+/** Gold missing for a fare: 0 when the party can pay it. */
+export function fareShortfall(fare: number, gold: number): number {
+  return Math.max(0, Math.ceil(fare) - Math.floor(gold));
+}
+
+/** The words for a fare that cannot be paid, on the map and in the toast. */
+export function fareWords(fare: number, gold: number): string {
+  return `Not enough gold: the fare is ${fare}, you have ${Math.floor(gold)}`;
+}
+
 /** Where one can go from `from`: every other node, nearest first, with its fare. */
 export function destinations(from: TravelNode, nodes: TravelNode[]): { node: TravelNode; fare: number; tiles: number }[] {
   return nodes

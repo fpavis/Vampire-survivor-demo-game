@@ -64,6 +64,7 @@ export class MapView {
         this.superTiles = new Map();     // 8x8 chunks composited at one pixel per tile, for the zoomed-out world map
         this.markers = [];       // extra markers (chests, exits) for interiors
         this.mode = 'overworld';
+        this.scanned = null;             // [fog, version] of the last full look for places round the hero
         this.minimap = document.createElement('canvas');
         this.minimap.width = 170;
         this.minimap.height = 170;
@@ -78,6 +79,7 @@ export class MapView {
         this.lairs.clear();
         this.siteList.clear();
         this.markers = [];
+        this.scanned = null;
         this.dirty = true;
     }
 
@@ -89,8 +91,12 @@ export class MapView {
     }
 
     // Repaint chunks whose fog changed, and pick up places / warlord lairs that have been seen.
-    sync(fog, world, population, session) {
-        if (!fog.dirty.size) return;
+    // `near` ({ tx, ty, poisNear }) is the hero's tile: a place belongs to the chunk of its gate, which can lie across a
+    // chunk border from the tile that gets revealed, so whenever the fog has grown the places round the hero are
+    // looked at again, not only the chunks that changed.
+    sync(fog, world, population, session, near) {
+        const rescan = this.mode === 'overworld' && near && (!this.scanned || this.scanned[0] !== fog || this.scanned[1] !== fog.version);
+        if (!fog.dirty.size && !rescan) return;
         const map = this.maps[this.mode];
         for (const key of fog.dirty) {
             const [cx, cy] = key.split(',').map(Number);
@@ -109,7 +115,18 @@ export class MapView {
                 }
             }
         }
+        if (rescan) {
+            this.scanned = [fog, fog.version];
+            for (const p of near.poisNear(near.tx, near.ty, 40)) if (!this.pois.has(p.id) && fog.isRevealed(p.tx, p.ty)) this.pois.set(p.id, p);
+        }
         fog.dirty.clear();
+        this.dirty = true;
+    }
+
+    /** A place the party has been inside is on the map, seen or not. */
+    know(poi) {
+        if (this.pois.get(poi.id) === poi) return;
+        this.pois.set(poi.id, poi);
         this.dirty = true;
     }
 

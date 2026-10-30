@@ -15,7 +15,7 @@ import {
   DEFAULT_ZOOM, MAP_ZOOMS, MAX_PINS, PIN_HEX, boundsOfChunks, clampCenter, markAt, markKey, markOrder, pixelOf, stepMark, tileAt, togglePin, zoomAt,
   type MapCam
 } from '../core/world/mapView';
-import type { TravelNode } from '../core/world/travel';
+import { fareShortfall, type TravelNode } from '../core/world/travel';
 import { FONT_UI } from './fonts';
 
 const T = WORLD_CONFIG.tile, CT = WORLD_CONFIG.chunkTiles;
@@ -316,6 +316,7 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
     : `Drag or WASD to look around · Q E: from place to place${canPin ? ' · P or right-click: pin' : ''} · wheel or + - to zoom · C back to you · M or Esc to close`;
   const gold = ui.wallet.value.gold;
   const picked = dests.find((d) => d.node.id === sel) ?? null;
+  const short = picked ? fareShortfall(picked.fare, gold) : 0;
   return (
     <div class={`vs-panel vs-worldmap hit${here ? ' travel' : ''}`} role="dialog" aria-label={title}>
       <div class="top">
@@ -344,7 +345,7 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
             {dests.map(({ node, fare, tiles }) => (
               <button key={node.id} type="button" class={`vs-btn dest ${node.kind}${sel === node.id ? ' on' : ''}`} data-dest={node.id} aria-pressed={sel === node.id} onClick={() => select(node.id)}>
                 <Icon name={node.kind === 'town' ? 'teleporter' : 'tower-waypoint'} />
-                <span class="tx"><b>{node.name}</b><small>{tiles} tiles · {fare ? `${fare} gold` : 'free'}</small></span>
+                <span class="tx"><b>{node.name}</b><small class={fareShortfall(fare, gold) ? 'poor' : ''}>{tiles} tiles · {fare ? `${fare} gold` : 'free'}{fareShortfall(fare, gold) ? ' · not enough' : ''}</small></span>
               </button>
             ))}
           </div>
@@ -352,8 +353,9 @@ function MapPanel({ mode, from }: { mode: 'view' | 'travel'; from: string | null
       </div>
       {picked && (
         <div class="confirm">
-          <span>Travel to <b>{picked.node.name}</b> · {picked.fare ? <><Icon name="res-gold" /> {picked.fare} gold</> : 'free between waypoints'}{gold < picked.fare && <em> · you have {gold}</em>}</span>
-          <button type="button" class="vs-btn go" disabled={gold < picked.fare} onClick={go}>Travel</button>
+          <span>Travel to <b>{picked.node.name}</b> · {picked.fare ? <><Icon name="res-gold" /> {picked.fare} gold</> : 'free between waypoints'}</span>
+          {short > 0 && <em class="poor" role="status">Need {short} more gold · you have {Math.floor(gold)}</em>}
+          <button type="button" class="vs-btn go" aria-disabled={short > 0} onClick={go}>Travel</button>
         </div>
       )}
       <div class="foot">

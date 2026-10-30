@@ -475,6 +475,9 @@ if (want('travel')) {
   await inTown(A.id);
   const att = await ev((id) => { const g = window.game; return { listed: g.session.cities.some((c) => c.id === id), log: window.__dev.ui.log.value.some((l) => /Teleporter attuned/.test(l.text)), node: !!g.travel.node(`town:${id}`) }; }, A.id);
   check('entering a town attunes its teleporter', att.listed && att.log && att.node, JSON.stringify(att));
+  // the party never walked to it, yet it is on the map: the icon, the seen patch and the "Visited" mark
+  const known = await ev((q) => { const g = window.game; return { on: g.map.discoveredPois().some((p) => p.id === q.id), seen: g.fog.isRevealed(q.tx, q.ty), badge: g.map.placeBadge(g.map.pois.get(q.id)) }; }, A);
+  check('a town entered without walking to it is on the map, seen and marked visited', known.on && known.seen && known.badge === 'visited', JSON.stringify(known));
   await ev(() => window.game.exitPlace()); await outside();
   await ev((q) => window.game.enterPlace(q), B); await inTown(B.id);
   await ev(() => window.game.exitPlace()); await outside();
@@ -501,16 +504,23 @@ if (want('travel')) {
   await inTown(B.id);
   const landed = await ev(() => { const g = window.game, tp = g.interior.services.teleporter, p = g.state.player; return { d: Math.round(Math.hypot(p.wx - tp.x, p.wy - tp.y)), gold: g.state.wallet.gold, map: !!window.__dev.ui.worldMap.value }; });
   check('town to town costs the fare and lands on the other town\'s teleporter', fare > 0 && bar.includes(String(fare)) && 5000 - landed.gold === fare && landed.d < 100 && !landed.map, JSON.stringify({ fare, bar, landed }));
-  // without the fare: the Travel button is off and the trip is refused
-  await setGold(0);
+  // without the fare: the Travel button says so, the click is answered, and the trip is refused
+  await setGold(10);
   await ev((id) => window.game.travel.open(id), node(B.id));
   await until(() => document.querySelectorAll('.vs-worldmap.travel .dest').length > 0);
   await page.click(`.vs-worldmap [data-dest="${node(A.id)}"]`);
   await until(() => !!document.querySelector('.vs-worldmap .confirm .go'));
-  const poor = await ev(([b, a]) => { const g = window.game; return { disabled: document.querySelector('.vs-worldmap .confirm .go').disabled, ok: g.travel.go(b, a), here: g.interiorPoi.id, busy: g.busy }; }, [node(B.id), node(A.id)]);
+  const before = await ev(() => window.__dev.ui.log.value.length);
+  const poorFare = await ev((a) => window.game.travel.from(window.game.travel.nodes().find((n) => n.kind === 'town' && n.poiId === window.game.interiorPoi.id).id).find((d) => d.node.id === a).fare, node(A.id));
+  const poorBar = await ev(() => { const go = document.querySelector('.vs-worldmap .confirm .go'); return { aria: go.getAttribute('aria-disabled'), disabled: go.disabled, text: document.querySelector('.vs-worldmap .confirm').innerText, row: document.querySelector('.vs-worldmap .dest.on small').className }; });
+  await page.click('.vs-worldmap .confirm .go', { force: true });      // Playwright treats aria-disabled as disabled; a player can press it
+  const poor = await ev((b) => { const g = window.game; return { here: g.interiorPoi.id, busy: g.busy, map: !!window.__dev.ui.worldMap.value, gold: g.state.wallet.gold, toast: window.__dev.ui.log.value.slice(-3).map((l) => l.text).join(' | ') }; }, node(B.id));
   await page.keyboard.press('Escape');
   await until(() => !window.__dev.ui.worldMap.value);
-  check('without the fare the trip is refused', poor.disabled && !poor.ok && poor.here === B.id && !poor.busy, JSON.stringify(poor));
+  check('short of gold the Travel button stays clickable and says how much is missing', poorBar.aria === 'true' && !poorBar.disabled && poorBar.text.includes(`Need ${poorFare - 10} more gold`) && poorBar.row.includes('poor'), JSON.stringify({ poorBar, poorFare }));
+  check('a click without the fare is answered with a message and nobody travels', poor.here === B.id && !poor.busy && poor.map && poor.gold === 10 && /Not enough gold/.test(poor.toast), JSON.stringify(poor));
+  const busyRefusal = await ev(([a, b]) => { const g = window.game; g.state.wallet.gold = 5000; g.busy = true; const ok = g.travel.go(a, b); g.busy = false; return { ok, toast: window.__dev.ui.log.value.slice(-1)[0].text }; }, [node(B.id), node(A.id)]);
+  check('a refusal while the screen is changing is spoken too', !busyRefusal.ok && /One moment/.test(busyRefusal.toast), JSON.stringify(busyRefusal));
   // two waypoints of the party's own, near the start
   await ev(() => window.game.exitPlace()); await outside();
   await goTo(0, 0);
