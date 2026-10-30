@@ -65,6 +65,8 @@ export async function suite(name, opts = {}) {
   console.log(`browser ${engine} ${browser.version()}`);
 
   const init = async (context) => {
+    // a promise that fails with nobody listening is a page error too (Firefox and WebKit do not report it as one)
+    await context.addInitScript(() => { window.addEventListener('unhandledrejection', (e) => console.error('[unhandledrejection] ' + String((e.reason && (e.reason.stack || e.reason.message)) || e.reason))); });
     if (seed !== null) await context.addInitScript((s) => { window.__forceSeed = s; }, seed);
     if (opts.init) await context.addInitScript(opts.init, opts.initArg);
   };
@@ -75,10 +77,12 @@ export async function suite(name, opts = {}) {
   };
   const context = await newContext();
 
+  const pages = [], recent = [];
   const watch = (page) => {
     const take = (text) => { if (!allowed.some((re) => re.test(text))) unexpected.push(text); };
+    pages.push(page);
     page.on('pageerror', (e) => take(e.message));
-    page.on('console', (m) => { if (m.type() === 'error') take(m.text()); });
+    page.on('console', (m) => { recent.push(`${m.type()}: ${m.text()}`.slice(0, 240)); if (recent.length > 30) recent.shift(); if (m.type() === 'error') take(m.text()); });
   };
   const newPage = async (ctx = context) => {
     const page = await ctx.newPage();
@@ -104,6 +108,18 @@ export async function suite(name, opts = {}) {
     if (done) return;
     check(`the suite ran to its end (${String(err && err.message || err).split('\n')[0].slice(0, 200)})`, false);
     console.log(String(err && err.stack || err).split('\n').slice(0, 6).join('\n'));
+    // what the page looked like when the suite gave up: enough to tell a game that never started from one that stalled
+    for (const pg of pages) {
+      try {
+        const state = await Promise.race([pg.evaluate(() => ({
+          game: typeof window.game, canvas: !!document.querySelector('canvas'), ready: document.readyState, fonts: document.fonts && document.fonts.status,
+          webgl: !!document.createElement('canvas').getContext('webgl'), webgl2: !!document.createElement('canvas').getContext('webgl2'),
+          title: !!window.__dev, ui: !!document.getElementById('ui-root')
+        })), new Promise((r) => setTimeout(() => r('no answer in 3 s'), 3000))]);
+        console.log('page state ' + JSON.stringify(state));
+      } catch (e) { console.log('page state unavailable: ' + String(e && e.message || e).split('\n')[0]); }
+    }
+    if (recent.length) console.log('console, last lines:\n  ' + recent.slice(-12).join('\n  '));
     unexpected.length = 0;
     await finish();
   };
@@ -113,6 +129,8 @@ export async function suite(name, opts = {}) {
   if (seed !== null) console.log(`seed ${seed}`);
   return {
     name, url, seed, browser, context, check, newContext, newPage,
+    /** How many times longer than in Chromium a wait may take: the other engines render in software, a few frames a second. */
+    slow: engine === 'chromium' ? 1 : 3,
     errors: unexpected,
     /** Errors a suite causes on purpose are not failures. */
     allowErrors: (re) => { allowed.push(re); },
