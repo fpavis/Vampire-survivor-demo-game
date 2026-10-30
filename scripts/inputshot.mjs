@@ -33,10 +33,12 @@ await p.locator('.vs-item', { hasText: 'Frost Nova', hasNotText: /on (Aria|Brann
 await shot('loadout');
 await tap(1);
 await tap(9); await shot('pause');
+await p.evaluate(() => window.game.ui.openMenu('settings'));      // Start opens the game menu on the page it was left on
 await p.locator('.vs-pause [data-tab="controls"]').click();
 await p.locator('.vs-pause button', { hasText: 'Show all controls' }).click();
 await p.evaluate(() => { document.activeElement && document.activeElement.blur(); });
 await tap(13); await tap(13); await tap(13);
 await p.evaluate(() => document.querySelector('.vs-pause').scrollTo(0, 400));
 await shot('controls');
-await b.close(); process.kill(-pv.pid);
+await b.close();
+try { process.kill(-pv.pid); } catch { /* the preview server is already gone */ }
