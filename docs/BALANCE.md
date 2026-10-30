@@ -72,7 +72,7 @@ soft cap. Each step is about half the old one; a complete card ends near where a
 | | Reach (new) | +5% spell area | +50% |
 | Vigor | Vitality | +12 max health | +120 |
 | | Recovery | +0.3 HP/s | +3/s |
-| | Armor | −3% damage taken | −30% (60% cap) |
+| | Armour | −3% damage taken | −30% (60% cap) |
 | Wayfarer | Swiftness | +4% speed | +40% |
 | | Magnet | +18% pickup range | +180% |
 | | Wisdom | +6% XP | +60% |

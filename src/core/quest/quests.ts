@@ -1,7 +1,7 @@
 // Quest engine: data-defined quests, objectives that listen to game facts, rewards and prerequisites.
 // Pure and deterministic. The runtime feeds it events and applies the rewards it returns.
 import { ENEMY_TYPES } from '../config';
-import { GROUP_NAMES } from './text';
+import { GROUP_NAMES, pluralName } from './text';
 
 export type Resource = 'gold' | 'wood' | 'stone' | 'iron';
 export const RESOURCES: Resource[] = ['gold', 'wood', 'stone', 'iron'];
@@ -239,7 +239,7 @@ export function describeObjective(o: ObjectiveDef, names: TextNames, resolved: s
   if (o.text) return o.text;
   switch (o.type) {
     case 'talk': return `Speak with the ${o.npc}`;
-    case 'kill': return `Defeat ${o.count} ${o.enemy ? plural(o.count, enemyName(o.enemy)) : o.group ? `monsters in the ${GROUP_NAMES[o.group] ?? o.group}` : 'monsters'}`;
+    case 'kill': return `Defeat ${o.count} ${o.enemy ? plural(o.count, enemyName(o.enemy), pluralName(enemyName(o.enemy))) : o.group ? `monsters in the ${GROUP_NAMES[o.group] ?? o.group}` : 'monsters'}`;
     case 'killBoss': return `Defeat ${o.count} ${plural(o.count, 'warlord')}`;
     case 'discover': return `Find ${names.place(o.target, resolved)}`;
     case 'enter': return `Enter ${names.place(o.target, resolved)}`;

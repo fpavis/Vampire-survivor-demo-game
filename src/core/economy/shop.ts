@@ -63,7 +63,7 @@ export const RUMORS = [
   'Merchants change their wares through the day. If nothing suits you, come back later.',
   'Sand swallows the careless. Scorpions swim in it like fish.',
   'My cousin chops wood for the tower builders. They say one tower needs a mountain of timber.',
-  'The deeper wilds change. Trees turn grey, the sky darkens... something is poisoning the land.',
+  'The deeper wilds change. Trees turn grey, the sky darkens… something is poisoning the land.',
   'Keep your runes tidy. A fitting rune turns a plain spell into a weapon.',
   'The innkeeper keeps the best beds in town. A good rest brings everyone back from the brink.',
   'If you hear a horn at night, do not step outside.',

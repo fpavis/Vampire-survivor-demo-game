@@ -186,7 +186,7 @@ export const RUNES: Record<string, RuneDef> = {
     mods: [], trigger: { on: 'hit', payload: 'spark', chance: 0.2, power: 0.6 } },
   echo: { id: 'echo', name: 'Death Echo', icon: 'rune-echo', rarity: 3, desc: 'Enemies killed by this spell explode for 70% damage.', exprs: ALL_DMG,
     mods: [], trigger: { on: 'kill', payload: 'burst', chance: 1, power: 0.7 } },
-  vampiric: { id: 'vampiric', name: 'Vampiric', icon: 'rune-vampiric', rarity: 3, desc: 'Each kill heals 1 HP.', exprs: ALL_DMG, mods: [{ p: 'leech', add: 1 }] },
+  vampiric: { id: 'vampiric', name: 'Vampiric', icon: 'rune-vampiric', rarity: 3, desc: 'Each kill heals 1 health.', exprs: ALL_DMG, mods: [{ p: 'leech', add: 1 }] },
   efficient: { id: 'efficient', name: 'Efficient', icon: 'rune-efficient', rarity: 1, desc: '-30% mana cost.', mode: 'active', mods: [{ p: 'mana', mul: 0.7 }] },
   reach: { id: 'reach', name: 'Far Reach', icon: 'rune-reach', rarity: 2, desc: '+40% distance.', exprs: ['dash', 'blink'], mods: [{ p: 'range', mul: 1.4 }] },
   lingering: { id: 'lingering', name: 'Lingering', icon: 'rune-lingering', rarity: 2, desc: '+50% duration.', exprs: ['barrier', 'dash', 'trail', 'cloud', 'heal'], mods: [{ p: 'duration', mul: 1.5 }] },

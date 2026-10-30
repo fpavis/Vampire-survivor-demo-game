@@ -118,6 +118,6 @@ export class EscortSystem {
         this.drop();
         g.quests.fire({ type: 'arrive', npc: j.o.npc, poi: { id: poi.id, type: poi.type, group: poi.group } });
         g.quests.turnInQuest(j.id);
-        g.ui.toast(`${j.o.npc}: "${poi.name}, at last. I would never have made it alone."`, 'person');
+        g.ui.toast(`${j.o.npc}: “${poi.name}, at last. I would never have made it alone.”`, 'person');
     }
 }

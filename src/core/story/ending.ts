@@ -25,11 +25,11 @@ export const LORD_INTRO: Record<string, string[]> = {
 
 /** A lord's last words, before the line that closes its chapter (LORD_FALL). */
 export const LORD_LAST: Record<string, string> = {
-  field: 'The harvest... was never going to be mine...',
-  forest: 'Cut me down, and I grow back. Slower, this time...',
+  field: 'The harvest… was never going to be mine…',
+  forest: 'Cut me down, and I grow back. Slower, this time…',
   desert: 'The sand remembers. It will remember you.',
-  shore: 'The tide... turns...',
-  mountain: 'A mountain does not fall. It only... settles.',
+  shore: 'The tide… turns…',
+  mountain: 'A mountain does not fall. It only… settles.',
   sovereign: 'Then hold the sky, little ones. See how long it lets you.'
 };
 
@@ -76,7 +76,7 @@ export function interludeDue(done: (quest: string) => boolean, told: (chapter: s
 
 export const EPILOGUE: string[] = [
   'Azrathul is gone, and the sky has forgotten him already.',
-  'The five lords are names in the Elder\'s book now, and nothing more.',
+  'The five lords are names in the Elder’s book now, and nothing more.',
   'In the towns the bounty boards fill with ordinary work: wolves, wagons, a lost goat.',
   'The roads you walked are busier than they have been in years.',
   'The world is still wide, and much of it is still unmapped.',

@@ -353,7 +353,7 @@ if (want('escort')) {
   await enter(dest);
   await until((id) => window.game.quests.state.done.includes(id), job.id);
   const arrived = await ev((a) => { const g = window.game; return { done: g.quests.state.done.includes(a.id), gold: g.state.wallet.gold - a.gold, rep: (g.quests.state.rep[a.town] || 0) - a.rep }; }, { id: job.id, town: town.id, ...before });
-  check('walking into the town they were bound for pays, and the town that asked thinks better of the party', arrived.done && arrived.gold >= job.def.rewards.gold && arrived.rep === 1 && await logHas(new RegExp(`${npc}: "`)), JSON.stringify(arrived));
+  check('walking into the town they were bound for pays, and the town that asked thinks better of the party', arrived.done && arrived.gold >= job.def.rewards.gold && arrived.rep === 1 && await logHas(new RegExp(`${npc}: “`)), JSON.stringify(arrived));
   await leave();
 }
 

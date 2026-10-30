@@ -15,7 +15,7 @@ const pick = <A,>(arr: readonly A[], h: number): A => arr[Math.min(arr.length - 
 
 const FETCH = [
   { item: 'a silver locket', icon: 'gem', title: 'The Lost Locket', ask: 'My mother\'s locket. Bandits took it and fled to {place}. Bring it home, please.' },
-  { item: 'the miller\'s ledger', icon: 'journal', title: 'The Miller\'s Ledger', ask: 'The miller dropped his ledger running from {place}. Without it, half the town owes him nothing.' },
+  { item: 'the miller’s ledger', icon: 'journal', title: 'The Miller’s Ledger', ask: 'The miller dropped his ledger running from {place}. Without it, half the town owes him nothing.' },
   { item: 'an old shrine icon', icon: 'star', title: 'The Shrine Icon', ask: 'Our shrine\'s icon was carried off to {place}. The town has not slept well since.' },
   { item: 'a courier\'s satchel', icon: 'backpack', title: 'Undelivered', ask: 'A courier never came back from {place}. His satchel holds letters for half the street.' }
 ];
@@ -32,7 +32,7 @@ export const relicIcon = (item: string): string => FETCH.find((f) => f.item === 
 /** What the townsperson says when the job is handed in. */
 export function jobThanks(def: QuestDef): string {
   const o = def.objectives[0];
-  if (o?.type === 'fetch') return `You found ${o.item}! I had given up hope. Take this, with the whole street's thanks.`;
+  if (o?.type === 'fetch') return `You found ${o.item}! I had given up hope. Take this, with the whole street’s thanks.`;
   if (o?.type === 'kill') return 'Listen: nothing howling. First quiet night in weeks. This is for you.';
   return 'Thank you. Truly.';
 }

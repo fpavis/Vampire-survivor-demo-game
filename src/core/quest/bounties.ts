@@ -3,7 +3,7 @@
 import { hash } from '../world/noise';
 import { ENEMY_TYPES } from '../config';
 import { ROSTERS } from '../world/biomes';
-import { GROUP_NAMES } from './text';
+import { GROUP_NAMES, pluralName } from './text';
 import type { QuestDef, Resource } from './quests';
 
 export interface BoardInfo { id: string; group: string; level: number; tx: number; ty: number }
@@ -42,7 +42,7 @@ export function boardBounties(seed: number, board: BoardInfo, epoch: number): Qu
     const count = 12 + Math.floor(h(0, 2) * 14);
     const name = ENEMY_TYPES[entry.type]?.name ?? entry.type;
     out.push({
-      ...base(0), title: `Cull the ${name}s`, summary: `${name}s are troubling the ${GROUP_NAMES[board.group] ?? 'land'}. Thin them out.`,
+      ...base(0), title: `Cull the ${pluralName(name)}`, summary: `${pluralName(name)} are troubling the ${GROUP_NAMES[board.group] ?? 'land'}. Thin them out.`,
       objectives: [{ type: 'kill', count, enemy: entry.type }],
       rewards: { gold: round5(count * (3 + lvl * 0.6)), xp: Math.round(count * (1 + lvl * 0.25)) }
     });

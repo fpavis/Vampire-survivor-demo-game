@@ -178,7 +178,7 @@ export const DIALOGUES: Record<string, DialogueScript> = {
   'elder.turnin': turnIn('elder.turnin', 'current', ['It is done, and done well. The towns will sleep easier tonight.']),
 
   'm0.turnin': turnIn('m0.turnin', 'm0_omen', [
-    'A dozen already? You are quicker than you look. The beasts are the demons\' doing, but they are only the first wave.',
+    'A dozen already? You are quicker than you look. The beasts are the demons’ doing, but they are only the first wave.',
     'Take this. And listen: the lords sit in dungeons. The nearest one in the fields is the place to begin.'
   ]),
   'm1.offer': offer('m1.offer', 'm1_hollow', [
@@ -201,7 +201,7 @@ export const DIALOGUES: Record<string, DialogueScript> = {
   'm5.offer': offer('m5.offer', 'm5_stone', [
     'Gorvak holds the peaks, and the peaks hold the way to the sovereign. Sink an expedition mine: a passage bored into the mountain, and a plateau at its heart. Then find his dungeon and break him.'
   ]),
-  'm5.turnin': turnIn('m5.turnin', 'm5_stone', ['All five thrones are empty. The plateau your tower opened hides a vault in the sky, and Azrathul is the one thing left that cares to be found.']),
+  'm5.turnin': turnIn('m5.turnin', 'm5_stone', ['All five thrones are empty. The plateau your expedition mine opened hides a vault in the sky, and Azrathul is the one thing left that cares to be found.']),
   'm6.offer': offer('m6.offer', 'm6_sovereign', [
     'Azrathul waits in a Skyvault, on the plateau an expedition mine opens. Go up. Bring everything you have learned. End this.'
   ]),

@@ -59,7 +59,7 @@ export function Healer() {
             <span class="pi"><Icon name={q.dead ? 'skull' : h.icon} /></span>
             <span>
               <b>{h.name}</b> <span class="vs-tag">Lv {h.level}</span>
-              <div class={`st${q.dead ? ' dead' : ''}`}>{q.dead ? 'Fallen' : `${h.hp} / ${h.maxHp} HP`}</div>
+              <div class={`st${q.dead ? ' dead' : ''}`}>{q.dead ? 'Fallen' : `${h.hp} / ${h.maxHp} health`}</div>
             </span>
             <button class="vs-btn" disabled={q.cost === 0 || q.cost > gold} onClick={() => { game.party.buy(i); ui.version.value++; }}>{label}</button>
           </div>

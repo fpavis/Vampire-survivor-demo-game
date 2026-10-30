@@ -17,7 +17,7 @@ export function RebindPanel() {
     input.captureKey((key: string) => {
       setWaiting(null);
       if (key === 'escape') return;
-      if (!input.keys.assign(a, key)) { setNote('That key is kept for menus, cards and heroes (Esc, Enter, 1-3, F, L).'); return; }
+      if (!input.keys.assign(a, key)) { setNote('That key is kept for menus, cards and heroes (Esc, Enter, 1–3, F, L).'); return; }
       input.savePrefs();
     });
   };

@@ -544,7 +544,7 @@ export class QuestSystem {
         const g = this.game, poi = g.interiorPoi;
         if (!poi || poi.type !== 'city' || this.rumourHere()) return false;
         const p = this.rumourPlace(poi);
-        if (!p) { g.ui.toast('"Quiet times. Nothing worth the telling."'); return false; }
+        if (!p) { g.ui.toast('“Quiet times. Nothing worth the telling.”'); return false; }
         this.places.set(p.id, p);
         (this.state.rumours ||= {})[poi.id] = { epoch: epochOf(g.state.time), place: p.id };
         g.audio.play('blip');

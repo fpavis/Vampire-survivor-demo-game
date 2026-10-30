@@ -68,7 +68,7 @@ function useDndWiring() {
       if (t.type === 'equip') {
         if (held) return { ok: false, reason: `${held} already has this spell equipped` };
         if (t.slot === undefined) {
-          if (mode !== 'auto') return { ok: false, reason: 'Active skills go into the Space / Q / R slots' };
+          if (mode !== 'auto') return { ok: false, reason: `Active skills go into the ${glyph('skill1')} / ${glyph('skill2')} / ${glyph('skill3')} slots` };
           const auto: string[] = sp().target().auto;
           if (auto.includes(it.uid)) return { ok: false };
           return auto.length >= MAX_AUTO ? { ok: false, reason: 'All auto-cast slots are full' } : { ok: true };
@@ -287,7 +287,7 @@ export function SpellsPage() {
       <h2>Spells &amp; Runes — {viewed?.name}{resting ? ' (resting)' : ''}
         <span class="vs-heroes">{party.heroes.map((h, i) => (
           <button key={h.id} class={`vs-btn vs-hb${i === vi ? ' on' : ''}${i === party.active ? ' act' : ''}${h.dead ? ' down' : ''}`} data-skipfocus data-hero={i}
-            title={i === party.active ? `${h.name} (active)` : `Show ${h.name}'s loadout${h.dead ? ' (down)' : ''}`} onClick={() => sp.setView(i)}><Icon name={h.icon} /></button>
+            title={i === party.active ? `${h.name} (active)` : `Show ${h.name}’s loadout${h.dead ? ' (down)' : ''}`} onClick={() => sp.setView(i)}><Icon name={h.icon} /></button>
         ))}</span>
       </h2>
       {resting && viewed ? (
@@ -478,7 +478,7 @@ function RunePicker({ item, slot, close }: { item: SpellItem; slot: number; clos
     <div class="vs-panel vs-picker hit">
       <button class="vs-btn vs-x" onClick={close} aria-label="Close"><Icon name="close" /></button>
       <h2><Icon name={tpl.icon} /> {tpl.name} · socket {slot + 1}</h2>
-      <div class="sub">Runes that fit this socket. {misfit > 0 ? `${misfit} other rune${misfit > 1 ? 's' : ''} in your bag ${misfit > 1 ? "don't" : "doesn't"} fit.` : ''}</div>
+      <div class="sub">Runes that fit this socket. {misfit > 0 ? `${misfit} other rune${misfit > 1 ? 's' : ''} in your bag ${misfit > 1 ? 'don’t' : 'doesn’t'} fit.` : ''}</div>
       {!fit.length && <div class="vs-empty">{ids.length ? 'None of your runes fit this spell.' : 'No runes yet. Rare drops from enemies, chests and altars.'}</div>}
       {fit.map((id) => {
         const def = RUNES[id];

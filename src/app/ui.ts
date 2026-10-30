@@ -327,7 +327,7 @@ export class UIManager {
         this.elements.statsText.position.set(12, 98 + (picks.length ? 92 : 48));
         this.elements.statsText.text =
             `Damage ×${st.might.toFixed(2)}   Speed ×${st.speed.toFixed(2)}\n` +
-            `Crit ${Math.round(st.crit * 100)}%   Armor ${Math.round(st.armor * 100)}%   Regen ${st.regen.toFixed(1)}/s`;
+            `Crit ${Math.round(st.crit * 100)}%   Armour ${Math.round(st.armor * 100)}%   Regen ${st.regen.toFixed(1)}/s`;
     }
 
 

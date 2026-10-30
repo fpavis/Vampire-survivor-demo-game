@@ -18,5 +18,5 @@ export const CREDITS: { section: string; lines: string[] }[] = [
   { section: 'Made with', lines: ['PixiJS (rendering)', 'Preact (interface)', 'fflate (save compression)'] },
   { section: 'Icons', lines: ['game-icons.net by Lorc, Delapouite and contributors, CC BY 3.0', 'Material Design Icons by Pictogrammers, Apache 2.0'] },
   { section: 'Typefaces', lines: ['Cinzel by Natanael Gama, SIL Open Font License', 'Nunito by Vernon Adams, Cyreal and Jacques Le Bailly, SIL Open Font License'] },
-  { section: 'Sound and music', lines: ['Synthesized in the browser with the Web Audio API'] }
+  { section: 'Sound and music', lines: ['Synthesised in the browser with the Web Audio API'] }
 ];

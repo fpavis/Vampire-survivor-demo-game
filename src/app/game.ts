@@ -1508,7 +1508,7 @@ class Game {
         for (const it of this.interactables) {
             if (it.kind === 'chest' && !it.opened) add({ kind: 'chest', it, text: '[E]  Open treasure' }, it.x, it.y, 64, 70);
             if (it.kind === 'relic' && !it.taken) add({ kind: 'relic', it, text: `[E]  Pick up ${it.item}` }, it.x, it.y, 64, 80);
-            if (it.npc) add({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant\'s wares', innkeeper: '[E]  Talk to the Innkeeper', elder: '[E]  Speak with the Elder', board: '[E]  Read the bounty board' }[it.kind] }, it.x, it.y, 90, 150);
+            if (it.npc) add({ kind: it.kind, text: { healer: '[E]  Talk to the Healer', merchant: '[E]  Browse the Merchant’s wares', innkeeper: '[E]  Talk to the Innkeeper', elder: '[E]  Speak with the Elder', board: '[E]  Read the bounty board' }[it.kind] }, it.x, it.y, 90, 150);
         }
         for (const c of this.critters.list) {
             if (c.kind === 'villager') add({ kind: 'npc', c, text: '[E]  Talk' }, c.wx, c.wy, 56, 130);

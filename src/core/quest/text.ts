@@ -14,3 +14,14 @@ export function bearing(from: { tx: number; ty: number }, to: { tx: number; ty: 
   const p = POINTS[((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8];
   return `about ${dist} tiles ${p}`;
 }
+
+const SAME_IN_PLURAL = new Set(['Jellyfish', 'Djinn']);
+/** The plural of a monster's name: Wolf is Wolves, Mummy is Mummies, Thorn Witch is Thorn Witches. */
+export function pluralName(name: string): string {
+  const cut = name.lastIndexOf(' ') + 1, head = name.slice(0, cut), word = name.slice(cut);
+  if (SAME_IN_PLURAL.has(word)) return name;
+  if (/[^aeiou]y$/i.test(word)) return head + word.slice(0, -1) + 'ies';
+  if (/[^f]f$/i.test(word)) return head + word.slice(0, -1) + 'ves';
+  if (/(s|x|ch|sh)$/i.test(word)) return head + word + 'es';
+  return head + word + 's';
+}

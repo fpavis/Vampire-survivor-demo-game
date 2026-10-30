@@ -5,7 +5,7 @@ import {
 } from '../src/core/quest/quests';
 import { BOUNTY_SLOTS, boardBounties, bountyId, epochOf } from '../src/core/quest/bounties';
 import { findPlace } from '../src/core/quest/places';
-import { bearing } from '../src/core/quest/text';
+import { bearing, pluralName } from '../src/core/quest/text';
 import { DialogueRunner, type DialogueContext, type DialogueScript, type Effect } from '../src/core/story/dialogue';
 import { CHAPTERS, DEMON_LORDS, DIALOGUES, MAIN_BY_ID, MAIN_QUESTS, bossTitle, currentMainQuest, elderScript, lookupMain } from '../src/core/story/story';
 import { OverworldSource } from '../src/core/world/terrain';
@@ -161,7 +161,7 @@ describe('quest engine', () => {
   });
 
   it('describes objectives as sentences', () => {
-    expect(describeObjective({ type: 'kill', count: 20, enemy: 'WOLF' }, names)).toBe('Defeat 20 Wolfs'.replace('Wolfs', ENEMY_TYPES.WOLF.name + 's'));
+    expect(describeObjective({ type: 'kill', count: 20, enemy: 'WOLF' }, names)).toBe('Defeat 20 Wolves');
     expect(describeObjective({ type: 'kill', count: 1, enemy: 'WOLF' }, names)).toBe(`Defeat 1 ${ENEMY_TYPES.WOLF.name}`);
     expect(describeObjective({ type: 'gather', resource: 'stone', count: 9 }, names)).toBe('Collect 9 stone');
     expect(describeObjective({ type: 'clear', target: { kind: 'dungeon' } }, names, 'Gloom Depths')).toBe('Clear Gloom Depths');
@@ -406,5 +406,26 @@ describe('finding places', () => {
     expect(bearing({ tx: 0, ty: 0 }, { tx: 0, ty: -40 })).toBe('about 40 tiles north');
     expect(bearing({ tx: 0, ty: 0 }, { tx: -20, ty: 20 })).toBe('about 28 tiles southwest');
     expect(bearing({ tx: 0, ty: 0 }, { tx: 2, ty: 2 })).toBe('right here');
+  });
+});
+
+describe('monster names in the plural', () => {
+  it('reads as English for the irregular names', () => {
+    expect(pluralName('Wolf')).toBe('Wolves');
+    expect(pluralName('Mummy')).toBe('Mummies');
+    expect(pluralName('Harpy')).toBe('Harpies');
+    expect(pluralName('Thorn Witch')).toBe('Thorn Witches');
+    expect(pluralName('Stalker Mantis')).toBe('Stalker Mantises');
+    expect(pluralName('Jellyfish')).toBe('Jellyfish');
+    expect(pluralName('Djinn')).toBe('Djinn');
+    expect(pluralName('Rock Troll')).toBe('Rock Trolls');
+  });
+
+  it('never leaves a doubled or dropped ending on any monster', () => {
+    for (const t of Object.values(ENEMY_TYPES)) {
+      const many = pluralName(t.name);
+      expect(many, t.name).not.toMatch(/(?:[^e]fs|[^aeiou]ys|sss)$/i);
+      expect(many.startsWith(t.name.slice(0, -1)), t.name).toBe(true);
+    }
   });
 });

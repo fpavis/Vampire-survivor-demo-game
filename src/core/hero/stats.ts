@@ -33,7 +33,7 @@ export const CARDS: Record<string, StatCard> = {
   reach: { id: 'reach', name: 'Reach', icon: 'card-reach', path: 'arcane', max: 10, label: 'Spell area', desc: 'Novas, meteors, clouds, trails and blades cover more ground.', value: (l) => 0.05 * l, fmt: (v) => `+${pct(v)}` },
   vitality: { id: 'vitality', name: 'Vitality', icon: 'card-vitality', path: 'vigor', max: 10, label: 'Max health', desc: 'More health, and heals when taken.', value: (l) => 12 * l, fmt: (v) => `+${v}` },
   recovery: { id: 'recovery', name: 'Recovery', icon: 'card-recovery', path: 'vigor', max: 10, label: 'Regeneration', desc: 'Slowly heal over time.', value: (l) => 0.3 * l, fmt: (v) => `+${v.toFixed(1)}/s` },
-  armor: { id: 'armor', name: 'Armor', icon: 'card-armor', path: 'vigor', max: 10, label: 'Damage taken', desc: 'Reduces all incoming damage.', value: (l) => 0.03 * l, fmt: (v) => `-${pct(v)}` },
+  armor: { id: 'armor', name: 'Armour', icon: 'card-armor', path: 'vigor', max: 10, label: 'Damage taken', desc: 'Reduces all incoming damage.', value: (l) => 0.03 * l, fmt: (v) => `-${pct(v)}` },
   swift: { id: 'swift', name: 'Swiftness', icon: 'card-swift', path: 'mobility', max: 10, label: 'Move speed', desc: 'Run faster.', value: (l) => 0.04 * l, fmt: (v) => `+${pct(v)}` },
   magnet: { id: 'magnet', name: 'Magnet', icon: 'card-magnet', path: 'mobility', max: 10, label: 'Pickup range', desc: 'Gems fly to you from further away.', value: (l) => 0.18 * l, fmt: (v) => `+${pct(v)}` },
   growth: { id: 'growth', name: 'Wisdom', icon: 'card-growth', path: 'mobility', max: 10, label: 'XP gain', desc: 'Gain experience faster.', value: (l) => 0.06 * l, fmt: (v) => `+${pct(v)}` },

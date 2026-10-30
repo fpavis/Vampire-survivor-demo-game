@@ -26,7 +26,7 @@ export function Controls() {
     ['Upgrades', key('upgrades'), 'D-pad ↓'],
     ['Build', key('build'), 'D-pad ←'],
     ['Journal and quests', key('journal'), 'D-pad →'],
-    ['Flip the menu\'s pages', 'Click a page, or its key', `${pad('prevHero')} · ${pad('nextHero')}`],
+    ['Flip the menu’s pages', 'Click a page, or its key', `${pad('prevHero')} · ${pad('nextHero')}`],
     ['World map', key('map'), pad('map')],
     ['On the map: from place to place · pin', 'Q E · P or right-click', `D-pad · ${pad('skill2')}`],
     ['Back · close · cancel', 'Esc', pad('cancel')],
@@ -145,7 +145,7 @@ function SettingsTabs({ title }: { title: boolean }) {
             <Toggle label="Lower the resolution a little when the game cannot keep up" on={s.dynRes} set={(v) => set({ dynRes: v })} icon="gauge" />
             <Choice label="Frame rate limit" value={s.fpsCap} options={[[0, 'None'], [60, '60 fps'], [30, '30 fps (saves battery)']]} set={(v) => set({ fpsCap: v })} />
             <Choice label="Camera" value={s.zoom} options={[[0, 'Far'], [1, 'Normal'], [2, 'Close']]} set={(v) => set({ zoom: v })} />
-            <Choice label="Art style" value={s.artStyle} options={[['pixel', 'Pixel art (everything at the ground\'s grain)'], ['smooth', 'Smooth']]} set={(v) => set({ artStyle: v })} />
+            <Choice label="Art style" value={s.artStyle} options={[['pixel', 'Pixel art (everything at the ground’s grain)'], ['smooth', 'Smooth']]} set={(v) => set({ artStyle: v })} />
             {s.artStyle === 'pixel' && <Choice label="Pixel size" value={s.pixelSize} options={[[2, 'Fine'], [3, 'Medium'], [4, 'Chunky']]} set={(v) => set({ pixelSize: v })} />}
             <Choice label="Screen filter" value={s.postFx} options={[['none', 'None'], ['pixelate', 'Pixelate'], ['crt', 'CRT screen'], ['grain', 'Film grain']]} set={(v) => set({ postFx: v })} />
             <Choice label="Colour grade" value={s.colorGrade} options={[['none', 'None'], ['warm', 'Warm'], ['cool', 'Cool'], ['noir', 'Noir'], ['sepia', 'Sepia']]} set={(v) => set({ colorGrade: v })} />
