@@ -61,7 +61,7 @@ export async function suite(name, opts = {}) {
   if (!['chromium', 'firefox', 'webkit'].includes(engine)) throw new Error(`BROWSER must be chromium, firefox or webkit, not ${engine}`);
   const browser = engine === 'chromium'
     ? await chromium.launch({ executablePath: findChromium(), args: launchArgs(opts.args) })
-    : await { firefox, webkit }[engine].launch();
+    : await { firefox, webkit }[engine].launch(engine === 'firefox' ? { firefoxUserPrefs: { 'webgl.disabled': false, 'webgl.force-enabled': true, 'webgl.enable-webgl2': true, 'gfx.webrender.software': true, 'layers.acceleration.disabled': true } } : {});
   console.log(`browser ${engine} ${browser.version()}`);
 
   const init = async (context) => {

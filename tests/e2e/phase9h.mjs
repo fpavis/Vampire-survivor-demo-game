@@ -1,11 +1,11 @@
 // Phase 9h end-to-end checks: robustness. A crash shows a screen with a report and keeps the last good save;
-// storage that will not save says so. Sections can be picked with ONLY=crash,storage,title,pwa,perf; THROTTLE=n slows the CPU.
+// storage that will not save says so. Sections can be picked with ONLY=crash,storage,title,nogl,pwa,perf; THROTTLE=n slows the CPU.
 import { suite } from './harness.mjs';
 
 const h = await suite('phase9h');
 const { check, want, context } = h;
 // errors the tests cause on purpose are expected; anything else is a failure
-h.allowErrors(/test crash|background oops|rejected oops|\[crash\]|storage test/);
+h.allowErrors(/test crash|background oops|rejected oops|\[crash\]|storage test|\[start\]/);
 await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(h.url).origin });
 let page = await h.newPage();
 const ev = (fn, arg) => page.evaluate(fn, arg);
@@ -133,6 +133,25 @@ if (want('title')) {
   await pg.keyboard.press('Enter');
   await pg.waitForTimeout(800);
   check('...and Enter does not start a game behind it', await pg.evaluate(() => !window.game.state.player && !!document.querySelector('.vs-crash')));
+  await ctx.close();
+}
+
+// ---- a browser without WebGL says so in plain words instead of showing a blank page
+if (want('nogl')) {
+  const ctx = await h.newContext();
+  await ctx.addInitScript(() => {
+    const real = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) { return /webgl/i.test(String(type)) ? null : real.call(this, type, ...rest); };
+  });
+  const pg = await h.newPage(ctx);
+  await pg.goto(h.url);
+  const shown = await pg.waitForSelector('[data-start-failure]', { timeout: 15000 }).then(() => true, () => false);
+  const info = await pg.evaluate(() => {
+    const b = document.querySelector('[data-start-failure]');
+    return { kind: b && b.dataset.startFailure, role: b && b.getAttribute('role'), heading: b && b.querySelector('h2').innerText, button: !!(b && b.querySelector('button')), focus: document.activeElement && document.activeElement.tagName, game: typeof window.game };
+  });
+  check('a browser without WebGL says so in plain words', shown && info.kind === 'webgl' && /cannot draw the game/.test(info.heading) && info.role === 'alert', JSON.stringify(info));
+  check('...with a Reload button that has the focus, and no half-started game', info.button && info.focus === 'BUTTON' && info.game === 'undefined', JSON.stringify(info));
   await ctx.close();
 }
 

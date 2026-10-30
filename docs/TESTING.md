@@ -118,7 +118,7 @@ differ. For a real comparison between two builds use `node scripts/perf.mjs`, ru
 | Tower levels, sieges, townsfolk jobs, escorts, rumours, story scenes (9f) | `phase9f` (`towers`, `siege`, `townsfolk`, `escort`, `rumour`, `scene`) | `towers`, `townsfolk`, `quests`, `story-moments` |
 | Hero switching, timers, building, reach and walls, the travel map, mountain outlines and their baked tops (12) | `phase12` (`party`, `building`, `reach`, `travel`, `mountains`) | `rockShape`, `party`, `mapview`, `travel` |
 | Controller setup, haptics, map stepping and pins (9g) | `phase9g` (`profile`, `haptics`, `map`) | `input`, `bindings`, `mapview`, `save` |
-| Crash screen, storage warnings, offline and install, fullscreen, performance (9h) | `phase9h` (`crash`, `storage`, `title`, `pwa`, `perf`) | `crash`, `app-shell`, `autotune`, `settings` |
+| Crash screen, storage warnings, a browser without WebGL, offline and install, fullscreen, performance (9h) | `phase9h` (`crash`, `storage`, `title`, `nogl`, `pwa`, `perf`) | `crash`, `app-shell`, `autotune`, `settings` |
 | Accessibility of every screen: names, contrast, dialogs, keyboard focus, text at 140%, the page (9i) | `phase9i` (`names`, `contrast`, `dialogs`, `focus`, `text140`, `page`) | `contrast`, `text` |
 | Keyboard, mouse and pad on every screen | `input` | `input`, `bindings`, `nav` |
 | Saves, migrations, slots | `phase1`, `phase9` (`slots`) | `save`, `slots`, `codex` |

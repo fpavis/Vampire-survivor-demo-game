@@ -76,12 +76,21 @@ export function screens(page) {
   return list;
 }
 
-/** Wait for panels to finish easing in (a half-faded panel has half the contrast). Endless animations are left alone. */
+/**
+ * Wait for panels to finish easing in (a half-faded panel has half the contrast). One frame first, so that what a click
+ * just changed has been drawn and its animations have started; endless animations are left alone.
+ */
 export function settled(page) {
-  return page.evaluate(() => Promise.race([
-    Promise.all(document.getAnimations().filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))),
-    new Promise((r) => setTimeout(r, 1500))
-  ])).then(() => page.waitForTimeout(60));
+  return page.evaluate(async () => {
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const finite = () => document.getAnimations().filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity);
+    const deadline = performance.now() + 2500;
+    await frame();
+    for (let running = finite(); running.length && performance.now() < deadline; running = finite()) {
+      await Promise.race([Promise.all(running.map((a) => a.finished.catch(() => {}))), new Promise((r) => setTimeout(r, 800))]);
+      await frame();
+    }
+  }).then(() => page.waitForTimeout(40));
 }
 
 /** Open a screen and wait for its root to appear. Returns whether it did. */
