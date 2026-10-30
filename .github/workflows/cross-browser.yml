@@ -1,0 +1,41 @@
+name: Other browsers
+
+# Chromium is the engine the game is built and tested against (ci.yml). This runs the smoke test and the input suite
+# in Firefox and WebKit (the engine of Safari) as well. It never holds a push back: a difference between engines is
+# information to read, and docs/RELEASE.md records what it showed.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+jobs:
+  engine:
+    name: ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser
+        run: npx playwright-core install --with-deps ${{ matrix.browser }}
+      - name: Browser tests
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: node tests/e2e/run.mjs --only smoke,input --title "Browser tests in ${{ matrix.browser }}" --json e2e-results.json
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: other-browsers-${{ matrix.browser }}
+          path: e2e-results.json
+          if-no-files-found: ignore

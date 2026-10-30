@@ -45,6 +45,7 @@ and names each failing check. In CI the same table is on the run's summary page.
 | `ONLY=a,b` | Only these sections of a suite (`want('a')` in the suite). The first lines of each suite list its sections |
 | `SEED=<n>` / `SEED=random` | The world to play in. **2024 by default**, printed at the top of every suite. A failure in a random world is reproduced with `SEED=<the printed seed>` |
 | `THROTTLE=n` | Slows the CPU n times, like a busy CI runner: the way to reproduce a timing failure (`THROTTLE=4`) |
+| `BROWSER=firefox` or `webkit` | The engine to drive (Chromium by default). Only `smoke` and `input` are expected to pass outside Chromium; its flags and `THROTTLE` do not apply. The browsers come from `npx playwright-core install firefox webkit` |
 | `CHROMIUM_PATH` | The browser binary. Without it the newest headless shell under `PLAYWRIGHT_BROWSERS_PATH` (default `/opt/pw-browsers`) is used, and otherwise Playwright's own |
 | `SHOTS=<dir>` | The suites that take screenshots save them there |
 

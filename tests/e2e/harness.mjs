@@ -8,9 +8,9 @@
 //   await h.finish();                       // closes everything, prints the result, sets the exit code
 //
 // Environment: SEED=<n> or SEED=random (the world; 2024 by default, printed), ONLY=a,b (sections, with h.want),
-// THROTTLE=n (slows the CPU like a busy CI runner), CHROMIUM_PATH (the browser), SHOTS=<dir> (screenshots, used by
-// the suites that take them). Run a suite alone with `node tests/e2e/<name>.mjs`, or all of them with run.mjs.
-import { chromium } from 'playwright-core';
+// THROTTLE=n (slows the CPU like a busy CI runner; Chromium only), CHROMIUM_PATH (the browser), SHOTS=<dir>
+// (screenshots, used by the suites that take them), BROWSER=chromium|firefox|webkit (the engine; Chromium by default). Run a suite alone with `node tests/e2e/<name>.mjs`, or all of them with run.mjs.
+import { chromium, firefox, webkit } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -55,7 +55,14 @@ export async function suite(name, opts = {}) {
     if (i >= 80) throw new Error('the preview server did not start');
     await new Promise((r) => setTimeout(r, 250));
   }
-  const browser = await chromium.launch({ executablePath: findChromium(), args: launchArgs(opts.args) });
+  // Chromium is the engine the suites are written against; Firefox and WebKit run the ones that make sense there
+  // (BROWSER=firefox node tests/e2e/smoke.mjs), without Chromium's flags or its CPU throttling
+  const engine = process.env.BROWSER || 'chromium';
+  if (!['chromium', 'firefox', 'webkit'].includes(engine)) throw new Error(`BROWSER must be chromium, firefox or webkit, not ${engine}`);
+  const browser = engine === 'chromium'
+    ? await chromium.launch({ executablePath: findChromium(), args: launchArgs(opts.args) })
+    : await { firefox, webkit }[engine].launch();
+  console.log(`browser ${engine} ${browser.version()}`);
 
   const init = async (context) => {
     if (seed !== null) await context.addInitScript((s) => { window.__forceSeed = s; }, seed);
@@ -76,7 +83,7 @@ export async function suite(name, opts = {}) {
   const newPage = async (ctx = context) => {
     const page = await ctx.newPage();
     watch(page);
-    if (process.env.THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
+    if (process.env.THROTTLE && engine === 'chromium') await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
     return page;
   };
 
