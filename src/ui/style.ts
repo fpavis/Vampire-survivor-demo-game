@@ -560,6 +560,7 @@ html.vs-reduced .vs-roll{padding:24px 0}
   .vs-pill .long{display:none}
   .vs-tracker{width:200px;padding:4px 8px;font-size:11px}
   .vs-tracker .t{font-size:12px}
+  .vs-tracker.elder .t{display:none}
   .vs-party{flex-direction:row;width:auto;gap:5px}
   .vs-hero{display:flex;flex-direction:column;align-items:stretch;gap:2px;width:50px;padding:3px 4px}
   .vs-hero .pi{font-size:20px;line-height:24px}

@@ -24,8 +24,7 @@ function Objectives({ q }: { q: QuestView }) {
 }
 
 /** An arrow turned toward the place, with its name and how far: "Hollowmere · 83 tiles northeast". The words say it all; the arrow is a glance. */
-export function Aim({ aim }: { aim: AimView }) {
-  const what = aim.why === 'hand-in' ? 'Hand in at' : 'Go to';
+export function Aim({ aim, what = aim.why === 'hand-in' ? 'Hand in at' : 'Go to' }: { aim: AimView; what?: string }) {
   return (
     <div class="vs-aim" data-aim={aim.why}>
       <svg class="arr" viewBox="0 0 20 20" aria-hidden="true" style={{ transform: `rotate(${aim.angle}rad)` }}><path d="M2 10h14M10.5 4.5 16.5 10l-6 5.5" /></svg>
@@ -280,9 +279,9 @@ export function Tracker() {
   if (!q) {
     // nothing under way: when the Elder has something to say, the way to the nearest town is the thing to follow
     return elder ? (
-      <button class="vs-tracker hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.ui.openMenu('journal')}>
+      <button class="vs-tracker elder hit" tabIndex={-1} title="Open the journal" onClick={() => ui.game?.ui.openMenu('journal')}>
         <div class="t"><Icon name="elder" /> Speak with the Elder</div>
-        <Aim aim={elder} />
+        <Aim aim={elder} what="The Elder is in" />
       </button>
     ) : null;
   }
