@@ -1,0 +1,43 @@
+{
+  "name": "survival-game",
+  "private": true,
+  "version": "0.17.0",
+  "description": "Three heroes, one endless, demon-haunted world: a browser action RPG with spells, dungeons and towns.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:single": "tsc --noEmit && vite build --config vite.single.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint -c .oxlintrc.json src tests scripts",
+    "check:size": "node scripts/size-check.mjs",
+    "check:perf": "node scripts/perf-check.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gallery": "node scripts/gallery.mjs gallery-out",
+    "preview": "vite preview",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "build:artifact": "npm run build:single && node scripts/make-artifact.mjs"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.3",
+    "fflate": "^0.8.3",
+    "pixi.js": "^7.4.3",
+    "preact": "^11.0.1"
+  },
+  "devDependencies": {
+    "@fontsource/cinzel": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
+    "@iconify-json/game-icons": "^1.2.4",
+    "@iconify-json/mdi": "^1.2.3",
+    "@types/node": "^26.6.5",
+    "axe-core": "4.13.0",
+    "oxlint": "1.87.0",
+    "playwright-core": "^1.64.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.3"
+  }
+}

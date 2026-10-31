@@ -1,0 +1,333 @@
+// Phase 9h end-to-end checks: robustness. A crash shows a screen with a report and keeps the last good save;
+// storage that will not save says so. Sections can be picked with ONLY=crash,storage,title,nogl,menu,pwa,perf; THROTTLE=n slows the CPU.
+import { suite } from './harness.mjs';
+
+const h = await suite('phase9h');
+const { check, want, context } = h;
+// errors the tests cause on purpose are expected; anything else is a failure
+h.allowErrors(/test crash|background oops|rejected oops|\[crash\]|storage test|\[start\]/);
+await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(h.url).origin });
+let page = await h.newPage();
+const ev = (fn, arg) => page.evaluate(fn, arg);
+const until = (fn, arg, timeout = 8000) => page.waitForFunction(fn, arg, { timeout }).then(() => true, () => false);
+const start = async (cont = false) => {
+  await page.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 15000 });
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.game.state.player && window.__dev);
+};
+
+await page.goto(h.url);
+await start();
+
+// ---- 9h.1: a crash in a frame stops the game on a screen that says so; the last good save is kept
+if (want('crash')) {
+  const saved = await ev(async () => { const g = window.game; g.state.kills = 4242; return g.requestSave('manual', true); });
+  check('a save is made before the crash', saved === true);
+
+  await ev(() => { const g = window.game; g.state.kills = 999; g.step = () => { throw new Error('test crash in a frame'); }; });
+  const shown = await until(() => !!document.querySelector('.vs-crash'));
+  await until(() => document.activeElement?.dataset?.act === 'crash-copy', null, 3000);
+  const screen = await ev(() => ({
+    text: document.querySelector('.vs-crash')?.innerText || '',
+    keep: !!document.querySelector('[data-act="crash-keep"]'),
+    fatal: !!window.game.crashed?.fatal,
+    focus: document.activeElement?.dataset?.act || ''
+  }));
+  check('an error in a frame shows the crash screen', shown && /Something went wrong/.test(screen.text) && /test crash in a frame/.test(screen.text), screen.text.slice(0, 120).replace(/\n/g, ' | '));
+  check('...says the game stopped and the last save is safe, with only Reload', screen.fatal && !screen.keep && /has stopped/.test(screen.text) && /last save is safe/.test(screen.text), JSON.stringify({ fatal: screen.fatal, keep: screen.keep }));
+  check('...with the first button focused for keys and pads', screen.focus === 'crash-copy', screen.focus);
+  const f0 = await ev(() => window.game.frame);
+  await page.waitForTimeout(600);
+  const f1 = await ev(() => window.game.frame);
+  check('the game no longer advances', f0 === f1, `${f0} -> ${f1}`);
+  const refused = await ev(() => window.game.requestSave('manual', true));
+  check('nothing is saved after the crash', refused === false);
+  await ev(() => document.querySelector('[data-act="crash-copy"]').click());
+  await page.waitForTimeout(300);
+  const report = await ev(async () => { try { return await navigator.clipboard.readText(); } catch { return document.querySelector('.vs-crash textarea')?.value || ''; } });
+  check('the report copies: the error, the version, the stack and what was happening', /Error: test crash in a frame/.test(report) && /Version: \d+\.\d+\.\d+/.test(report) && /Stack:\n.*\S/.test(report) && /Playing: overworld/.test(report), report.split('\n').slice(0, 5).join(' | '));
+
+  // Reload: the save from before the crash is the one that comes back
+  await ev(() => document.querySelector('[data-act="crash-reload"]').click());
+  await page.waitForFunction(() => !!window.game && window.game.titleReady && !document.querySelector('.vs-crash'), null, { timeout: 15000 });
+  await start(true);
+  const kills = await ev(() => window.game.state.kills);
+  check('Reload brings back the last good save', kills === 4242, String(kills));
+
+  // an error outside the loop: the game runs on, and the player may keep playing
+  await ev(() => { setTimeout(() => { throw new Error('background oops'); }, 0); });
+  await until(() => !!document.querySelector('.vs-crash'));
+  const soft = await ev(() => ({ keep: !!document.querySelector('[data-act="crash-keep"]'), fatal: !!window.game.crashed?.fatal, text: document.querySelector('.vs-crash')?.innerText || '' }));
+  // the loop still runs: count its calls for a moment
+  const loops = await ev(() => new Promise((r) => {
+    const g = window.game, o = g.gameLoop;
+    let n = 0;
+    const done = () => { g.gameLoop = o; r(n); };
+    g.gameLoop = function (d) { if (++n >= 2) setTimeout(done, 0); return o.call(this, d); };
+    setTimeout(done, 6000);
+  }));
+  check('an error outside the loop offers Keep playing, and the game runs on', soft.keep && !soft.fatal && /background/.test(soft.text) && loops > 0, JSON.stringify({ keep: soft.keep, fatal: soft.fatal, loops }));
+  check('...nothing is saved while it is up', (await ev(() => window.game.requestSave('manual', true))) === false);
+  await ev(() => document.querySelector('[data-act="crash-keep"]').click());
+  const kept = await ev(async () => ({ gone: !document.querySelector('.vs-crash'), saves: await window.game.requestSave('manual', true) }));
+  check('Keep playing closes it and saving works again', kept.gone && kept.saves === true, JSON.stringify(kept));
+  await ev(() => { Promise.reject(new Error('rejected oops')); });
+  const rej = await until(() => /rejected oops/.test(document.querySelector('.vs-crash')?.innerText || ''));
+  check('a rejected promise is caught the same way', rej);
+  await ev(() => document.querySelector('[data-act="crash-keep"]').click());
+  // the same error again is not shown twice
+  await ev(() => { setTimeout(() => { throw new Error('background oops'); }, 0); });
+  await page.waitForTimeout(300);
+  check('the same error again is not shown a second time', await ev(() => !document.querySelector('.vs-crash')));
+}
+
+// ---- 9h.1: saving that fails, or storage the browser will not give, says so with a way to keep the progress
+if (want('storage')) {
+  await ev(() => { const g = window.game; g.saveFailures = 0; g.storageDismissed = false; g.store.__save = g.store.save; g.store.save = () => Promise.reject(new Error('storage test: quota exceeded')); });
+  await ev(() => window.game.requestSave('manual', true));
+  const once = await ev(() => !!document.querySelector('.vs-storage'));
+  await ev(() => window.game.requestSave('manual', true));
+  const twice = await until(() => !!document.querySelector('.vs-storage'));
+  const text = await ev(() => document.querySelector('.vs-storage')?.innerText || '');
+  check('a failed save toasts; two in a row put up the storage warning', !once && twice && /Saving failed twice/.test(text), text.replace(/\n/g, ' | '));
+  await ev(() => document.querySelector('[data-act="storage-export"]').click());
+  const exported = await ev(() => document.querySelector('.vs-storage textarea')?.value || '');
+  check('Export gives the progress as text to keep', exported.length > 200, `${exported.slice(0, 24)}… (${exported.length})`);
+  await ev(() => { const g = window.game; g.store.save = g.store.__save; });
+  await ev(() => window.game.requestSave('manual', true));
+  check('a save that works again takes the warning down', await until(() => !document.querySelector('.vs-storage')));
+
+  // no storage at all: a page where IndexedDB and localStorage both refuse (the first page is closed, so the two
+  // do not share the software GPU)
+  await page.close();
+  const bare = await h.newContext();
+  await bare.addInitScript(() => {
+    Object.defineProperty(window, 'indexedDB', { get() { throw new Error('storage test: blocked'); } });
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage test: blocked'); } });
+  });
+  const p2 = await h.newPage(bare);
+  await p2.goto(h.url);
+  await p2.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  // on the title screen already, before there is anything to lose
+  const onTitle = await p2.waitForFunction(() => /not letting the game save/.test(document.querySelector('.vs-storage')?.innerText || '') && !window.game.state.player, null, { timeout: 8000 }).then(() => true, () => false);
+  check('with no storage at all, the title screen already says so', onTitle);
+  await p2.keyboard.press('Enter');
+  await p2.waitForFunction(() => window.game.state.player, null, { timeout: 30000 });
+  const mem = await p2.waitForFunction(() => /not letting the game save/.test(document.querySelector('.vs-storage')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
+  check('with no storage at all, the game says so as it starts', mem);
+  await p2.evaluate(() => document.querySelector('[data-act="storage-dismiss"]').click());
+  check('...and the warning can be dismissed', await p2.evaluate(() => !document.querySelector('.vs-storage')));
+  await bare.close();
+}
+
+// ---- 9h.1: an error on the title screen shows the crash screen there too, and no game starts behind it
+if (want('title')) {
+  const ctx = await h.newContext();
+  const pg = await h.newPage(ctx);
+  await pg.goto(h.url);
+  await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  await pg.evaluate(() => { window.game.menuLoop = () => { throw new Error('test crash on the title screen'); }; });
+  const shown = await pg.waitForFunction(() => /test crash on the title screen/.test(document.querySelector('.vs-crash')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
+  const st = await pg.evaluate(() => ({ fatal: !!window.game.crashed?.fatal, reload: !!document.querySelector('[data-act="crash-reload"]'), keep: !!document.querySelector('[data-act="crash-keep"]') }));
+  check('an error on the title screen shows the crash screen there too, with only Reload', shown && st.fatal && st.reload && !st.keep, JSON.stringify(st));
+  await pg.keyboard.press('Enter');
+  await pg.waitForTimeout(800);
+  check('...and Enter does not start a game behind it', await pg.evaluate(() => !window.game.state.player && !!document.querySelector('.vs-crash')));
+  await ctx.close();
+}
+
+// ---- a browser without WebGL says so in plain words instead of showing a blank page
+if (want('nogl')) {
+  const ctx = await h.newContext();
+  await ctx.addInitScript(() => {
+    const real = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) { return /webgl/i.test(String(type)) ? null : real.call(this, type, ...rest); };
+  });
+  const pg = await h.newPage(ctx);
+  await pg.goto(h.url);
+  const shown = await pg.waitForSelector('[data-start-failure]', { timeout: 15000 }).then(() => true, () => false);
+  const info = await pg.evaluate(() => {
+    const b = document.querySelector('[data-start-failure]');
+    return { kind: b && b.dataset.startFailure, role: b && b.getAttribute('role'), heading: b && b.querySelector('h2').innerText, button: !!(b && b.querySelector('button')), focus: document.activeElement && document.activeElement.tagName, game: typeof window.game };
+  });
+  check('a browser without WebGL says so in plain words', shown && info.kind === 'webgl' && /cannot draw the game/.test(info.heading) && info.role === 'alert', JSON.stringify(info));
+  check('...with a Reload button that has the focus, and no half-started game', info.button && info.focus === 'BUTTON' && info.game === 'undefined', JSON.stringify(info));
+  await ctx.close();
+}
+
+// ---- Escape and the menu button: one press closes the game menu, and a window that blinks does not open it again
+if (want('menu')) {
+  page = await h.newPage();
+  await page.goto(h.url);
+  await start();
+  const menuOpen = () => ev(() => window.__dev.ui.pauseOpen.value);
+  const bad = [];
+  for (const pg of ['party', 'spells', 'upgrades', 'journal', 'build', 'save', 'settings']) {
+    await ev((p) => window.game.ui.openMenu(p), pg);
+    await page.waitForTimeout(250);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    if (await menuOpen()) bad.push(pg);
+  }
+  check('Escape closes the game menu on every page', bad.length === 0, bad.join(','));
+  await ev(() => window.game.ui.openMenu('spells'));
+  await page.focus('.vs-load input.vs-in');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check('one Escape in the Spells search box leaves it and closes the menu', !(await menuOpen()));
+  await ev(() => window.game.ui.openMenu('party'));
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Escape');
+  // the page loses the focus for a moment as Escape closes the menu, as an embedding page can make it do
+  await ev(() => { window.dispatchEvent(new Event('blur')); setTimeout(() => window.dispatchEvent(new Event('focus')), 100); });
+  await page.waitForTimeout(1000);
+  check('a window that blinks as Escape closes the menu does not bring it back', !(await menuOpen()));
+  await ev(() => { window.__hasFocus = document.hasFocus; document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await page.waitForTimeout(700);
+  const paused = await menuOpen();
+  await ev(() => { document.hasFocus = window.__hasFocus; });
+  check('a window that really lost the focus still pauses the game', paused === true);
+  const gear = await ev(() => { const p = window.game.ui.settingsButton.getGlobalPosition(); return { x: p.x, y: p.y }; });
+  await page.mouse.click(gear.x, gear.y);
+  await page.waitForTimeout(300);
+  check('the gear in the corner closes the menu too', !(await menuOpen()), JSON.stringify(gear));
+  await ev(() => window.game.perf.toggle(true));
+  await page.keyboard.press('Escape');                          // opens the menu again, and is the last key the overlay saw
+  await page.waitForFunction(() => /key Escape · menu open · window focused/.test(document.querySelector('.vs-perf')?.textContent || ''), null, { timeout: 8000 }).then(() => check('the F3 overlay names the last key, the menu and the window focus', true), () => check('the F3 overlay names the last key, the menu and the window focus', false, document.querySelector('.vs-perf')?.textContent || 'no overlay'));
+}
+
+// ---- 9h.2: installable, playable offline, fullscreen, and a hint to turn a phone sideways
+if (want('pwa')) {
+  const ctx = await h.newContext();
+  const pg = await h.newPage(ctx);
+  await pg.goto(h.url);
+  await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  const man = await pg.evaluate(async () => {
+    const href = document.querySelector('link[rel="manifest"]')?.getAttribute('href');
+    const m = await (await fetch(href)).json();
+    const icons = await Promise.all(m.icons.map(async (i) => { const r = await fetch(i.src); return { src: i.src, ok: r.ok, type: r.headers.get('content-type') }; }));
+    const og = document.querySelector('meta[property="og:image"]')?.getAttribute('content');
+    const ogOk = og ? (await fetch(og)).ok : false;
+    return { name: m.name, display: m.display, icons, maskable: m.icons.some((i) => i.purpose === 'maskable'), ogOk, desc: !!document.querySelector('meta[name="description"]') };
+  });
+  check('the manifest names the game and its icons load', man.name === 'Survival Game' && man.icons.length >= 3 && man.icons.every((i) => i.ok && /png/.test(i.type)) && man.maskable, JSON.stringify(man.icons.map((i) => `${i.src}:${i.ok}`)));
+  check('...with a description and a social preview image', man.desc && man.ogOk);
+  const sw = await pg.waitForFunction(() => !!navigator.serviceWorker && !!navigator.serviceWorker.controller, null, { timeout: 30000 }).then(() => true, () => false);
+  check('the service worker installs and takes the page', sw);
+  // with the network gone, the game still starts
+  await ctx.setOffline(true);
+  await pg.reload();
+  const offline = await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 }).then(() => true, () => false);
+  check('with the network cut, the game loads from the cache', offline);
+  if (offline) {
+    await pg.keyboard.press('Enter');
+    check('...and a new game starts', await pg.waitForFunction(() => !!window.game.state.player, null, { timeout: 30000 }).then(() => true, () => false));
+  }
+  await ctx.setOffline(false);
+  // fullscreen from Video settings
+  await pg.evaluate(() => { window.__fs = 0; document.documentElement.requestFullscreen = () => { window.__fs++; return Promise.resolve(); }; window.game.ui.openMenu('settings'); });
+  await pg.waitForFunction(() => !!document.querySelector('.vs-pause [data-tab="video"]'));
+  await pg.evaluate(() => document.querySelector('.vs-pause [data-tab="video"]').click());
+  const fsBtn = await pg.waitForFunction(() => !!document.querySelector('[data-act="fullscreen"]'), null, { timeout: 5000 }).then(() => true, () => false);
+  if (fsBtn) await pg.evaluate(() => document.querySelector('[data-act="fullscreen"]').click());
+  check('Video settings have a Fullscreen switch that asks for it', fsBtn && (await pg.evaluate(() => window.__fs)) === 1);
+  await ctx.close();
+
+  // a phone held upright is asked to turn; sideways it is not
+  const phone = await h.newContext({ width: 390, height: 844 }, { hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  const pp = await h.newPage(phone);
+  await pp.goto(h.url);
+  await pp.waitForFunction(() => !!window.game, null, { timeout: 30000 });
+  const asked = await pp.waitForFunction(() => /Turn your device sideways/.test(document.querySelector('.vs-turn')?.innerText || ''), null, { timeout: 8000 }).then(() => true, () => false);
+  check('a phone held upright is asked to turn sideways', asked);
+  if (asked) await pp.evaluate(() => document.querySelector('[data-act="turn-dismiss"]').click());
+  check('...and can play like that', await pp.evaluate(() => !document.querySelector('.vs-turn')));
+  await pp.setViewportSize({ width: 844, height: 390 });
+  await pp.reload();
+  await pp.waitForFunction(() => !!window.game, null, { timeout: 30000 });
+  await pp.waitForTimeout(500);
+  check('held sideways, there is no hint', await pp.evaluate(() => !document.querySelector('.vs-turn')));
+  await phone.close();
+}
+
+// ---- 9h.3: pools, monsters off screen, dynamic resolution, the first-run pick
+if (want('perf')) {
+  const ctx = await h.newContext();
+  await ctx.addInitScript(() => { window.__autoTune = { skip: 2, frames: 12 }; });
+  const pg = await h.newPage(ctx);
+  const pev = (fn, arg) => pg.evaluate(fn, arg);
+  await pg.goto(h.url);
+  // a first start: the title scene is timed and a preset picked and saved
+  const picked = await pg.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('vs.settings.v1') || 'null')?.quality; } catch { return null; } }, null, { timeout: 30000 }).then((h) => h.jsonValue(), () => null);
+  check('a first start picks a quality preset for the device and keeps it', ['high', 'medium', 'low'].includes(picked), String(picked));
+  await pg.waitForFunction(() => !!window.game && window.game.titleReady, null, { timeout: 30000 });
+  await pg.keyboard.press('Enter');
+  await pg.waitForFunction(() => window.game.state.player && window.__dev, null, { timeout: 30000 });
+  const told = await pg.waitForFunction(() => window.__dev.ui.log.value.some((l) => /Graphics set to (High|Medium|Low) for this device/.test(l.text)), null, { timeout: 8000 }).then(() => true, () => false);
+  check('...and says so when the game starts', told);
+  const again = await pev(() => window.game.autoTune.bench === null);
+  check('...once: a later start does not time it again', again);
+
+  // dynamic resolution, fed frame times by hand (the game is held so its own slow frames do not count)
+  const dyn = await pev(() => {
+    const g = window.game, at = g.autoTune;
+    g.state.paused = true;
+    const r0 = g.app.renderer.resolution;
+    for (let i = 0; i < 60; i++) at.playFrame(40);
+    const down = { f: at.factor, r: g.app.renderer.resolution };
+    for (let i = 0; i < 700; i++) at.playFrame(8);
+    const up = { f: at.factor, r: g.app.renderer.resolution };
+    return { r0, down, up };
+  });
+  check('two seconds of long frames lower the resolution a step', dyn.down.f === 0.9 && Math.abs(dyn.down.r - dyn.r0 * 0.9) < 0.02, JSON.stringify(dyn));
+  check('...and five seconds with room bring it back', dyn.up.f === 1 && Math.abs(dyn.up.r - dyn.r0) < 0.01, JSON.stringify(dyn.up));
+  await pev(() => window.game.ui.openMenu('settings'));
+  await pg.waitForFunction(() => !!document.querySelector('.vs-pause [data-tab="video"]'));
+  await pev(() => document.querySelector('.vs-pause [data-tab="video"]').click());
+  const tog = await pg.waitForFunction(() => [...document.querySelectorAll('.vs-pause .vs-toggle')].some((b) => /cannot keep up/.test(b.innerText)), null, { timeout: 5000 }).then(() => true, () => false);
+  if (tog) await pev(() => [...document.querySelectorAll('.vs-pause .vs-toggle')].find((b) => /cannot keep up/.test(b.innerText)).click());
+  const off = await pev(() => { const at = window.game.autoTune; for (let i = 0; i < 200; i++) at.playFrame(40); return at.factor; });
+  check('the Video switch turns it off', tog && off === 1, String(off));
+  await pev(() => { window.game.ui.closeMenu(); window.game.state.paused = false; });
+
+  // pools: a spent particle's sprite and a spent bolt come back for the next ones
+  const pool = await pev(() => {
+    const g = window.game, p = g.state.player;
+    g.fx.burst(p.wx, p.wy, 10, 0xffffff, 20, 2, { life: 6 });
+    for (let i = 0; i < 20; i++) g.fx.update(1);
+    const spent = g.fx.spritePool.length;
+    g.fx.burst(p.wx, p.wy, 10, 0xffffff, 8, 2, { life: 6 });
+    return { spent, after: g.fx.spritePool.length };
+  });
+  check('spent particles go back to a pool and are reused', pool.spent >= 20 && pool.after === pool.spent - 8, JSON.stringify(pool));
+  const bolt = await pev(() => {
+    const g = window.game, sp = g.spells, p = g.state.player;
+    g.godMode = true;
+    for (const e of g.state.enemies) e.dead = true;
+    g.reap();
+    const it = sp.addSpell('bolt', 1);
+    sp.setLoadout([it.uid], sp.active);
+    const target = g.makeEnemy('SLIME', p.wx + 200, p.wy, { level: 1 });
+    target.health = target.maxHealth = 1e6;
+    let first = null;
+    for (let f = 0; f < 240 && !first; f++) { g.gameLoop(1); first = sp.bullets[0]?.sprite || null; }
+    for (let f = 0; f < 240 && sp.bullets.some((b) => b.sprite === first); f++) g.gameLoop(1);
+    let reused = false;
+    for (let f = 0; f < 300 && !reused; f++) { g.gameLoop(1); reused = sp.bullets.some((b) => b.sprite === first); }
+    return { fired: !!first, reused };
+  });
+  check('a spent bolt flies again instead of being rebuilt', bolt.fired && bolt.reused, JSON.stringify(bolt));
+
+  // monsters well off screen are neither animated nor drawn; on screen they are
+  const vis = await pev(() => {
+    const g = window.game, p = g.state.player;
+    const far = g.makeEnemy('SLIME', p.wx + 3000, p.wy, { level: 1 });
+    const near = g.makeEnemy('SLIME', p.wx + 120, p.wy, { level: 1 });
+    g.gameLoop(1);
+    return { far: far.renderable, near: near.renderable };
+  });
+  check('a monster far off screen is not drawn; one on screen is', vis.far === false && vis.near === true, JSON.stringify(vis));
+  await ctx.close();
+}
+
+await h.finish();

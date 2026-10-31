@@ -1,0 +1,1299 @@
+// @ts-nocheck -- Pixi-bound runtime; the rules live in typed, tested core/spells + core/hero.
+import * as PIXI from 'pixi.js';
+import { WORLD_CONFIG } from '../core/config';
+import { EntityManager } from '../render/entities';
+import { levelOf, towerPower } from '../core/world/towers';
+import { addSpellXp, heroScaled, resolveSpell, makeSpell, starterLoadout, TEMPLATES, RUNES } from '../core/spells/spells';
+import { spendMana, regenMana } from '../core/hero/stats';
+import { buildHero } from '../render/heroArt';
+import { settings } from './settings';
+import { ui as uiBridge } from '../ui/bridge';
+
+/** Triggers may set off one more trigger (a spark that splinters, shards that spark), never more. */
+const MAX_TRIGGER_DEPTH = 2;
+/** A resting hero's assist spell: cast less often and softer than by the hero in front. */
+export const ASSIST = { power: 0.6, cooldown: 1.6 };
+
+const TILT = WORLD_CONFIG.tilt;
+const msToFrames = (ms) => ms * 0.06;
+const MAX_AUTO = 5;
+const MAX_ACTIVE = 3;
+// hard caps so a heavily modified loadout cannot flood the scene
+const CAP = { bullets: 120, rings: 24, meteors: 30, bolts: 16, decals: 40, zones: 40, later: 40 };
+/**
+ * How far auto-cast spells look for a target (world units): what is on screen near the hero, not across it.
+ * Spells that fly need a clear line to their target; those that fall from the sky (lightning, meteors) do not.
+ */
+export const REACH = { bolt: 440, wisps: 440, lightning: 420, meteor: 440, cloud: 400 };
+
+export class SpellSystem {
+    constructor(game) {
+        this.game = game;
+        this.fresh();
+    }
+
+    fresh() {
+        this.spells = [];
+        this.auto = [];
+        this.active = [null, null, null];
+        this.runes = [];
+        this.mana = { value: 60 };
+        this.timers = {};
+        this.orbits = {};
+        this.bullets = []; this.rings = []; this.meteors = []; this.bolts = []; this.decals = [];
+        this.zones = []; this.later = [];
+        this.healUntil = 0; this.healRate = 0;
+        this.lastTrail = null;
+        this.cache = new Map();
+        this.depth = 0;
+        this.dashing = null;
+        this.barrierUntil = 0;
+        this.barrierG = null;
+        this.burning = new Set();
+        this.version = 0;      // bumps whenever the loadout changes (UI refresh)
+        this.ghosts = [];      // dash afterimages
+    }
+
+    // ------------------------------------------------------------ lifecycle
+    reset() {
+        this.clearProjectiles();
+        for (const o of Object.values(this.orbits)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); }
+        if (this.barrierG) { this.barrierG.destroy(); this.barrierG = null; }
+        this.fresh();
+    }
+
+    clearProjectiles() {
+        this.bullets.forEach((b) => EntityManager.release(b.sprite));
+        this.rings.forEach((r) => r.g.destroy());
+        this.meteors.forEach((m) => { m.tele.destroy(); EntityManager.cleanup(m.rock); });
+        this.bolts.forEach((b) => b.g.destroy());
+        this.decals.forEach((d) => d.g.destroy());
+        for (const o of Object.values(this.orbits)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); }
+        this.orbits = {};
+        this.bullets = []; this.rings = []; this.meteors = []; this.bolts = []; this.decals = [];
+        (this.zones || []).forEach((z) => z.g.destroy());
+        this.zones = []; this.later = [];
+        this.healUntil = 0;
+        this.dashing = null;
+        (this.ghosts || []).forEach((gh) => gh.c.destroy({ children: true }));
+        this.ghosts = [];
+    }
+
+    setInventory(spells, runes) {
+        this.spells = spells.map((x) => ({ ...x, runes: [...x.runes] }));
+        this.runes = [...runes];
+        this.touch();
+    }
+
+    setLoadout(auto, active) {
+        this.auto = auto.filter((u) => this.item(u));
+        this.active = [0, 1, 2].map((i) => (active[i] && this.item(active[i]) ? active[i] : null));
+        this.touch();
+    }
+
+    /** The hero whose loadout the spell panel shows and edits (null: the active hero). */
+    viewIndex() {
+        const p = this.game.party;
+        return p && this.viewHero != null && this.viewHero !== p.active && p.heroes[this.viewHero] ? this.viewHero : (p ? p.active : 0);
+    }
+
+    /** The loadout being edited: the live one for the active hero, the hero's own record for a resting hero. */
+    target() {
+        const p = this.game.party;
+        return p && this.viewIndex() !== p.active ? p.heroes[this.viewIndex()] : this;
+    }
+
+    /** Show (and edit) another hero's loadout in the spell panel without switching to them. */
+    setView(i) {
+        const p = this.game.party;
+        this.viewHero = p && i != null && i !== p.active ? i : null;
+        this.touch();
+    }
+
+    cycleView(dir) {
+        const p = this.game.party;
+        if (!p) return;
+        const n = p.heroes.length;
+        this.setView((this.viewIndex() + dir + n) % n);
+    }
+
+    /** Name of another hero who has this spell equipped (a spell can only be used by one hero at a time). */
+    heldBy(uid) {
+        const party = this.game.party;
+        if (!party) return null;
+        if (this.game.towers && this.game.towers.holderOf(uid)) return 'A tower';
+        party.commit();
+        const me = this.viewIndex();
+        for (let i = 0; i < party.heroes.length; i++) {
+            if (i === me) continue;
+            const h = party.heroes[i];
+            if (h.auto.includes(uid) || h.active.includes(uid)) return party.def(i).name;
+        }
+        return null;
+    }
+
+    serialize() {
+        return {
+            spells: this.spells.map((s) => ({ uid: s.uid, tpl: s.tpl, level: s.level, xp: s.xp, runes: [...s.runes], locked: !!s.locked, ...(s.fav ? { fav: true } : {}) })),
+            runes: [...this.runes]
+        };
+    }
+
+    // a change to spells or loadouts refreshes the panels at once, not at the next UI sync of the game loop
+    touch() { this.version++; this.cache.clear(); uiBridge.version.value++; }
+    item(uid) { return this.spells.find((s) => s.uid === uid); }
+    level(tplId) { const s = this.spells.find((x) => x.tpl === tplId); return s ? s.level : 0; }
+    /** The spell's numbers as the hero casts it (area and duration from the hero's cards); `plain` for towers. */
+    resolved(item, plain = false) {
+        const st = this.game.stats;
+        const area = plain || !st ? 1 : st.area || 1, dur = plain || !st ? 1 : st.duration || 1;
+        const key = item.level + '|' + item.runes.join(',') + '|' + area + '|' + dur;
+        const id = plain ? 'plain:' + item.uid : item.uid;
+        let c = this.cache.get(id);
+        if (!c || c.key !== key) { c = { key, r: heroScaled(resolveSpell(item), area, dur) }; this.cache.set(id, c); }
+        return c.r;
+    }
+
+    // ---------------------------------------------------------- inventory
+    // New finds go to the shared bag; the player decides which hero equips them.
+    addSpell(tplId, level = 1) {
+        const s = makeSpell(tplId, level);
+        s.isNew = true;                               // marked in the spell panel until it has been looked at
+        this.spells.push(s);
+        this.game.codexFound?.('spells', tplId);
+        this.touch();
+        return s;
+    }
+    addRune(id) {
+        this.runes.push(id);
+        (this.newRunes || (this.newRunes = new Set())).add(id);
+        this.game.codexFound?.('runes', id);
+        this.touch();
+    }
+    /** The spell panel was looked at: nothing in it is new any more. */
+    clearNew() {
+        let changed = false;
+        for (const s of this.spells) if (s.isNew) { s.isNew = false; changed = true; }
+        if (this.newRunes && this.newRunes.size) { this.newRunes.clear(); changed = true; }
+        if (changed) this.touch();
+    }
+    /** Equipped by the hero shown in the spell panel (the active hero unless another one is being viewed). */
+    equipped(uid) { const t = this.target(); return t.auto.includes(uid) || t.active.includes(uid); }
+
+    equip(uid, slot = -1) {
+        const it = this.item(uid);
+        if (!it || this.heldBy(uid)) return false;
+        const t = this.target();
+        const mode = TEMPLATES[it.tpl].mode;
+        if (mode === 'auto') {
+            if (t.auto.includes(uid)) return true;
+            if (t.auto.length >= MAX_AUTO) return false;
+            t.auto.push(uid);
+        } else {
+            const cur = t.active.indexOf(uid);
+            if (cur >= 0) t.active[cur] = null;
+            const i = slot >= 0 ? slot : t.active.indexOf(null);
+            if (i < 0) return false;
+            t.active[i] = uid;
+        }
+        this.touch();
+        return true;
+    }
+    unequip(uid) {
+        const t = this.target();
+        t.auto = t.auto.filter((u) => u !== uid);
+        t.active = t.active.map((u) => (u === uid ? null : u));
+        for (const h of this.game.party?.heroes || []) if (h.assist === uid && !h.auto.includes(uid)) h.assist = null;
+        this.touch();
+    }
+
+    // ------------------------------------------------------ loadout sets
+    /** Keep the shown hero's loadout in set `n` (0..2). */
+    storePreset(n) {
+        const p = this.game.party;
+        if (!p) return;
+        const h = p.heroes[this.viewIndex()], t = this.target();
+        h.presets = h.presets || [null, null, null];
+        h.presets[n] = { auto: [...t.auto], active: [...t.active] };
+        this.touch();
+    }
+
+    /** Equip set `n` on the shown hero; spells another hero or a tower holds, or that were salvaged, are skipped. */
+    loadPreset(n) {
+        const p = this.game.party;
+        const h = p && p.heroes[this.viewIndex()];
+        const set = h && h.presets && h.presets[n];
+        if (!set) return { ok: false, skipped: 0 };
+        const t = this.target();
+        for (const u of [...t.auto, ...t.active]) if (u) this.unequip(u);
+        let skipped = 0;
+        for (const u of set.auto) if (!this.item(u) || !this.equip(u)) skipped++;
+        set.active.forEach((u, i) => { if (u && (!this.item(u) || !this.equip(u, i))) skipped++; });
+        this.touch();
+        return { ok: true, skipped };
+    }
+    socket(uid, runeId, slot) {
+        const it = this.item(uid);
+        const i = this.runes.indexOf(runeId);
+        if (!it || i < 0) return false;
+        const prev = it.runes[slot];
+        it.runes[slot] = runeId;
+        this.runes.splice(i, 1);
+        if (prev) this.runes.push(prev);
+        this.touch();
+        return true;
+    }
+    unsocket(uid, slot) {
+        const it = this.item(uid);
+        if (!it || !it.runes[slot]) return;
+        this.runes.push(it.runes[slot]);
+        it.runes[slot] = null;
+        this.touch();
+    }
+
+    // -------------------------------------------------------------- update
+    update(delta) {
+        const g = this.game;
+        const sfx = g.surfaces ? g.surfaces.fx : null;
+        regenMana(this.mana, g.stats, delta * (sfx ? sfx.manaRegen : 1));
+        this.tickActiveCooldowns(delta * (sfx ? sfx.haste : 1));
+        const wanted = new Set();
+        for (const uid of this.auto) {
+            const it = this.item(uid);
+            if (!it) continue;
+            const r = this.resolved(it);
+            if (r.tpl.expr === 'orbit') { wanted.add(uid); this.updateOrbit(r, delta); continue; }
+            this.timers[uid] = (this.timers[uid] ?? 20) - delta * (sfx ? sfx.haste : 1);
+            if (this.timers[uid] > 0) continue;
+            const fired = this.fireAuto(r);
+            // stay "ready" until a target shows up
+            this.timers[uid] = fired ? msToFrames(r.p.cooldown) * g.stats.cooldown : 0;
+        }
+        this.updateAssists(delta * (sfx ? sfx.haste : 1));
+        for (const [uid, o] of Object.entries(this.orbits)) {
+            if (!wanted.has(uid)) { o.blades.forEach((b) => EntityManager.cleanup(b)); if (o.trail) o.trail.destroy(); delete this.orbits[uid]; }
+        }
+        this.updateDash(delta);
+        this.updateBarrier();
+        this.updateBurning(delta);
+        this.updateBullets(delta);
+        this.updateRings(delta);
+        this.updateMeteors(delta);
+        this.updateBolts(delta);
+        this.updateDecals(delta);
+        this.updateZones(delta);
+        this.updateLater(delta);
+        this.updateHeal(delta);
+    }
+
+    /** Fire an auto-cast spell once; false when there was nothing to aim at. */
+    fireAuto(r) {
+        switch (r.tpl.expr) {
+            case 'bolt': return this.fireBolt(r);
+            case 'chain': return this.fireLightning(r);
+            case 'nova': return this.fireNova(r);
+            case 'meteor': return this.fireMeteor(r);
+            case 'trail': return this.dropEmber(r);
+            case 'wisp': return this.fireWisps(r);
+            case 'glaive': return this.fireGlaive(r);
+            case 'cloud': return this.fireCloud(r);
+        }
+        return false;
+    }
+
+    /** A copy of a resolved spell with its damage scaled (assists and linked casts hit softer), its damage counted
+     *  as `srcKind` on the training ground's meter. */
+    scaled(r, k, srcKind = r.srcKind) { return { ...r, srcKind, p: { ...r.p, damage: r.p.damage * k, burn: r.p.burn * k } }; }
+
+    /**
+     * ASSIST: each resting hero (alive) may lend one of their own auto spells, cast from the party at a lower
+     * rate (cooldown x ASSIST.cooldown) and power (x ASSIST.power). Orbiting blades cannot assist.
+     */
+    updateAssists(step) {
+        const p = this.game.party;
+        if (!p) return;
+        for (let i = 0; i < p.heroes.length; i++) {
+            const h = p.heroes[i];
+            if (i === p.active || h.dead || !h.assist || !h.auto.includes(h.assist)) continue;
+            const it = this.item(h.assist);
+            if (!it) continue;
+            const r = this.resolved(it);
+            if (r.tpl.expr === 'orbit') continue;
+            const key = 'assist:' + h.assist;
+            this.timers[key] = (this.timers[key] ?? 60) - step;
+            if (this.timers[key] > 0) continue;
+            const fired = this.fireAuto(this.scaled(r, ASSIST.power, 'assist'));
+            this.timers[key] = fired ? msToFrames(r.p.cooldown) * ASSIST.cooldown : 0;
+        }
+    }
+
+    /** Resonance: a kill casts the hero's next auto spell at reduced power (at most twice a second). */
+    castLinked(r, power) {
+        const g = this.game;
+        if (g.frame < (this.linkedAt || 0)) return;
+        const list = this.auto.filter((u) => u !== r.item.uid && this.item(u) && this.resolved(this.item(u)).tpl.expr !== 'orbit');
+        if (!list.length) return;
+        const i = this.auto.indexOf(r.item.uid);
+        const next = list.find((u) => this.auto.indexOf(u) > i) || list[0];
+        this.linkedAt = g.frame + 30;
+        this.fireAuto(this.scaled(this.resolved(this.item(next)), power, 'linked'));
+    }
+
+    /** Active skills (dash, blink, aegis) count their cooldown down here; auto-cast spells do it as they fire. */
+    tickActiveCooldowns(step) {
+        for (const uid in this.timers) {
+            if (this.timers[uid] <= 0) continue;
+            const it = this.item(uid);
+            if (it && TEMPLATES[it.tpl].mode === 'active') this.timers[uid] = Math.max(0, this.timers[uid] - step);
+        }
+    }
+
+    // ------------------------------------------------------- damage + hooks
+    dmg(r) { return r.p.damage * (this.srcMult ?? this.game.stats.might); }
+
+    hit(e, amount, r, opts = {}) {
+        const g = this.game;
+        if (e.dead) return;
+        const p = r.p;
+        const knock = opts.knock ? { ...opts.knock, force: opts.knock.force * p.knock } : undefined;
+        // where the damage came from, for the training ground's meter: the spell, and how (its own hit, a zone, an
+        // echo, a rune it set off; an assist, a linked cast or a tower count as such whatever they do)
+        const source = { uid: r.item.uid, tpl: r.item.tpl, kind: r.srcKind || opts.kind || 'hit' };
+        g.damageEnemy(e, amount, { color: opts.color, knock, spell: r.item, critBonus: p.crit, quiet: opts.quiet, source });
+        if (e.dead) return;
+        const dur = g.stats.duration || 1;      // Persistence: burns and slows last longer
+        if (p.slow > 0) { e.slowUntil = Math.max(e.slowUntil || 0, g.frame + 150 * dur); e.slowAmount = Math.max(e.slowAmount || 0, p.slow); }
+        if (p.burn > 0) { e.burnUntil = g.frame + 180 * dur; e.burnDps = p.burn * g.stats.might; e.burnSrc = r.item; e.burnKind = r.srcKind || 'burn'; this.burning.add(e); }
+        if (this.depth < MAX_TRIGGER_DEPTH) {
+            for (const t of r.triggers) {
+                if (t.on !== 'hit' || Math.random() > t.chance) continue;
+                this.depth++;
+                try { this.spark(e, amount * t.power, r); } finally { this.depth--; }
+            }
+        }
+    }
+
+    spark(from, amount, r) {
+        const g = this.game;
+        let best = null, bd = 260 * 260;
+        for (const e of g.state.enemies) {
+            if (e === from || e.dead || e.untargetable) continue;
+            const d = (e.wx - from.wx) ** 2 + (e.wy - from.wy) ** 2;
+            if (d < bd) { bd = d; best = e; }
+        }
+        if (!best) return;
+        this.hit(best, amount, r, { color: 0xfff3a0, kind: 'rune:spark' });
+        this.arc(from.wx, from.wy, best.wx, best.wy, 0xfff3a0);
+    }
+
+    arc(x1, y1, x2, y2, color) {
+        if (this.bolts.length >= CAP.bolts) return;
+        const g = new PIXI.Graphics();
+        g.zIndex = 1e8;
+        g.blendMode = PIXI.BLEND_MODES.ADD;
+        g.lineStyle(3, color, 0.9);
+        g.moveTo(x1, y1 * TILT - 14);
+        g.lineTo(x2, y2 * TILT - 14);
+        this.game.objectLayer.addChild(g);
+        this.bolts.push({ g, life: 8, max: 8 });
+    }
+
+    updateBurning(delta) {
+        const g = this.game;
+        for (const e of this.burning) {
+            if (e.dead || g.frame > e.burnUntil) { this.burning.delete(e); continue; }
+            e.burnAcc = (e.burnAcc || 0) + delta;
+            if (e.burnAcc >= 30) {
+                e.burnAcc = 0;
+                const src = e.burnSrc;
+                g.damageEnemy(e, e.burnDps * 0.5, { color: 0xff9a3a, noCrit: true, spell: src, noEngage: true, source: src ? { uid: src.uid, tpl: src.tpl, kind: e.burnKind || 'burn' } : null });
+            }
+        }
+    }
+
+    // called from Game.killEnemy
+    onKill(e, item) {
+        const g = this.game;
+        if (!item) return;
+        const r = this.resolved(item);
+        if (addSpellXp(item, 1)) {
+            g.ui.toast(`${r.tpl.name} reached level ${item.level}`, r.tpl.icon);
+            this.touch();
+        }
+        if (r.p.leech) g.state.health = Math.min(g.state.maxHealth, g.state.health + r.p.leech);
+        if (r.p.manaLeech) this.mana.value = Math.min(g.stats.maxMana, this.mana.value + r.p.manaLeech);
+        if (this.depth >= MAX_TRIGGER_DEPTH) return;
+        // a trigger set off by another trigger hits softer: its power multiplies again
+        const soft = this.depth > 0 ? 0.6 : 1;
+        for (const t of r.triggers) {
+            if (t.on !== 'kill' || Math.random() > t.chance) continue;
+            this.depth++;
+            try {
+                if (t.payload === 'shards') this.shards(e.wx, e.wy, this.dmg(r) * t.power * soft, r);
+                else if (t.payload === 'cast') this.castLinked(r, t.power * soft);
+                else this.burst(e.wx, e.wy, 90, this.dmg(r) * t.power * soft, r);
+            } finally { this.depth--; }
+        }
+    }
+
+    burst(x, y, radius, amount, r) {
+        const g = this.game;
+        for (const e of g.state.enemies) {
+            if (e.dead || e.untargetable) continue;
+            const dx = e.wx - x, dy = e.wy - y, rr = radius + e.radius;
+            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force: 3 }, kind: 'rune:burst' });
+        }
+        g.fx.burst(x, y, 12, r.color, 20, 3.5, { size: 0.8, life: 22 });
+    }
+
+    /** Three small bolts burst out of a kill (Splinter). They never trigger anything themselves. */
+    shards(x, y, amount, r) {
+        const g = this.game;
+        const a0 = Math.random() * Math.PI * 2;
+        for (let k = 0; k < 3 && this.bullets.length < CAP.bullets; k++) {
+            const angle = a0 + (k / 3) * Math.PI * 2;
+            const sprite = EntityManager.createBolt(x, y, angle, 0xe8f6ff);
+            sprite.scale.set(0.7);
+            const vx = Math.cos(angle) * 7, vy = Math.sin(angle) * 7;
+            g.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx, vy, life: 30, damage: amount, pierce: 0, hits: new Set(), r, shard: true });
+        }
+    }
+
+    /** Run `fn` after `frames` (aftershocks). */
+    after(frames, fn) { if (this.later.length < CAP.later) this.later.push({ t: frames, fn }); }
+
+    updateLater(delta) {
+        for (let i = this.later.length - 1; i >= 0; i--) {
+            const l = this.later[i];
+            l.t -= delta;
+            if (l.t <= 0) { this.later.splice(i, 1); l.fn(); }
+        }
+    }
+
+    /** An instant ring of damage (slams and aftershocks). */
+    pulse(x, y, radius, amount, r, force = 8, kind = 'hit') {
+        const g = this.game;
+        for (const e of g.state.enemies) {
+            if (e.dead || e.untargetable) continue;
+            const dx = e.wx - x, dy = e.wy - y, rr = radius + e.radius;
+            if (dx * dx + dy * dy <= rr * rr) this.hit(e, amount, r, { color: r.color, knock: { x: dx, y: dy, force }, kind });
+        }
+        g.fx.shockwave(x, y, radius * 1.1, r.color, 22, 6);
+    }
+
+    /** The nearest living enemies within `range`; with `los`, only those a projectile could reach (no wall between). */
+    nearestEnemies(x, y, range, limit = 1, los = false) {
+        const r2 = range * range;
+        // short searches use the spatial hash (rebuilt every frame); the nearest one needs no sort
+        const pool = range <= 420 && this.game.hash ? this.game.hash.near(x, y, range, this.nearBuf || (this.nearBuf = [])) : this.game.state.enemies;
+        if (los) {
+            const near = [];
+            for (const e of pool) {
+                if (e.dead || e.untargetable) continue;
+                const dx = e.wx - x, dy = e.wy - y, d = dx * dx + dy * dy;
+                if (d <= r2) near.push({ e, d });
+            }
+            near.sort((a, b) => a.d - b.d);
+            const w = this.game.world, out = [];
+            // a few line checks at most: the nearest ones that can be seen
+            for (let i = 0; i < near.length && out.length < limit && i < limit * 3 + 4; i++) if (w.clearShot(x, y, near[i].e.wx, near[i].e.wy)) out.push(near[i].e);
+            return out;
+        }
+        if (limit === 1) {
+            let best = null, bd = r2;
+            for (let i = 0; i < pool.length; i++) {
+                const e = pool[i];
+                if (e.dead || e.untargetable) continue;
+                const dx = e.wx - x, dy = e.wy - y, d = dx * dx + dy * dy;
+                if (d <= bd) { bd = d; best = e; }
+            }
+            return best ? [best] : [];
+        }
+        const out = [];
+        for (const e of pool) {
+            if (e.dead || e.untargetable) continue;
+            const dx = e.wx - x, dy = e.wy - y;
+            const d = dx * dx + dy * dy;
+            if (d <= r2) out.push({ e, d });
+        }
+        out.sort((a, b) => a.d - b.d);
+        return out.slice(0, limit).map((o) => o.e);
+    }
+
+    // ------------------------------------------------------------ arcane bolt
+    fireBolt(r, src) {
+        const s = r.p;
+        const p = src || this.game.state.player;
+        const targets = this.nearestEnemies(p.wx, p.wy, REACH.bolt, s.count, true);
+        if (!targets.length) return false;
+        for (let i = 0; i < s.count && this.bullets.length < CAP.bullets; i++) {
+            const t = targets[i] || targets[0];
+            let angle = Math.atan2(t.wy - p.wy, t.wx - p.wx);
+            if (i >= targets.length) angle += (i % 2 ? 1 : -1) * 0.16 * Math.ceil((i - targets.length + 1) / 2);
+            const sprite = EntityManager.createBolt(p.wx, p.wy, angle, r.color);
+            const vx = Math.cos(angle) * s.speed, vy = Math.sin(angle) * s.speed;
+            sprite.getChildAt(1).getChildAt(0).rotation = Math.atan2(vy * TILT, vx);
+            this.game.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx, vy, life: 80, damage: this.dmg(r), pierce: s.pierce, hits: new Set(), r, homing: s.homing, jumps: s.jumps, speed: s.speed, boltTrail: sprite.getChildAt(1).getChildAt(0) });
+        }
+        this.game.audio.play('bolt', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    updateBullets(delta) {
+        const enemies = this.game.state.enemies;
+        const p = this.game.state.player;
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const b = this.bullets[i];
+            const sp = b.sprite;
+            if (b.glaive) {
+                // out along its line, slowing, then back to the hero's hand
+                const g = b.glaive;
+                if (g.out) {
+                    g.dist += Math.hypot(b.vx, b.vy) * delta;
+                    if (g.dist >= g.range) { g.out = false; b.hits.clear(); }
+                } else {
+                    const dx = p.wx - sp.wx, dy = p.wy - sp.wy, d = Math.hypot(dx, dy) || 1;
+                    b.vx = (dx / d) * b.speed; b.vy = (dy / d) * b.speed;
+                    if (d < 24) b.life = 0;
+                }
+                sp.blade.rotation += 0.45 * delta;
+            }
+            if (b.homing) {
+                // steer toward the nearest enemy, harder for higher homing
+                const t = this.nearestEnemies(sp.wx, sp.wy, 320, 1)[0];
+                if (t && !(b.glaive && !b.glaive.out)) {
+                    const want = Math.atan2(t.wy - sp.wy, t.wx - sp.wx), cur = Math.atan2(b.vy, b.vx);
+                    let da = want - cur;
+                    while (da > Math.PI) da -= Math.PI * 2;
+                    while (da < -Math.PI) da += Math.PI * 2;
+                    const turn = Math.max(-1, Math.min(1, da)) * 0.07 * b.homing * delta;
+                    const sp0 = Math.hypot(b.vx, b.vy);
+                    b.vx = Math.cos(cur + turn) * sp0; b.vy = Math.sin(cur + turn) * sp0;
+                    if (b.boltTrail) b.boltTrail.rotation = Math.atan2(b.vy * TILT, b.vx);
+                }
+            }
+            sp.wx += b.vx * delta;
+            sp.wy += b.vy * delta;
+            b.life -= delta;
+            // walls, mountains and gates stop them; a glaive turns back at one (and is gone if it meets one coming home)
+            if (this.game.world.shotBlocked(sp.wx, sp.wy)) {
+                if (b.glaive && b.glaive.out) { b.glaive.out = false; b.hits.clear(); sp.wx -= b.vx * delta; sp.wy -= b.vy * delta; }
+                else b.life = 0;
+            }
+            if (Math.random() < (b.wisp ? 0.6 : 0.35)) this.game.fx.burst(sp.wx, sp.wy, b.wisp ? 18 : 22, b.r.color, 1, 0.25, { size: 0.55, life: 14, gravity: 0, up: 0.1, glow: true });
+            EntityManager.place(sp);
+            let remove = b.life <= 0;
+            if (!remove) {
+                for (let j = 0; j < enemies.length; j++) {
+                    const e = enemies[j];
+                    if (e.dead || e.untargetable || b.hits.has(e)) continue;
+                    const dx = e.wx - sp.wx, dy = e.wy - sp.wy;
+                    const rr = e.radius + (b.glaive ? 16 : 8);
+                    if (dx * dx + dy * dy < rr * rr) {
+                        b.hits.add(e);
+                        if (b.shard) this.depth++;
+                        try { this.hit(e, b.damage, b.r, { knock: { x: b.vx, y: b.vy, force: 2.2 }, kind: b.shard ? 'rune:shard' : 'hit' }); } finally { if (b.shard) this.depth--; }
+                        if (b.pierce > 0) { b.pierce--; continue; }
+                        // Ricochet: jump to the next enemy instead of fizzling
+                        if (b.jumps > 0) {
+                            const next = this.nearestEnemies(sp.wx, sp.wy, 260, 6, true).find((n) => !b.hits.has(n));
+                            if (next) {
+                                b.jumps--;
+                                const a = Math.atan2(next.wy - sp.wy, next.wx - sp.wx), v = Math.hypot(b.vx, b.vy);
+                                b.vx = Math.cos(a) * v; b.vy = Math.sin(a) * v;
+                                if (b.boltTrail) b.boltTrail.rotation = Math.atan2(b.vy * TILT, b.vx);
+                                b.life = Math.max(b.life, 40);
+                                break;
+                            }
+                        }
+                        remove = true;
+                        break;
+                    }
+                }
+            }
+            if (remove) {
+                this.game.fx.hit(sp.wx, sp.wy, b.r.color);
+                EntityManager.release(sp);
+                this.bullets.splice(i, 1);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------- spirit blades
+    updateOrbit(r, delta) {
+        const s = r.p;
+        const game = this.game;
+        const p = game.state.player;
+        let o = this.orbits[r.item.uid];
+        if (!o) {
+            const trail = new PIXI.Graphics();
+            trail.blendMode = PIXI.BLEND_MODES.ADD;
+            game.objectLayer.addChild(trail);
+            o = this.orbits[r.item.uid] = { blades: [], angle: 0, trail };
+        }
+        while (o.blades.length < s.count) {
+            const b = EntityManager.createBlade(r.color);
+            game.objectLayer.addChild(b);
+            o.blades.push(b);
+        }
+        while (o.blades.length > s.count) EntityManager.cleanup(o.blades.pop());
+        o.angle += s.speed * delta;
+        const dmg = this.dmg(r);
+        // ghostly arc trailing behind each blade
+        const tr = o.trail;
+        tr.clear();
+        tr.zIndex = p.wy + 1;
+        o.blades.forEach((b, i) => {
+            const a0 = o.angle + (i / o.blades.length) * Math.PI * 2;
+            for (let k = 0; k < 7; k++) {
+                const a1 = a0 - k * 0.075, a2 = a0 - (k + 1) * 0.075;
+                tr.lineStyle(7 - k * 0.8, r.color, 0.42 * (1 - k / 7));
+                tr.moveTo(p.wx + Math.cos(a1) * s.radius, (p.wy + Math.sin(a1) * s.radius) * TILT - 18);
+                tr.lineTo(p.wx + Math.cos(a2) * s.radius, (p.wy + Math.sin(a2) * s.radius) * TILT - 18);
+            }
+        });
+        tr.lineStyle(0);
+        o.blades.forEach((b, i) => {
+            const a = o.angle + (i / o.blades.length) * Math.PI * 2;
+            b.wx = p.wx + Math.cos(a) * s.radius;
+            b.wy = p.wy + Math.sin(a) * s.radius;
+            EntityManager.place(b);
+            b.blade.rotation = Math.atan2(Math.cos(a) * TILT, -Math.sin(a)) + Math.PI / 2;
+            for (const e of game.state.enemies) {
+                if (e.dead || e.untargetable || game.frame - e.lastOrbit < 24) continue;
+                const dx = e.wx - b.wx, dy = e.wy - b.wy;
+                const rr = e.radius + 14;
+                if (dx * dx + dy * dy < rr * rr) {
+                    e.lastOrbit = game.frame;
+                    game.audio.play('blade', { x: e.wx, y: e.wy });
+                    this.hit(e, dmg, r, { knock: { x: e.wx - p.wx, y: e.wy - p.wy, force: 3 } });
+                }
+            }
+        });
+    }
+
+    // -------------------------------------------------------- chain lightning
+    fireLightning(r, src) {
+        const p = src || this.game.state.player;
+        const candidates = this.nearestEnemies(p.wx, p.wy, REACH.lightning, 40);
+        if (!candidates.length || this.bolts.length >= CAP.bolts) return false;
+        for (let i = 0; i < r.p.count; i++) {
+            this.chainStrike(candidates[Math.floor(Math.random() * candidates.length)], r);
+        }
+        this.game.audio.play('zap', { x: candidates[0].wx, y: candidates[0].wy });
+        return true;
+    }
+
+    chainStrike(start, r) {
+        const game = this.game;
+        const hit = new Set([start]);
+        const points = [{ x: start.wx, y: start.wy, z: 6 + start.baseHeight * 0.5 }];
+        let cur = start;
+        let dmg = this.dmg(r);
+        this.hit(start, dmg, r, { color: 0xd6c8ff });
+        for (let j = 0; j < r.p.jumps; j++) {
+            let best = null, bd = 240 * 240;
+            for (const e of game.state.enemies) {
+                if (e.dead || e.untargetable || hit.has(e)) continue;
+                const dx = e.wx - cur.wx, dy = e.wy - cur.wy;
+                const d = dx * dx + dy * dy;
+                if (d < bd && game.world.clearShot(cur.wx, cur.wy, e.wx, e.wy)) { bd = d; best = e; }     // it arcs, it does not go through rock
+            }
+            if (!best) break;
+            hit.add(best);
+            dmg *= 0.85;
+            this.hit(best, dmg, r, { color: 0xd6c8ff });
+            points.push({ x: best.wx, y: best.wy, z: 6 + best.baseHeight * 0.5 });
+            cur = best;
+        }
+        const first = points[0];
+        const path = [{ sx: first.x + (Math.random() - 0.5) * 60, sy: first.y * TILT - 520 }];
+        points.forEach((pt) => path.push({ sx: pt.x, sy: pt.y * TILT - pt.z }));
+        const g = new PIXI.Graphics();
+        g.zIndex = 1e8;
+        g.blendMode = PIXI.BLEND_MODES.ADD;
+        const jag = [];
+        for (let i = 0; i < path.length - 1; i++) {
+            const a = path[i], b = path[i + 1];
+            const steps = Math.max(4, Math.floor(Math.hypot(b.sx - a.sx, b.sy - a.sy) / 26));
+            jag.push({ x: a.sx, y: a.sy });
+            for (let k = 1; k < steps; k++) {
+                const t = k / steps;
+                jag.push({ x: a.sx + (b.sx - a.sx) * t + (Math.random() - 0.5) * 22, y: a.sy + (b.sy - a.sy) * t + (Math.random() - 0.5) * 22 });
+            }
+        }
+        const last = path[path.length - 1];
+        jag.push({ x: last.sx, y: last.sy });
+        this.polyline(g, jag, 14, r.color, 0.18);
+        this.polyline(g, jag, 7, r.color, 0.45);
+        this.polyline(g, jag, 2.6, 0xffffff, 1);
+        // little forks that crackle off the main bolt
+        for (let k = 2; k < jag.length - 1; k += 3) {
+            if (Math.random() < 0.5) continue;
+            const a = jag[k], ang = Math.random() * Math.PI * 2, len = 14 + Math.random() * 20;
+            const mid = { x: a.x + Math.cos(ang) * len * 0.5 + (Math.random() - 0.5) * 8, y: a.y + Math.sin(ang) * len * 0.5 };
+            const end = { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
+            this.polyline(g, [a, mid, end], 3, r.color, 0.5);
+            this.polyline(g, [a, mid, end], 1.2, 0xffffff, 0.85);
+        }
+        game.objectLayer.addChild(g);
+        this.bolts.push({ g, life: 16, max: 16, pts: points });
+        points.forEach((pt) => { game.fx.burst(pt.x, pt.y, 18, 0xe6dcff, 6, 2.8, { size: 0.8, life: 18, glow: true }); game.fx.shockwave(pt.x, pt.y, 34, r.color, 12, 3); });
+        game.fx.addShake(2);
+    }
+
+    polyline(g, pts, width, color, alpha) {
+        g.lineStyle(width, color, alpha, 0.5);
+        g.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    }
+
+    updateBolts(delta) {
+        for (let i = this.bolts.length - 1; i >= 0; i--) {
+            const b = this.bolts[i];
+            b.life -= delta;
+            b.g.alpha = Math.max(0, b.life / b.max);
+            if (b.life <= 0) { b.g.destroy(); this.bolts.splice(i, 1); }
+        }
+    }
+
+    // -------------------------------------------------------------- frost nova
+    fireNova(r, src) {
+        const game = this.game;
+        const p = src || game.state.player;
+        const s = r.p;
+        if (!this.nearestEnemies(p.wx, p.wy, s.radius * 1.35, 1).length || this.rings.length >= CAP.rings) return false;
+        const g = new PIXI.Graphics();
+        game.groundLayer.addChild(g);
+        this.rings.push({ g, x: p.wx, y: p.wy, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r), rs: r, fade: 0, spin: Math.random() * 6 });
+        game.fx.addShake(3);
+        game.fx.shockwave(p.wx, p.wy, s.radius * 1.15, 0xe8fbff, 26, 6);
+        game.fx.burst(p.wx, p.wy, 10, 0xe8fbff, 18, 4, { size: 0.8, life: 28, gravity: 0.05, up: 1.5, glow: true });
+        game.audio.play('nova', { x: p.wx, y: p.wy });
+        for (let k = 1; k <= s.echo; k++) {
+            const x = p.wx, y = p.wy;
+            this.after(27 * k, () => {
+                if (this.rings.length >= CAP.rings) return;
+                const g2 = new PIXI.Graphics();
+                game.groundLayer.addChild(g2);
+                this.rings.push({ g: g2, x, y, r: 12, maxR: s.radius, hit: new Set(), damage: this.dmg(r) * 0.6, rs: r, fade: 0, spin: Math.random() * 6, echo: true });
+                game.audio.play('nova', { x, y, vol: 0.6 });
+            });
+        }
+        return true;
+    }
+
+    updateRings(delta) {
+        const game = this.game;
+        for (let i = this.rings.length - 1; i >= 0; i--) {
+            const ring = this.rings[i];
+            if (ring.r < ring.maxR) {
+                ring.r = Math.min(ring.maxR, ring.r + (6 + (ring.maxR - ring.r) * 0.06) * delta);
+                for (const e of game.state.enemies) {
+                    if (e.dead || e.untargetable || ring.hit.has(e)) continue;
+                    const dx = e.wx - ring.x, dy = e.wy - ring.y;
+                    const rr = ring.r + e.radius;
+                    if (dx * dx + dy * dy <= rr * rr) {
+                        ring.hit.add(e);
+                        this.hit(e, ring.damage, ring.rs, { color: 0xbdefff, knock: { x: dx, y: dy, force: 7 }, kind: ring.echo ? 'echo' : 'hit' });
+                        game.fx.burst(e.wx, e.wy, 16, 0xbdefff, 4, 2, { size: 0.6, life: 20 });
+                    }
+                }
+            } else ring.fade += delta;
+            const alpha = Math.max(0, 1 - ring.fade / 22);
+            const c = ring.rs.color;
+            const R = ring.r;
+            ring.g.clear();
+            ring.g.beginFill(c, 0.16 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, R);
+            ring.g.endFill();
+            ring.g.beginFill(0xffffff, 0.08 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, R * 0.6);
+            ring.g.endFill();
+            // jagged ice crystals standing along the front of the wave
+            const n = 22;
+            ring.g.lineStyle(1.2, 0x6ad0ff, 0.8 * alpha);
+            ring.g.beginFill(0xe8fbff, 0.85 * alpha);
+            for (let k = 0; k < n; k++) {
+                const a = ring.spin + (k / n) * Math.PI * 2, len = 12 + ((k * 7) % 5) * 4, w = 0.09;
+                const bx = ring.x + Math.cos(a) * R, by = ring.y + Math.sin(a) * R;
+                ring.g.drawPolygon([
+                    ring.x + Math.cos(a - w) * (R - 6), ring.y + Math.sin(a - w) * (R - 6),
+                    bx + Math.cos(a) * len, by + Math.sin(a) * len,
+                    ring.x + Math.cos(a + w) * (R - 6), ring.y + Math.sin(a + w) * (R - 6)
+                ]);
+            }
+            ring.g.endFill();
+            ring.g.lineStyle(4, 0xd8f6ff, 0.9 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, R);
+            ring.g.lineStyle(2, 0x6ad0ff, 0.6 * alpha);
+            ring.g.drawCircle(ring.x, ring.y, Math.max(2, R - 12));
+            ring.g.lineStyle(0);
+            if (ring.r < ring.maxR && Math.random() < 0.5) {
+                const a = Math.random() * Math.PI * 2;
+                game.fx.burst(ring.x + Math.cos(a) * R, ring.y + Math.sin(a) * R, 8, 0xe8fbff, 1, 0.6, { size: 0.6, life: 22, gravity: 0.02, up: 1.2, glow: true });
+            }
+            if (ring.fade >= 22) { ring.g.destroy(); this.rings.splice(i, 1); }
+        }
+    }
+
+    // ------------------------------------------------------------------ meteor
+    fireMeteor(r, src) {
+        const game = this.game;
+        const p = src || game.state.player;
+        const candidates = this.nearestEnemies(p.wx, p.wy, REACH.meteor, 30);
+        if (!candidates.length) return false;
+        for (let i = 0; i < r.p.count && this.meteors.length < CAP.meteors; i++) {
+            const t = candidates[Math.floor(Math.random() * candidates.length)];
+            const tele = new PIXI.Graphics();
+            game.groundLayer.addChild(tele);
+            const rock = new PIXI.Container();
+            const trail = new PIXI.Graphics();
+            trail.beginFill(0xff7a20, 0.5);
+            trail.drawPolygon([-14, 0, 14, 0, 60, -160, 20, -170]);
+            trail.endFill();
+            trail.blendMode = PIXI.BLEND_MODES.ADD;
+            const glow = new PIXI.Graphics();
+            glow.beginFill(0xff9a3a, 0.5);
+            glow.drawCircle(0, 0, 30);
+            glow.endFill();
+            glow.blendMode = PIXI.BLEND_MODES.ADD;
+            const core = new PIXI.Graphics();
+            core.beginFill(0x4a2a1a); core.drawCircle(0, 0, 17); core.endFill();
+            core.beginFill(0xff6a1a); core.drawCircle(-3, -3, 12); core.endFill();
+            core.beginFill(0xffe08a); core.drawCircle(-5, -5, 6); core.endFill();
+            rock.addChild(trail, glow, core);
+            rock.visible = false;
+            game.objectLayer.addChild(rock);
+            this.meteors.push({
+                x: t.wx + (Math.random() - 0.5) * 30, y: t.wy + (Math.random() - 0.5) * 30,
+                t: -i * 10, delay: 62, radius: r.p.radius, damage: this.dmg(r), tele, rock, r
+            });
+        }
+        game.audio.play('meteorFall', { x: candidates[0].wx, y: candidates[0].wy });
+        return true;
+    }
+
+    updateMeteors(delta) {
+        const game = this.game;
+        for (let i = this.meteors.length - 1; i >= 0; i--) {
+            const m = this.meteors[i];
+            m.t += delta;
+            if (m.t < 0) continue;
+            const p = Math.min(1, m.t / m.delay);
+            m.tele.clear();
+            m.tele.beginFill(0xff4a1a, 0.08 + 0.2 * p);
+            m.tele.drawCircle(m.x, m.y, m.radius * (0.3 + 0.7 * p));
+            m.tele.endFill();
+            m.tele.lineStyle(3, 0xff8a3a, 0.5 + 0.4 * Math.sin(m.t * 0.5));
+            m.tele.drawCircle(m.x, m.y, m.radius);
+            m.rock.visible = true;
+            const ease = p * p;
+            if (Math.random() < 0.6) game.fx.burst(m.x + (1 - ease) * 150, m.y, 520 * (1 - ease) + 4, Math.random() < 0.5 ? 0xff8a3a : 0xffd070, 1, 0.6, { size: 0.9, life: 18, gravity: -0.02, up: 0.4, glow: true });
+            m.rock.position.set(m.x + (1 - ease) * 150, m.y * TILT - 520 * (1 - ease));
+            m.rock.zIndex = m.y + 30;
+            if (m.t >= m.delay) {
+                for (const e of game.state.enemies) {
+                    if (e.dead || e.untargetable) continue;
+                    const dx = e.wx - m.x, dy = e.wy - m.y;
+                    const rr = m.radius + e.radius;
+                    if (dx * dx + dy * dy <= rr * rr) this.hit(e, m.damage, m.r, { color: 0xffb060, knock: { x: dx, y: dy, force: 9 } });
+                }
+                game.fx.burst(m.x, m.y, 6, 0xff8a3a, 34, 5.5, { size: 1.2, life: 36, up: 4 });
+                game.fx.burst(m.x, m.y, 6, 0xffe08a, 16, 3, { size: 0.8, life: 24, up: 3 });
+                game.fx.burst(m.x, m.y, 6, 0x333333, 12, 2.5, { size: 1.4, life: 44, up: 2, gravity: 0.05 });
+                game.fx.addShake(8);
+                game.audio.play('boom', { x: m.x, y: m.y });
+                for (let k = 1; k <= m.r.p.echo; k++) {
+                    const mx = m.x, my = m.y, mr = m.r, rad = m.radius, dmg = m.damage * 0.6;
+                    this.after(27 * k, () => { this.pulse(mx, my, rad, dmg, mr, 6, 'echo'); game.audio.play('boom', { x: mx, y: my, vol: 0.6 }); });
+                }
+                game.fx.flash(m.x, m.y, m.radius * 4, 0xffa040, 26);
+                game.fx.shockwave(m.x, m.y, m.radius * 1.6, 0xffa040, 24, 7);
+                game.fx.burst(m.x, m.y, 8, 0xffd070, 16, 4.5, { size: 1, life: 26, up: 3, glow: true });
+                if (this.decals.length < CAP.decals) {
+                    const scorch = new PIXI.Graphics();
+                    scorch.beginFill(0x1a0f08, 0.55);
+                    scorch.drawCircle(m.x, m.y, m.radius * 0.7);
+                    scorch.endFill();
+                    game.groundLayer.addChild(scorch);
+                    this.decals.push({ g: scorch, life: 240, max: 240 });
+                    const flash = new PIXI.Graphics();
+                    flash.beginFill(0xffc070, 0.7);
+                    flash.drawCircle(m.x, m.y, m.radius);
+                    flash.endFill();
+                    flash.blendMode = PIXI.BLEND_MODES.ADD;
+                    game.groundLayer.addChild(flash);
+                    this.decals.push({ g: flash, life: 14, max: 14 });
+                }
+                m.tele.destroy();
+                EntityManager.cleanup(m.rock);
+                this.meteors.splice(i, 1);
+            }
+        }
+    }
+
+    updateDecals(delta) {
+        for (let i = this.decals.length - 1; i >= 0; i--) {
+            const d = this.decals[i];
+            d.life -= delta;
+            d.g.alpha = Math.max(0, d.life / d.max);
+            if (d.life <= 0) { d.g.destroy(); this.decals.splice(i, 1); }
+        }
+    }
+
+    /** a tower casts a spell from its own position, on its own cooldown, with no hero bonuses (but its own level's) */
+    towerFire(rec, item, origin, delta) {
+        const key = 'tw' + rec.id;
+        this.timers[key] = (this.timers[key] ?? 30) - delta;
+        if (this.timers[key] > 0) return;
+        const r = { ...this.resolved(item, true), srcKind: 'tower' };
+        const pw = towerPower(levelOf(rec));
+        this.srcMult = pw.damage;
+        let fired = false;
+        switch (r.tpl.expr) {
+            case 'bolt': fired = this.fireBolt(r, origin); break;
+            case 'chain': fired = this.fireLightning(r, origin); break;
+            case 'nova': fired = this.fireNova(r, origin); break;
+            case 'meteor': fired = this.fireMeteor(r, origin); break;
+            case 'wisp': fired = this.fireWisps(r, origin); break;
+            case 'glaive': fired = this.fireGlaive(r, origin); break;
+            case 'cloud': fired = this.fireCloud(r, origin); break;
+        }
+        this.srcMult = null;
+        this.timers[key] = fired ? msToFrames(r.p.cooldown) * pw.cooldown : 0;
+    }
+
+    // light emitted by spells for the light map (caves, ruins, dark regions)
+    emitLights(L) {
+        for (const b of this.bullets) L.add({ x: b.sprite.wx, y: b.sprite.wy, z: 18, r: 90, color: b.r.color, i: 0.9 });
+        for (const o of Object.values(this.orbits)) for (const b of o.blades) L.add({ x: b.wx, y: b.wy, z: 16, r: 60, color: 0x9ff2ff, i: 0.6 });
+        for (const ring of this.rings) L.add({ x: ring.x, y: ring.y, z: 0, r: ring.r * 1.4 + 30, color: ring.rs.color, i: Math.max(0, 1 - ring.fade / 14) * 0.8 });
+        for (const m of this.meteors) if (m.t >= 0) L.add({ x: m.x, y: m.y, z: 0, r: m.radius * (0.8 + m.t / m.delay), color: 0xff7a2a, i: 0.4 + 0.6 * (m.t / m.delay) });
+        for (const b of this.bolts) if (b.pts) for (const p of b.pts) L.add({ x: p.x, y: p.y, z: 20, r: 150, color: 0xc8b8ff, i: b.life / b.max });
+        if (this.barrierActive) { const p = this.game.state.player; L.add({ x: p.wx, y: p.wy, z: 20, r: this.barrierRadius * 3, color: this.barrierColor, i: 0.7 }); }
+        for (const z of this.zones) if (z.kind === 'ember') L.add({ x: z.x, y: z.y, z: 4, r: z.r * 2.2, color: 0xff7a2a, i: 0.5 * Math.min(1, z.life / 30) });
+        if (this.game.frame < this.healUntil) { const p = this.game.state.player; L.add({ x: p.wx, y: p.wy, z: 30, r: 160, color: 0x9bffb0, i: 0.7 }); }
+    }
+
+    // ------------------------------------------------------------ ember trail
+    dropEmber(r) {
+        const p = this.game.state.player;
+        const last = this.lastTrail;
+        if (last && Math.hypot(p.wx - last.x, p.wy - last.y) < 18) return false;   // only while moving
+        this.lastTrail = { x: p.wx, y: p.wy };
+        if (this.zones.length >= CAP.zones) { const old = this.zones.shift(); old.g.destroy(); }
+        this.zone('ember', p.wx, p.wy, r.p.radius, r.p.duration, this.dmg(r), r);
+        if (Math.random() < 0.3) this.game.audio.play('trail', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    /** A lasting patch on the ground that hurts what stands in it (embers, spore clouds). */
+    zone(kind, x, y, radius, seconds, damage, r) {
+        const g = new PIXI.Graphics();
+        g.blendMode = kind === 'ember' ? PIXI.BLEND_MODES.ADD : PIXI.BLEND_MODES.NORMAL;
+        this.game.groundLayer.addChild(g);
+        this.zones.push({ kind, x, y, r: radius, life: seconds * 60, max: seconds * 60, tick: 0, damage, rs: r, g, seed: Math.random() * 10 });
+    }
+
+    updateZones(delta) {
+        const game = this.game;
+        for (let i = this.zones.length - 1; i >= 0; i--) {
+            const z = this.zones[i];
+            z.life -= delta;
+            if (z.life <= 0) { z.g.destroy(); this.zones.splice(i, 1); continue; }
+            z.tick -= delta;
+            if (z.tick <= 0) {
+                z.tick = 30;
+                for (const e of game.state.enemies) {
+                    if (e.dead || e.untargetable || (z.kind === 'ember' && e.flying)) continue;
+                    const dx = e.wx - z.x, dy = e.wy - z.y, rr = z.r + e.radius * 0.5;
+                    if (dx * dx + dy * dy <= rr * rr) this.hit(e, z.damage * 0.5, z.rs, { color: z.kind === 'ember' ? 0xffa040 : 0x9be07b, kind: 'dot' });
+                }
+            }
+            const fade = Math.min(1, z.life / 40, (z.max - z.life) / 10 + 0.2);
+            const t = game.frame * 0.05 + z.seed;
+            const g = z.g;
+            g.clear();
+            if (z.kind === 'ember') {
+                g.beginFill(0xff5a1a, 0.28 * fade); g.drawEllipse(z.x, z.y, z.r, z.r * 0.85); g.endFill();
+                g.beginFill(0xffb040, 0.35 * fade); g.drawEllipse(z.x + Math.sin(t) * 4, z.y, z.r * 0.6, z.r * 0.5); g.endFill();
+                g.beginFill(0xfff0a0, 0.4 * fade); g.drawEllipse(z.x, z.y + Math.cos(t * 1.3) * 3, z.r * 0.25, z.r * 0.2); g.endFill();
+                if (Math.random() < 0.12 * delta) game.fx.burst(z.x + (Math.random() - 0.5) * z.r, z.y + (Math.random() - 0.5) * z.r, 6, 0xffa040, 1, 0.6, { size: 0.6, life: 20, gravity: -0.04, up: 1.2, glow: true });
+            } else {
+                g.beginFill(0x3a6a2a, 0.22 * fade); g.drawEllipse(z.x, z.y, z.r, z.r * 0.9); g.endFill();
+                for (let k = 0; k < 6; k++) {
+                    const a = t * 0.4 + k * 1.05, rr = z.r * (0.4 + 0.12 * Math.sin(t + k));
+                    g.beginFill(k % 2 ? 0x9ad05a : 0xd0e87a, 0.34 * fade);
+                    g.drawCircle(z.x + Math.cos(a) * z.r * 0.45, z.y + Math.sin(a) * z.r * 0.38, rr);
+                    g.endFill();
+                }
+                g.lineStyle(2.5, 0x5a9a3a, 0.55 * fade); g.drawEllipse(z.x, z.y, z.r, z.r * 0.9); g.lineStyle(0);
+                if (Math.random() < 0.15 * delta) game.fx.burst(z.x + (Math.random() - 0.5) * z.r, z.y + (Math.random() - 0.5) * z.r, 8, 0xc8f08a, 1, 0.4, { size: 0.8, life: 30, gravity: -0.02, up: 0.6 });
+            }
+        }
+    }
+
+    // --------------------------------------------------------------- wisps
+    fireWisps(r, src) {
+        const p = src || this.game.state.player;
+        const targets = this.nearestEnemies(p.wx, p.wy, REACH.wisps, r.p.count, true);
+        if (!targets.length) return false;
+        for (let i = 0; i < r.p.count && this.bullets.length < CAP.bullets; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sprite = EntityManager.createWisp(p.wx, p.wy, r.color);
+            this.game.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx: Math.cos(a) * r.p.speed, vy: Math.sin(a) * r.p.speed, life: 240, damage: this.dmg(r), pierce: r.p.pierce, hits: new Set(), r, homing: Math.max(1, r.p.homing) * 1.6, jumps: r.p.jumps, speed: r.p.speed, wisp: true });
+        }
+        this.game.audio.play('wisp', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    // -------------------------------------------------------------- glaive
+    fireGlaive(r, src) {
+        const p = src || this.game.state.player;
+        const targets = this.nearestEnemies(p.wx, p.wy, r.p.range + 60, r.p.count, true);
+        if (!targets.length) return false;
+        for (let i = 0; i < r.p.count && this.bullets.length < CAP.bullets; i++) {
+            const t = targets[i] || targets[0];
+            const a = Math.atan2(t.wy - p.wy, t.wx - p.wx) + (i >= targets.length ? (i % 2 ? 0.35 : -0.35) : 0);
+            const sprite = EntityManager.createBlade(r.color);
+            sprite.wx = p.wx; sprite.wy = p.wy;
+            this.game.objectLayer.addChild(sprite);
+            EntityManager.place(sprite);
+            this.bullets.push({ sprite, vx: Math.cos(a) * r.p.speed, vy: Math.sin(a) * r.p.speed, life: 200, damage: this.dmg(r), pierce: 999, hits: new Set(), r, homing: r.p.homing, speed: r.p.speed, glaive: { out: true, dist: 0, range: r.p.range } });
+        }
+        this.game.audio.play('glaive', { x: p.wx, y: p.wy });
+        return true;
+    }
+
+    // --------------------------------------------------------------- cloud
+    fireCloud(r, src) {
+        const p = src || this.game.state.player;
+        const t = this.nearestEnemies(p.wx, p.wy, REACH.cloud, 1)[0];
+        if (!t) return false;
+        if (this.zones.length >= CAP.zones) { const old = this.zones.find((z) => z.kind === 'cloud') || this.zones[0]; old.g.destroy(); this.zones.splice(this.zones.indexOf(old), 1); }
+        this.zone('cloud', t.wx, t.wy, r.p.radius, r.p.duration, this.dmg(r), r);
+        this.game.fx.burst(t.wx, t.wy, r.p.radius * 0.6, 0xb8e07a, 14, 1.2, { size: 1, life: 30, gravity: -0.01, up: 0.6 });
+        this.game.audio.play('cloud', { x: t.wx, y: t.wy });
+        return true;
+    }
+
+    // ---------------------------------------------------------- earthshatter
+    slam(r) {
+        const g = this.game, p = g.state.player;
+        const dmg = this.dmg(r);
+        this.pulse(p.wx, p.wy, r.p.radius, dmg, r, 10);
+        g.fx.addShake(7);
+        g.fx.burst(p.wx, p.wy, r.p.radius * 0.5, 0x8a6a4a, 26, 4, { size: 1.3, life: 34, up: 4, gravity: 0.12 });
+        g.fx.burst(p.wx, p.wy, 20, 0xe8d8b8, 14, 3, { size: 0.9, life: 24, up: 3 });
+        g.fx.flash(p.wx, p.wy, r.p.radius * 2.5, 0xffe0a0, 20);
+        g.input?.haptic('slam');
+        for (let k = 1; k <= r.p.echo; k++) {
+            const x = p.wx, y = p.wy;
+            this.after(27 * k, () => { this.pulse(x, y, r.p.radius * 1.1, dmg * 0.6, r, 6, 'echo'); g.audio.play('slam', { x, y, vol: 0.6 }); g.fx.addShake(4); });
+        }
+    }
+
+    // --------------------------------------------------------- mending light
+    startHeal(r) {
+        const g = this.game, p = g.state.player;
+        this.healUntil = g.frame + r.p.duration * 60;
+        this.healRate = r.p.heal * g.stats.might;
+        g.fx.pillar(p.wx, p.wy, 0x9bffb0, 40, 70, 220);
+        g.fx.burst(p.wx, p.wy, 20, 0x9bffb0, 18, 2, { size: 0.8, life: 30, up: 2.5, glow: true });
+    }
+
+    updateHeal(delta) {
+        const g = this.game, s = g.state;
+        if (g.frame >= this.healUntil || !s.player) return;
+        s.health = Math.min(s.maxHealth, s.health + this.healRate * delta / 60);
+        if (Math.random() < 0.3 * delta) g.fx.burst(s.player.wx + (Math.random() - 0.5) * 30, s.player.wy, 6, 0x9bffb0, 1, 0.4, { size: 0.7, life: 30, up: 2, gravity: -0.03, glow: true });
+    }
+
+    // ================================================================ ACTIVE
+    /** Slot readiness for the HUD: 0..1 cooldown progress, and whether mana suffices. */
+    slotInfo(i) {
+        const uid = this.active[i];
+        const it = uid && this.item(uid);
+        if (!it) return null;
+        const r = this.resolved(it);
+        const cost = Math.round(r.p.mana * this.game.stats.manaCost);
+        const left = Math.max(0, (this.timers[uid] ?? 0));
+        const total = msToFrames(r.p.cooldown) * this.game.stats.cooldown;
+        return { item: it, r, cost, cdFrac: total ? Math.min(1, left / total) : 0, affordable: this.mana.value >= cost };
+    }
+
+    cast(slot) {
+        const g = this.game;
+        const s = g.state;
+        if (!s.player || s.gameOver || s.paused || g.busy) return false;
+        const info = this.slotInfo(slot);
+        if (!info) return false;
+        const { item, r, cost } = info;
+        if ((this.timers[item.uid] ?? 0) > 0) return false;
+        if (!spendMana(this.mana, cost)) { g.ui.toast('Not enough mana'); g.audio?.play('deny'); return false; }
+        this.timers[item.uid] = msToFrames(r.p.cooldown) * g.stats.cooldown;
+        switch (r.tpl.expr) {
+            case 'dash': this.startDash(r); break;
+            case 'blink': this.blink(r); break;
+            case 'barrier': this.startBarrier(r); break;
+            case 'slam': this.slam(r); break;
+            case 'heal': this.startHeal(r); break;
+        }
+        g.audio?.play(r.tpl.expr);
+        return true;
+    }
+
+    aimDir() {
+        const g = this.game;
+        const p = g.state.player;
+        const stick = g.input && g.input.aim();
+        if (stick) return stick;                      // right stick aims dashes and blinks
+        const ptr = g.state.pointerPosition;
+        if (ptr && (g.state.pointerDown || (settings.aimAtCursor && g.pointerKind === 'mouse'))) {
+            const { x: tx, y: ty } = g.screenToWorld(ptr.x, ptr.y);
+            const d = Math.hypot(tx - p.wx, ty - p.wy);
+            if (d > 8) return { x: (tx - p.wx) / d, y: (ty - p.wy) / d };
+        }
+        if (g.lastMove && (g.lastMove.x || g.lastMove.y)) return g.lastMove;
+        return { x: p.facing || 1, y: 0 };
+    }
+
+    startDash(r) {
+        const d = this.aimDir();
+        const g = this.game, p = g.state.player;
+        const frames = Math.max(6, r.p.duration * 60 * 0.6);
+        this.dashing = { dx: d.x, dy: d.y, left: frames, speed: r.p.range / frames, color: r.color, n: 0 };
+        g.invulnUntil = Math.max(g.invulnUntil || 0, g.frame + r.p.duration * 60 + 6);
+        g.fx.burst(p.wx, p.wy, 10, 0xe8f4ff, 14, 3, { size: 0.8, life: 16, glow: true });
+        g.fx.shockwave(p.wx, p.wy, 46, 0xe8f4ff, 14, 4);
+        g.input?.haptic('dash');
+    }
+
+    // translucent copy of the hero left behind while dashing
+    afterimage(color) {
+        const g = this.game, p = g.state.player;
+        if (this.ghosts.length > 10) return;
+        const c = new PIXI.Container();
+        const body = new PIXI.Container();
+        buildHero(body, p.heroId || 'aria');
+        EntityManager.bake(body, 'hero:' + (p.heroId || 'aria'));
+        body.scale.x = p.facing || 1;
+        c.addChild(body);
+        c.position.set(p.wx, p.wy * TILT);
+        c.zIndex = p.wy - 1;
+        c.alpha = 0.7;
+        const tint = new PIXI.Graphics();
+        tint.beginFill(color, 0.55); tint.drawEllipse(0, -30, 15, 33); tint.endFill();
+        tint.blendMode = PIXI.BLEND_MODES.ADD;
+        c.addChild(tint);
+        g.objectLayer.addChild(c);
+        this.ghosts.push({ c, life: 16, max: 16 });
+    }
+
+    updateDash(delta) {
+        for (let i = this.ghosts.length - 1; i >= 0; i--) {
+            const gh = this.ghosts[i];
+            gh.life -= delta;
+            gh.c.alpha = 0.7 * Math.max(0, gh.life / gh.max);
+            if (gh.life <= 0) { gh.c.destroy({ children: true }); this.ghosts.splice(i, 1); }
+        }
+        const d = this.dashing;
+        if (!d) return;
+        const g = this.game;
+        const p = g.state.player;
+        const step = Math.min(delta, d.left);
+        if ((d.n++ % 3) === 0) this.afterimage(d.color);
+        g.world.tryMove(p, d.dx * d.speed * step, d.dy * d.speed * step * 1.2, p.radius, !!g.boat);
+        d.left -= delta;
+        // wind streaks
+        g.fx.burst(p.wx - d.dx * 10, p.wy - d.dy * 10, 14 + Math.random() * 30, 0xe8f4ff, 1, 0.5, { size: 0.6, life: 12, gravity: 0, up: 0, glow: true });
+        if (d.left <= 0) this.dashing = null;
+    }
+
+    blink(r) {
+        const g = this.game;
+        const p = g.state.player;
+        const d = this.aimDir();
+        const x0 = p.wx, y0 = p.wy;
+        g.fx.burst(p.wx, p.wy, 20, r.color, 22, 3, { size: 0.9, life: 20, glow: true });
+        g.fx.shockwave(p.wx, p.wy, 60, r.color, 16, 5);
+        g.input?.haptic('dash');
+        let dist = 0;
+        for (let t = 16; t <= r.p.range; t += 16) {
+            if (g.world.blocked(p.wx + d.x * t, p.wy + d.y * t, p.radius, !!g.boat)) break;
+            dist = t;
+        }
+        p.wx += d.x * dist;
+        p.wy += d.y * dist;
+        g.invulnUntil = Math.max(g.invulnUntil || 0, g.frame + 14);
+        g.fx.streak(x0, y0, p.wx, p.wy, r.color, 26, 18, 12);
+        g.fx.burst(p.wx, p.wy, 20, r.color, 26, 3.4, { size: 0.9, life: 22, glow: true });
+        g.fx.shockwave(p.wx, p.wy, 80, r.color, 20, 5);
+        g.fx.pillar(p.wx, p.wy, r.color, 26, 46, 150);
+        g.cam.x += d.x * dist * 0.5; g.cam.y += d.y * dist * 0.5;
+    }
+
+    startBarrier(r) {
+        const g = this.game;
+        this.barrierUntil = g.frame + r.p.duration * 60;
+        this.barrierRadius = r.p.radius;
+        this.barrierColor = r.color;
+        g.fx.addShake(2);
+        const p = g.state.player;
+        g.fx.shockwave(p.wx, p.wy, r.p.radius * 1.6, r.color, 18, 5);
+        g.fx.burst(p.wx, p.wy, 24, r.color, 16, 2.4, { size: 0.8, life: 24, glow: true });
+    }
+
+    get barrierActive() { return this.game.frame < this.barrierUntil; }
+
+    updateBarrier() {
+        const g = this.game;
+        if (!this.barrierActive) {
+            if (this.barrierG) { this.barrierG.destroy(); this.barrierG = null; }
+            return;
+        }
+        if (!this.barrierG) {
+            this.barrierG = new PIXI.Graphics();
+            this.barrierG.blendMode = PIXI.BLEND_MODES.ADD;
+            g.objectLayer.addChild(this.barrierG);
+        }
+        const p = g.state.player;
+        const left = (this.barrierUntil - g.frame) / 60;
+        const a = left < 0.6 ? 0.45 + 0.4 * Math.sin(g.frame * 0.6) : 0.9;
+        const b = this.barrierG;
+        const R = this.barrierRadius, RY = R * TILT * 1.35, col = this.barrierColor, t = g.frame;
+        b.clear();
+        // bubble: soft fill, bright rim, a lit crescent and a turning hex lattice
+        b.beginFill(col, 0.1 * a); b.drawEllipse(0, 0, R, RY); b.endFill();
+        b.beginFill(0xffffff, 0.08 * a); b.drawEllipse(-R * 0.25, -RY * 0.35, R * 0.45, RY * 0.3); b.endFill();
+        b.lineStyle(2.5, col, 0.9 * a); b.drawEllipse(0, 0, R, RY);
+        b.lineStyle(6, col, 0.2 * a); b.drawEllipse(0, 0, R - 3, RY - 3);
+        b.lineStyle(1.2, 0xffffff, 0.35 * a);
+        for (let k = 0; k < 6; k++) {
+            const a0 = t * 0.01 + (k / 6) * Math.PI * 2, a1 = a0 + Math.PI / 3;
+            b.moveTo(Math.cos(a0) * R * 0.62, Math.sin(a0) * RY * 0.62);
+            b.lineTo(Math.cos(a1) * R * 0.62, Math.sin(a1) * RY * 0.62);
+            b.moveTo(Math.cos(a0) * R * 0.62, Math.sin(a0) * RY * 0.62);
+            b.lineTo(Math.cos(a0) * R * 0.98, Math.sin(a0) * RY * 0.98);
+        }
+        b.lineStyle(0);
+        // orbiting runes
+        b.beginFill(0xffffff, 0.9 * a);
+        for (let k = 0; k < 4; k++) {
+            const ang = -t * 0.04 + (k / 4) * Math.PI * 2, rx = Math.cos(ang) * R, ry = Math.sin(ang) * RY;
+            b.drawPolygon([rx, ry - 4, rx + 3, ry, rx, ry + 4, rx - 3, ry]);
+        }
+        b.endFill();
+        b.position.set(p.wx, p.wy * TILT - 22);
+        b.zIndex = p.wy + 40;
+    }
+}
+
+export { MAX_AUTO, MAX_ACTIVE, TEMPLATES, RUNES };

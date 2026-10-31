@@ -1,0 +1,351 @@
+// @ts-nocheck -- Pixi-bound runtime for boats, island caches and sea monsters
+import * as PIXI from 'pixi.js';
+import { WORLD_CONFIG } from '../core/config';
+import { engage } from '../core/ai/ai';
+import { BIOME, isWaterBiome } from '../core/world/biomes';
+import { BOAT_SPEED, CACHE_CELL, boatBlocked, boatSpot, cacheForCell } from '../core/world/towers';
+import { KRAKEN_CELL, KRAKEN_LEVEL_BONUS, isSeaDungeonCell, krakenForCell } from '../core/world/dungeons';
+import { dungeonAffinity } from '../core/loot/loot';
+import { createBoat } from '../render/boatArt';
+import { EntityManager } from '../render/entities';
+import { ui as uiBridge } from '../ui/bridge';
+
+const T = WORLD_CONFIG.tile;
+const TILT = WORLD_CONFIG.tilt;
+const SHOW = T * WORLD_CONFIG.chunkTiles * 3;
+const KRAKEN_WAKE = 650;              // a boat this close to a lair wakes its kraken
+const KRAKEN_SINK = 1600;             // and this far away lets it sink again (unless it is still fighting)
+
+/** Docks give each shore a boat. Boats cross deep water; islands hide treasure; the sea has its own monsters. */
+export class SeaSystem {
+    constructor(game) {
+        this.game = game;
+        this.boats = new Map();          // dock id -> { id, back, front, wake, x, y }
+        this.caches = new Map();         // cache id -> { cache, sprite }
+        this.cacheCells = new Map();
+        this.known = new Map();          // caches the hero has come near (shown on the map)
+        this.krakenCells = new Map();    // cell key -> lair or null
+        this.krakensSeen = new Map();    // lairs the hero has sailed near (shown on the map)
+        this.timer = 0;
+        this.spawnTimer = 0;
+    }
+
+    reset() {
+        for (const b of this.boats.values()) this.destroyBoat(b);
+        for (const c of this.caches.values()) c.sprite.destroy();
+        this.boats.clear(); this.caches.clear(); this.cacheCells.clear(); this.known.clear();
+        this.krakenCells.clear(); this.krakensSeen.clear();
+        this.timer = this.spawnTimer = 0;
+    }
+
+    destroyBoat(b) { b.back.destroy({ children: true }); b.front.destroy({ children: true }); b.wake.destroy(); }
+
+    // ---------------------------------------------------------------- boats
+    posOf(rec) {
+        const m = this.game.session.boats[rec.id];
+        return m || boatSpot(rec);
+    }
+
+    /** make sure every built dock near the hero has a boat sprite */
+    refresh() {
+        const g = this.game;
+        const p = g.state.player;
+        if (!p || g.mode !== 'overworld') return;
+        for (const rec of g.towers.builtOf('dock')) {
+            const pos = this.posOf(rec);
+            const near = Math.hypot(pos.x - p.wx, pos.y - p.wy) < SHOW;
+            let b = this.boats.get(rec.id);
+            if (near && !b) {
+                const parts = createBoat();
+                b = { id: rec.id, ...parts, x: pos.x, y: pos.y, phase: Math.random() * 6 };
+                g.groundLayer.addChild(b.wake);
+                g.objectLayer.addChild(b.back, b.front);
+                this.boats.set(rec.id, b);
+            } else if (!near && b && !(g.boat && g.boat.dockId === rec.id)) { this.destroyBoat(b); this.boats.delete(rec.id); }
+        }
+    }
+
+    /** The dock's boat is somewhere else (left on a far shore) and nobody is aboard: it can be called back. */
+    canRecall(rec) {
+        const g = this.game;
+        if (g.boat && g.boat.dockId === rec.id) return false;
+        const pos = this.posOf(rec), spot = boatSpot(rec);
+        return Math.hypot(pos.x - spot.x, pos.y - spot.y) > 2 * T;
+    }
+
+    /** Call the boat home: it is moored at its dock again, so no one is ever stranded without it. */
+    recall(rec) {
+        const g = this.game;
+        if (!this.canRecall(rec)) return false;
+        const spot = boatSpot(rec);
+        g.session.boats[rec.id] = { x: spot.x, y: spot.y };
+        const b = this.boats.get(rec.id);
+        if (b) { b.x = spot.x; b.y = spot.y; } else this.refresh();
+        g.fx.burst(spot.x, spot.y, 14, 0xdff4ff, 18, 2.4, { size: 0.8, life: 24, glow: true });
+        g.fx.shockwave(spot.x, spot.y, 70, 0xdff4ff, 18, 4);
+        g.audio.play('sail');
+        g.ui.toast('Your boat glides back to the dock', 'sail');
+        g.map.dirty = true;
+        g.requestSave('recall', true);
+        return true;
+    }
+
+    /** nearest moored boat within reach, or null */
+    boatNear(x, y, range = 96) {
+        let best = null, bd = range * range;
+        for (const b of this.boats.values()) {
+            if (this.game.boat && this.game.boat.dockId === b.id) continue;
+            const d = (b.x - x) ** 2 + (b.y - y) ** 2;
+            if (d < bd) { bd = d; best = b; }
+        }
+        return best;
+    }
+
+    board(id) {
+        const g = this.game;
+        const b = this.boats.get(id);
+        if (!b || g.boat) return false;
+        const p = g.state.player;
+        g.boat = { dockId: id };
+        p.wx = b.x; p.wy = b.y;
+        g.spells.dashing = null;
+        uiBridge.sailing.value = true;
+        g.fx.burst(b.x, b.y, 14, 0xdff4ff, 14, 2.4, { size: 0.8, life: 22, glow: true });
+        g.fx.shockwave(b.x, b.y, 60, 0xdff4ff, 18, 4);
+        g.audio.play('sail');
+        g.ui.toast('All aboard! Steer as you walk. Press [E] near a shore to step off');
+        return true;
+    }
+
+    /** nearest tile of dry land within reach for stepping ashore */
+    landNear(x, y, range = 120) {
+        const g = this.game;
+        let best = null, bd = range * range;
+        const tx0 = Math.floor(x / T), ty0 = Math.floor(y / T), R = Math.ceil(range / T);
+        for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) {
+            const b = g.world.biomeAt(tx0 + i, ty0 + j);
+            if (isWaterBiome(b) || b === BIOME.MOUNTAIN || b === BIOME.PEAK || b === BIOME.VOID) continue;
+            const cx = (tx0 + i + 0.5) * T, cy = (ty0 + j + 0.5) * T;
+            const d = (cx - x) ** 2 + (cy - y) ** 2;
+            if (d < bd && !g.world.blocked(cx, cy, g.state.player.radius)) { bd = d; best = { x: cx, y: cy }; }
+        }
+        return best;
+    }
+
+    disembark() {
+        const g = this.game;
+        const p = g.state.player;
+        const land = this.landNear(p.wx, p.wy);
+        if (!land || !g.boat) return false;
+        const b = this.boats.get(g.boat.dockId);
+        if (b) { b.x = p.wx; b.y = p.wy; g.session.boats[b.id] = { x: p.wx, y: p.wy }; }
+        p.wx = land.x; p.wy = land.y;
+        g.boat = null;
+        uiBridge.sailing.value = false;
+        g.fx.burst(p.wx, p.wy, 10, 0xdff4ff, 12, 2, { size: 0.7, life: 20, glow: true });
+        g.audio.play('pickup');
+        g.flow.centerTx = NaN;
+        return true;
+    }
+
+    /** the party is gone / the game restarts: leave the boat where it floats */
+    abandon() {
+        const g = this.game;
+        if (g.boat) {
+            const p = g.state.player;
+            const b = this.boats.get(g.boat.dockId);
+            if (b) { b.x = p.wx; b.y = p.wy; g.session.boats[b.id] = { x: p.wx, y: p.wy }; }
+        }
+        g.boat = null;
+        uiBridge.sailing.value = false;
+    }
+
+    // ----------------------------------------------------------- caches
+    cachesNear(tx, ty, r) {
+        const g = this.game;
+        const out = [];
+        const c0x = Math.floor((tx - r) / CACHE_CELL), c1x = Math.floor((tx + r) / CACHE_CELL);
+        const c0y = Math.floor((ty - r) / CACHE_CELL), c1y = Math.floor((ty + r) / CACHE_CELL);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            const key = `${cx},${cy}`;
+            if (!this.cacheCells.has(key)) this.cacheCells.set(key, cacheForCell(g.overworld.seed, cx, cy, (x, y) => g.overworld.biomeAt(x, y)));
+            const c = this.cacheCells.get(key);
+            if (c && !isSeaDungeonCell(g.overworld.seed, cx, cy)) out.push(c);       // a drowned shrine stands where the treasure would be
+        }
+        return out;
+    }
+
+    isOpened(id) { return this.game.session.caches.includes(id); }
+
+    /** nearest unopened cache within reach, or null */
+    cacheTarget(x, y, range = 70) {
+        let best = null, bd = range * range;
+        for (const d of this.caches.values()) {
+            const cx = (d.cache.tx + 0.5) * T, cy = (d.cache.ty + 0.5) * T;
+            const dd = (cx - x) ** 2 + (cy - y) ** 2;
+            if (dd < bd) { bd = dd; best = d.cache; }
+        }
+        return best;
+    }
+
+    open(cache) {
+        const g = this.game;
+        g.session.caches.push(cache.id);
+        this.known.delete(cache.id);
+        const d = this.caches.get(cache.id);
+        const x = (cache.tx + 0.5) * T, y = (cache.ty + 0.5) * T;
+        if (d) { d.sprite.destroy(); this.caches.delete(cache.id); }
+        g.fx.burst(x, y, 24, 0xffd84a, 30, 3.4, { size: 1, life: 40, up: 4, glow: true });
+        g.fx.pillar(x, y, 0xffd84a, 70, 70, 240);
+        g.ui.banner('BURIED TREASURE', 0xffd84a);
+        g.audio.play('loot');
+        g.grantLoot(2);
+        for (let i = 0; i < 8; i++) g.dropGem(x + (Math.random() - 0.5) * 100, y + (Math.random() - 0.5) * 70, Math.round(20 + cache.level * 6), 'coin');
+        for (let i = 0; i < 3; i++) g.dropGem(x + (Math.random() - 0.5) * 80, y + 20, 1, ['wood', 'stone', 'iron'][i % 3]);
+        g.map.dirty = true;
+        g.requestSave('cache', true);
+    }
+
+    // ------------------------------------------------------------- update
+    update(delta) {
+        const g = this.game;
+        const p = g.state.player;
+        if (!p || g.mode !== 'overworld') return;
+        const t = g.frame;
+        this.timer -= delta;
+        if (this.timer <= 0) {
+            this.timer = 30;
+            this.refresh();
+            this.watchKrakens();
+            const ptx = Math.floor(p.wx / T), pty = Math.floor(p.wy / T);
+            for (const c of this.cachesNear(ptx, pty, 30)) {
+                if (this.isOpened(c.id) || this.caches.has(c.id)) continue;
+                const x = (c.tx + 0.5) * T, y = (c.ty + 0.5) * T;
+                if (Math.hypot(x - p.wx, y - p.wy) > SHOW) continue;
+                const set = g.world.decorTextures.chest;
+                const s = new PIXI.Sprite(set[0].texture);
+                s.anchor.set(0.5, set[0].anchorY);
+                s.position.set(x, y * TILT);
+                s.zIndex = y;
+                g.objectLayer.addChild(s);
+                this.caches.set(c.id, { cache: c, sprite: s });
+                this.known.set(c.id, c);
+            }
+            for (const [id, d] of this.caches) {
+                const x = (d.cache.tx + 0.5) * T, y = (d.cache.ty + 0.5) * T;
+                if (Math.hypot(x - p.wx, y - p.wy) > SHOW * 1.4) { d.sprite.destroy(); this.caches.delete(id); }
+            }
+        }
+        // boats bob; the one under the hero follows them
+        for (const b of this.boats.values()) {
+            const sailing = g.boat && g.boat.dockId === b.id;
+            if (sailing) { b.x = p.wx; b.y = p.wy; }
+            b.phase += 0.05 * delta;
+            const bob = Math.sin(b.phase) * 1.8;
+            const sx = b.x, sy = b.y * TILT;
+            b.back.position.set(sx, sy + bob); b.front.position.set(sx, sy + bob);
+            b.back.zIndex = b.y - 2; b.front.zIndex = b.y + 2;
+            b.back.rotation = b.front.rotation = Math.sin(b.phase * 0.7) * 0.035;
+            b.wake.clear();
+            const a = 0.28 + 0.1 * Math.sin(b.phase * 1.3);
+            b.wake.lineStyle(2.5, 0xffffff, a); b.wake.drawEllipse(b.x, b.y + 4, 50, 18);
+            b.wake.lineStyle(1.5, 0xffffff, a * 0.6); b.wake.drawEllipse(b.x, b.y + 4, 62 + Math.sin(b.phase) * 3, 23);
+            if (sailing) {
+                p.body.y = -6;
+                p.zIndex = b.y;
+                if (p.moving && (t | 0) % 4 === 0) g.fx.burst(b.x - (g.lastMove.x || 0) * 30, b.y - (g.lastMove.y || 0) * 20, 4, 0xffffff, 1, 0.8, { size: 0.6, life: 20, gravity: 0, up: 0.1, glow: true });
+                g.session.boats[b.id] = { x: b.x, y: b.y };
+            }
+        }
+        if (g.boat) this.spawnSeaMonsters(delta);
+    }
+
+    // ----------------------------------------------------------- kraken
+    krakensNear(tx, ty, r) {
+        const g = this.game;
+        const out = [];
+        const c0x = Math.floor((tx - r) / KRAKEN_CELL), c1x = Math.floor((tx + r) / KRAKEN_CELL);
+        const c0y = Math.floor((ty - r) / KRAKEN_CELL), c1y = Math.floor((ty + r) / KRAKEN_CELL);
+        for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {
+            const key = `${cx},${cy}`;
+            if (!this.krakenCells.has(key)) this.krakenCells.set(key, krakenForCell(g.overworld.seed, cx, cy, (x, y) => g.overworld.biomeAt(x, y)));
+            const l = this.krakenCells.get(key);
+            if (l) out.push(l);
+        }
+        return out;
+    }
+
+    krakenDefeated(id) { return this.game.session.defeatedLairs[id] !== undefined; }
+
+    /** sailing close to a lair wakes its kraken; sailing far away lets it sink back down */
+    watchKrakens() {
+        const g = this.game;
+        const p = g.state.player;
+        const ptx = Math.floor(p.wx / T), pty = Math.floor(p.wy / T);
+        const live = new Map();
+        for (const e of g.state.enemies) if (e.kraken && !e.dead) live.set(e.kraken, e);
+        for (const l of this.krakensNear(ptx, pty, 40)) {
+            if (this.krakenDefeated(l.id)) continue;
+            const x = (l.tx + 0.5) * T, y = (l.ty + 0.5) * T;
+            const d = Math.hypot(x - p.wx, y - p.wy);
+            if (d < SHOW && g.fog.isRevealed(l.tx, l.ty)) this.krakensSeen.set(l.id, l);
+            if (g.boat && d < KRAKEN_WAKE && !live.has(l.id)) this.rise(l);
+        }
+        for (const [id, e] of live) {
+            if (Math.hypot(e.home.x - p.wx, e.home.y - p.wy) > KRAKEN_SINK && e.shell !== 'engaged') { e.dead = true; e.silent = true; }
+        }
+    }
+
+    rise(l) {
+        const g = this.game;
+        const x = (l.tx + 0.5) * T, y = (l.ty + 0.5) * T;
+        const level = Math.max(1, g.overworld.levelAt(l.tx, l.ty)) + KRAKEN_LEVEL_BONUS;
+        const e = g.makeEnemy('KRAKEN', x, y, { level, home: { x, y }, leash: 900 });
+        e.kraken = l.id;
+        e.group = 'shore';
+        this.krakensSeen.set(l.id, l);
+        engage(g, e, false);
+        g.fx.burst(x, y, 30, 0xdff4ff, 40, 4, { size: 1, life: 40, up: 4, glow: true });
+        g.fx.shockwave(x, y, 160, 0xdff4ff, 30, 6);
+        g.fx.addShake(10);
+        g.audio.play('splash', { x, y });
+        g.map.dirty = true;
+        return e;
+    }
+
+    /** the kraken is slain: remembered for good, and it leaves the sea's riches behind */
+    krakenDown(e) {
+        const g = this.game;
+        g.session.defeatedLairs[e.kraken] = g.state.time;
+        g.ui.banner('THE KRAKEN SINKS', 0x9ae8ff);
+        g.grantLoot(3, { affinity: dungeonAffinity('shore', 'sea'), bonus: 1 });
+        for (let i = 0; i < 12; i++) g.dropGem(e.wx + (Math.random() - 0.5) * 160, e.wy + (Math.random() - 0.5) * 110, Math.round(30 + e.level * 8), 'coin');
+        g.map.dirty = true;
+    }
+
+    spawnSeaMonsters(delta) {
+        const g = this.game;
+        const p = g.state.player;
+        this.spawnTimer -= delta;
+        // keep the sea lively but not crowded; stray monsters are recycled when far behind
+        const mine = g.state.enemies.filter((e) => e.seaSpawn && !e.dead);
+        for (const e of mine) if (Math.hypot(e.wx - p.wx, e.wy - p.wy) > 1300) { e.dead = true; e.silent = true; }
+        if (this.spawnTimer > 0 || mine.length >= 5) return;
+        // look for open water at a few random bearings; a narrow channel may have none in some directions
+        let x = 0, y = 0, found = false;
+        for (let attempt = 0; attempt < 10 && !found; attempt++) {
+            const a = Math.random() * Math.PI * 2, r = 480 + Math.random() * 200;
+            x = p.wx + Math.cos(a) * r; y = p.wy + Math.sin(a) * r;
+            found = isWaterBiome(g.world.biomeAtPos(x, y));
+        }
+        this.spawnTimer = found ? 150 + Math.random() * 120 : 40;
+        if (!found) return;
+        const level = Math.max(1, g.overworld.levelAt(Math.floor(x / T), Math.floor(y / T)));
+        const type = Math.random() < 0.55 ? 'GULL' : 'JELLY';
+        const e = g.makeEnemy(type, x, y, { level, elite: Math.random() < 0.08 });
+        e.seaSpawn = true;
+        engage(g, e, false);
+    }
+}
+
+export { boatBlocked, BOAT_SPEED };

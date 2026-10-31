@@ -1,0 +1,44 @@
+// Visual check of the controller UI: focus rings, device-aware hints, pause menu, controls table.
+// Usage: npm run build && node scripts/inputshot.mjs <out-dir> [tag]
+import { chromium } from 'playwright-core';
+import { findChromium } from './lib/browser.mjs';
+import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+const OUT = process.argv[2] || 'gallery-out'; const TAG = process.argv[3] || 'pad';
+mkdirSync(OUT, { recursive: true });
+const pv = spawn('npx', ['vite', 'preview', '--port', '4206', '--strictPort'], { stdio: 'ignore', detached: true });
+await new Promise((r) => setTimeout(r, 2500));
+const b = await chromium.launch({ executablePath: findChromium(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
+const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
+await ctx.addInitScript(() => {
+  window.__forceSeed = 2024;
+  window.__pad = { id: 'Xbox 360 Controller (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
+  window.__padOn = false;
+  navigator.getGamepads = () => (window.__padOn ? [window.__pad, null, null, null] : [null, null, null, null]);
+});
+const p = await ctx.newPage();
+p.on('pageerror', (e) => console.log('ERR', e.message));
+await p.goto('http://localhost:4206/'); await p.waitForFunction(() => !!window.game);
+await p.waitForTimeout(500);
+const shot = async (name) => { await p.waitForTimeout(350); await p.screenshot({ path: `${OUT}/${TAG}-${name}.png` }); };
+const pad = (o = {}) => p.evaluate((o) => { const q = window.__pad; window.__padOn = true; q.axes = o.axes || [0, 0, 0, 0]; for (let i = 0; i < 17; i++) { const on = (o.down || []).includes(i); q.buttons[i] = { pressed: on, value: on ? 1 : 0 }; } }, o);
+const tap = async (...d) => { await pad({ down: d }); await p.evaluate(() => window.game.gameLoop(1)); await pad(); await p.evaluate(() => window.game.gameLoop(1)); await p.waitForTimeout(120); };
+await pad({ down: [0] }); await p.waitForFunction(() => window.game.input.frame.held.size > 0); await pad();
+await p.waitForFunction(() => window.game.state.player);
+await p.evaluate(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; g.popRuntime.population = null; g.state.experience = 0; g.state.nextLevel = 20; g.state.experience = 20; g.checkLevelUp(); g.state.nextLevel = 1e12; g.spells.addSpell('nova'); });
+await tap(13); await shot('cards');
+await tap(1);
+await tap(12); await p.waitForTimeout(200);
+await p.locator('.vs-item', { hasText: 'Frost Nova', hasNotText: /on (Aria|Brann|Cyra)/ }).first().focus();
+await shot('loadout');
+await tap(1);
+await tap(9); await shot('pause');
+await p.evaluate(() => window.game.ui.openMenu('settings'));      // Start opens the game menu on the page it was left on
+await p.locator('.vs-pause [data-tab="controls"]').click();
+await p.locator('.vs-pause button', { hasText: 'Show all controls' }).click();
+await p.evaluate(() => { document.activeElement && document.activeElement.blur(); });
+await tap(13); await tap(13); await tap(13);
+await p.evaluate(() => document.querySelector('.vs-pause').scrollTo(0, 400));
+await shot('controls');
+await b.close();
+try { process.kill(-pv.pid); } catch { /* the preview server is already gone */ }

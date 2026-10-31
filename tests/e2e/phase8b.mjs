@@ -1,0 +1,340 @@
+// Phase 8b-8g end-to-end checks: audio (mixer, effects, music that follows the place), regions and roads, new
+// spells and runes, accessibility options, onboarding tips.
+import { suite } from './harness.mjs';
+
+const h = await suite('phase8b', { args: ['--autoplay-policy=no-user-gesture-required'] });
+const { check, want } = h;
+let page = await h.newPage();
+const ev = (fn, arg) => page.evaluate(fn, arg);
+// the game menu (Esc) on its Settings page
+const openSettings = async (pg) => {
+  await pg.keyboard.press('Escape');
+  await pg.waitForSelector('.vs-menu', { timeout: 4000 });
+  await pg.evaluate(() => document.querySelector('.vs-menu [data-page="settings"]').click());
+  await pg.waitForSelector('.vs-pause', { timeout: 4000 });
+};
+const loop = (n) => ev((n) => { for (let i = 0; i < n; i++) window.game.gameLoop(1); }, n);
+
+await page.goto(h.url);
+await page.waitForFunction(() => !!window.game);
+await page.keyboard.press('Enter');
+await page.waitForFunction(() => window.game.state.player);
+await ev(() => { const g = window.game; g.godMode = true; g.state.nextLevel = 1e12; });
+
+const findTown = () => ev(() => {
+  const g = window.game, src = g.overworld; let town = null;
+  for (let r = 0; r < 60 && !town; r++) for (let cy = -r; cy <= r && !town; cy++) for (let cx = -r; cx <= r && !town; cx++) {
+    if (Math.max(Math.abs(cx), Math.abs(cy)) !== r) continue;
+    const q = src.poiForCell(cx, cy); if (q && q.type === 'city') town = q;
+  }
+  return town && town.id;
+});
+
+// ---- audio
+if (want('audio')) {
+  const a0 = await ev(() => window.game.audio.stats());
+  check('the audio context runs after the first key press', a0.state === 'running', JSON.stringify(a0));
+  await loop(40);
+  await page.waitForTimeout(400);
+  const a1 = await ev(() => window.game.audio.stats());
+  check('the overworld plays its region track', ['field', 'forest', 'desert', 'shore', 'mountain'].includes(a1.track) && a1.bars > 0, JSON.stringify(a1));
+
+  const sounds = await ev(() => {
+    const g = window.game, p = g.state.player;
+    const before = { ...g.audio.played };
+    const e = g.makeEnemy('SLIME', p.wx + 60, p.wy, { level: 1 });
+    g.damageEnemy(e, 1, { noCrit: true });
+    g.audio.last = {};
+    g.damageEnemy(e, 1e6, { noCrit: true });
+    g.audio.last = {};
+    g.godMode = false; g.invulnUntil = 0; g.hurtPlayer(1); g.godMode = true;
+    const diff = {};
+    for (const [k, v] of Object.entries(g.audio.played)) if (v !== (before[k] || 0)) diff[k] = v - (before[k] || 0);
+    return diff;
+  });
+  check('hits, kills and getting hurt make sounds', sounds.hit >= 1 && sounds.kill >= 1 && sounds.hurt >= 1, JSON.stringify(sounds));
+
+  const far = await ev(() => {
+    const g = window.game, p = g.state.player, n = g.audio.played.kill || 0;
+    g.audio.last = {};
+    const e = g.makeEnemy('SLIME', p.wx + 5000, p.wy, { level: 1 });
+    g.damageEnemy(e, 1e6, { noCrit: true });
+    return (g.audio.played.kill || 0) - n;
+  });
+  check('sounds far off screen are not played', far === 0, String(far));
+
+  const boss = await ev(() => {
+    const g = window.game;
+    g.spawnBoss();
+    for (let i = 0; i < 40; i++) g.gameLoop(1);
+    const t = g.audio.stats();
+    g.state.enemies.filter((e) => e.isBoss).forEach((e) => { e.dead = true; });
+    g.reap();
+    return t;
+  });
+  check('a nearby warlord switches to the boss track at full intensity', boss.track === 'boss' && boss.intensity === 1, JSON.stringify(boss));
+
+  const town = await findTown();
+  await ev((id) => { const g = window.game; g.enterPlace(g.overworld.poiForCell(...id.split(',').map(Number))); }, town);
+  await page.waitForFunction(() => window.game.mode === 'interior' && !window.game.busy, null, { timeout: 15000 });
+  await loop(40);
+  check('a town plays the town track', (await ev(() => window.game.audio.stats().track)) === 'town');
+  await ev(() => window.game.exitPlace());
+  await page.waitForFunction(() => window.game.mode === 'overworld' && !window.game.busy, null, { timeout: 15000 });
+
+  await ev(() => { window.game.audio.setVolume('music', 0.25); window.game.audio.setMuted(false); });
+  const prefs = await ev(() => JSON.parse(localStorage.getItem('vs.audio.v1') || '{}'));
+  check('volumes are remembered', Math.abs(prefs.music - 0.25) < 1e-6, JSON.stringify(prefs));
+  await openSettings(page);
+  await ev(() => document.querySelector('.vs-pause [data-tab="audio"]').click());
+  await page.waitForTimeout(150);
+  const sliders = await ev(() => [...document.querySelectorAll('.vs-pause .vs-row span')].map((x) => x.innerText));
+  check('the settings have volume sliders', ['Master volume', 'Music', 'Effects'].every((l) => sliders.includes(l)), JSON.stringify(sliders));
+  await page.keyboard.press('Escape');
+}
+
+// ---- regions and roads
+if (want('roads')) {
+  const road = await ev(() => {
+    const g = window.game, net = g.overworld.roads;
+    const start = { id: 'start', tx: 0, ty: 2, name: 'the start' };
+    const [town] = net.near(start);
+    const path = town ? net.route(start, town) : null;
+    if (!path) return null;
+    const k = Math.floor(path.length / 4) * 2;
+    const p = g.state.player;
+    p.wx = (path[k] + 0.5) * 48; p.wy = (path[k + 1] + 0.5) * 48; g.cam.x = p.wx; g.cam.y = p.wy;
+    g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    for (let i = 0; i < 30; i++) g.gameLoop(1);
+    return { town: town.name, len: path.length / 2, surface: g.surfaces.current && g.surfaces.current.id, speed: g.surfaces.fx.speed, hud: document.querySelector('.vs-surface')?.innerText || '' };
+  });
+  check('a road leads from the start to the nearest town', road && road.len > 5, JSON.stringify(road));
+  check('walking on the road is faster', road && road.surface === 'road' && road.speed > 1.2, JSON.stringify(road));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/road.png` });
+
+  const region = await ev(() => {
+    const g = window.game, p = g.state.player;
+    const r0 = g.regionId;
+    p.wx = 330 * 48; p.wy = 20 * 48; g.cam.x = p.wx; g.cam.y = p.wy;
+    g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    for (let i = 0; i < 45; i++) g.gameLoop(1);
+    const r = g.overworld.region(g.regionId);
+    return { r0, r1: g.regionId, name: r.name, title: r.title, label: g.zoneLabel, seen: g.regionsSeen.size, onMap: g.map.regions().map((x) => x.name) };
+  });
+  check('walking into another region names it', region.r0 === '0,0' && region.r1 !== '0,0' && region.label.includes(region.name), JSON.stringify(region));
+  check('regions seen are listed on the world map', region.seen >= 2 && region.onMap.includes('Hearthvale') && region.onMap.includes(region.name), JSON.stringify(region.onMap));
+
+  const sign = await ev(() => {
+    const g = window.game, net = g.overworld.roads;
+    const towns = net.townsIn(-200, -200, 200, 200).filter((n) => net.destinations(n).length);
+    const n = towns[0];
+    if (!n) return null;
+    const p = g.state.player;
+    p.wx = (n.tx + 2.4) * 48 + 30; p.wy = (n.ty + 0.6) * 48 + 10; g.cam.x = p.wx; g.cam.y = p.wy;
+    g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    for (let i = 0; i < 10; i++) g.gameLoop(1);
+    g.updateInteraction();
+    const kind = g.target && g.target.kind;
+    let toast = '';
+    const orig = g.ui.toast.bind(g.ui); g.ui.toast = (t) => { toast = t; orig(t); };
+    g.interact();
+    g.ui.toast = orig;
+    return { kind, toast, dests: net.destinations(n) };
+  });
+  check('a signpost by a town names where its roads lead', sign && sign.kind === 'sign' && sign.dests.every((d) => sign.toast.includes(d)), JSON.stringify(sign));
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/signpost.png` });
+    await page.keyboard.press('m'); await page.waitForTimeout(500);
+    await page.screenshot({ path: `${process.env.SHOTS}/regions-map.png` });
+    await page.keyboard.press('m'); await page.waitForTimeout(200);
+  }
+}
+
+// ---- new spells and runes
+if (want('spells')) {
+  const trial = (id, setup) => ev(([id, setup]) => {
+    const g = window.game, p = g.state.player, sp = g.spells;
+    g.state.enemies.forEach((e) => { e.dead = true; }); g.reap();
+    sp.clearProjectiles();
+    // stand on open ground
+    for (let r = 0; r < 40; r++) { if (!g.world.blocked(p.wx, p.wy, 40) && !g.world.blocked(p.wx + 260, p.wy, 40)) break; p.wx += 96; }
+    g.cam.x = p.wx; g.cam.y = p.wy; g.world.update(g.cam.x, g.cam.y, 1280, 720, true);
+    sp.setLoadout([], [null, null, null]);
+    const it = sp.addSpell(id);
+    if (setup.runes) it.runes = setup.runes;
+    sp.equip(it.uid, 0);
+    sp.timers = {};
+    const foes = (setup.foes || [[180, 0]]).map(([dx, dy]) => { const e = g.makeEnemy('SLIME', p.wx + dx, p.wy + dy, { level: 1 }); e.speed = 0; e.health = e.maxHealth = setup.hp || 1e5; return e; });
+    const out = { zones: 0, glaives: 0, wisps: 0, rings: 0 };
+    if (setup.hurt) g.state.health = g.state.maxHealth * 0.4;
+    const h0 = g.state.health;
+    if (setup.cast) { sp.mana.value = 200; out.cast = sp.cast(0); }
+    for (let f = 0; f < (setup.frames || 150); f++) {
+      if (setup.walk) { p.wx += 3; foes.forEach((e) => { e.wx = p.wx - 40; }); }
+      g.gameLoop(1);
+      out.zones = Math.max(out.zones, sp.zones.length);
+      out.glaives = Math.max(out.glaives, sp.bullets.filter((b) => b.glaive).length);
+      out.wisps = Math.max(out.wisps, sp.bullets.filter((b) => b.wisp).length);
+      out.rings = Math.max(out.rings, sp.rings.length);
+    }
+    out.damage = Math.round(foes.reduce((a, e) => a + (e.maxHealth - Math.max(0, e.health)), 0));
+    out.hit = foes.filter((e) => e.health < e.maxHealth).length;
+    out.knocked = foes.some((e) => Math.abs(e.kvx) + Math.abs(e.kvy) > 0.5);
+    out.healed = Math.round(g.state.health - h0);
+    out.glaivesLeft = sp.bullets.filter((b) => b.glaive).length;
+    g.state.health = g.state.maxHealth;
+    return out;
+  }, [id, setup]);
+
+  const trail = await trial('trail', { walk: true, frames: 120, foes: [[-40, 0]] });
+  check('Ember Trail leaves burning ground that hurts', trail.zones > 3 && trail.damage > 0, JSON.stringify(trail));
+  const wisp = await trial('wisp', { frames: 200, foes: [[220, 40]] });
+  check('Seeker Wisps hunt down an enemy', wisp.wisps > 0 && wisp.damage > 0, JSON.stringify(wisp));
+  const glaive = await trial('glaive', { frames: 100, foes: [[160, 0], [240, 0]] });   // one throw: out ~270 px and back, before the next
+  check('Returning Glaive cuts through a line and comes back', glaive.glaives > 0 && glaive.hit === 2 && glaive.glaivesLeft === 0, JSON.stringify(glaive));
+  const cloud = await trial('cloud', { frames: 150, foes: [[200, 0], [220, 20]] });
+  check('Spore Cloud settles on a crowd and hurts it', cloud.zones > 0 && cloud.hit === 2, JSON.stringify(cloud));
+  const slam = await trial('slam', { cast: true, frames: 6, foes: [[80, 0], [-90, 30], [400, 0]] });
+  check('Earthshatter hurts and hurls what is close, not what is far', slam.cast && slam.hit === 2 && slam.knocked, JSON.stringify(slam));
+  const heal = await trial('heal', { cast: true, hurt: true, frames: 120, foes: [[900, 0]] });
+  check('Mending Light heals the hero over time', heal.cast && heal.healed >= 8, JSON.stringify(heal));
+  const after = await trial('nova', { runes: ['aftershock', null], frames: 60, foes: [[60, 0]] });
+  check('Aftershock sends a second ring', after.rings >= 2 || after.damage > 22 * 1.5, JSON.stringify(after));
+  const rico = await trial('bolt', { runes: ['ricochet', null], frames: 75, foes: [[160, 0], [230, 50], [230, -50]] });
+  check('Ricochet bounces one bolt between enemies', rico.hit >= 2, JSON.stringify(rico));
+
+  const kills = await ev(() => {
+    const g = window.game, sp = g.spells, p = g.state.player;
+    const it = sp.addSpell('bolt'); it.runes = ['splinter', 'siphon'];
+    let shards = 0; const orig = sp.shards.bind(sp); sp.shards = (...a) => { shards++; return orig(...a); };
+    sp.mana.value = 0;
+    const e = g.makeEnemy('SLIME', p.wx + 50, p.wy, { level: 1 });
+    g.damageEnemy(e, 1e6, { noCrit: true, spell: it });
+    sp.shards = orig;
+    return { shards, mana: sp.mana.value, spawned: sp.bullets.filter((b) => b.shard).length };
+  });
+  check('Splinter bursts kills into shards and Mana Siphon refills mana', kills.shards === 1 && kills.spawned === 3 && kills.mana >= 2, JSON.stringify(kills));
+}
+
+// ---- accessibility and rebinding
+if (want('access')) {
+  const before = await ev(() => parseFloat(getComputedStyle(document.querySelector('.vs-wallet')).fontSize));
+  await openSettings(page);
+  const tabLabels = async (tab) => { await ev((t) => document.querySelector(`.vs-pause [data-tab="${t}"]`).click(), tab); await page.waitForTimeout(150); return ev(() => [...document.querySelectorAll('.vs-pause .vs-tabbody .vs-btn, .vs-pause .vs-tabbody .vs-row span')].map((b) => b.innerText)); };
+  const rebindLabels = await tabLabels('controls');
+  const labels = await tabLabels('access');
+  check('the settings offer text size, colours, reduced motion and rebinding',
+    labels.includes('Text size') && labels.some((t) => /Colours/.test(t)) && labels.some((t) => /Reduced motion/.test(t)) && rebindLabels.some((t) => /Rebind/.test(t)), JSON.stringify({ labels, rebindLabels }));
+  const applied = await ev(() => {
+    const btn = [...document.querySelectorAll('.vs-pause .vs-btn')];
+    // one click on the colours button picks the red-green palette
+    btn.find((b) => /Colours/.test(b.innerText)).click();
+    btn.find((b) => /Reduced motion/.test(b.innerText)).click();
+    const slider = [...document.querySelectorAll('.vs-pause input[type=range]')].find((r) => /Text size/.test(r.closest('label').innerText));
+    slider.value = '1.3'; slider.dispatchEvent(new Event('input', { bubbles: true }));
+    return { prefs: JSON.parse(localStorage.getItem('vs.access.v1') || '{}'), ts: getComputedStyle(document.documentElement).getPropertyValue('--ts').trim(), reduced: document.documentElement.classList.contains('vs-reduced') };
+  });
+  check('accessibility settings apply and are remembered', applied.prefs.palette === 'redgreen' && applied.prefs.reducedMotion === true && Math.abs(applied.prefs.textScale - 1.3) < 1e-6 && applied.ts === '1.3' && applied.reduced, JSON.stringify(applied));
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/access-pause.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const after = await ev(() => parseFloat(getComputedStyle(document.querySelector('.vs-wallet')).fontSize));
+  check('bigger text makes the HUD text bigger', after > before * 1.2, `${before} -> ${after}`);
+  const cues = await ev(() => {
+    const g = window.game, p = g.state.player;
+    g.fx.shake = 0; g.fx.addShake(10);
+    const e = g.makeEnemy('SLIME', p.wx + 150, p.wy, { level: g.state.level + 6 });
+    g.gameLoop(1);
+    return { shake: g.fx.shake, label: e.hpBar.label && e.hpBar.label.text, fill: e.hpBar.label && e.hpBar.label.style.fill };
+  });
+  check('reduced motion stops screen shake', cues.shake === 0, JSON.stringify(cues));
+  check('a strong monster is tagged with a shape and the palette colour', /^▲ Lv/.test(cues.label || '') && (cues.fill === 0xf0e442 || cues.fill === '#f0e442'), JSON.stringify(cues));
+
+  // rebind the first skill to X with the keyboard, through the panel
+  await openSettings(page);
+  await ev(() => document.querySelector('.vs-pause [data-tab="controls"]').click());
+  await page.waitForTimeout(150);
+  await ev(() => [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Rebind/.test(b.innerText)).click());
+  await page.waitForTimeout(200);
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/rebind.png` });
+  await ev(() => document.querySelector('[data-bind="key:skill1"]').click());
+  await page.keyboard.press('x');
+  await page.waitForTimeout(150);
+  const rb = await ev(() => ({ act: window.game.input.keys.actionFor('x'), swapped: window.game.input.keys.label('skill2'), cell: document.querySelector('[data-bind="key:skill1"]').innerText, saved: (JSON.parse(localStorage.getItem('vs.input.v1') || '{}').keys || {}).skill1 }));
+  check('a key can be rebound from the panel and is remembered', rb.act === 'skill1' && rb.cell === 'X' && JSON.stringify(rb.saved) === '["x"]', JSON.stringify(rb));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  const cast = await ev(() => { const g = window.game; g.spells.setLoadout(g.spells.auto, [g.spells.spells.find((s) => s.tpl === 'dash')?.uid || null, null, null]); g.spells.timers = {}; g.spells.mana.value = 100; return document.querySelector('.vs-skill .k')?.innerText; });
+  await page.keyboard.press('x');
+  await page.waitForTimeout(100);
+  const used = await ev(() => { const g = window.game, uid = g.spells.active[0]; return { cd: g.spells.timers[uid] || 0, mana: g.spells.mana.value }; });
+  check('the rebound key casts the skill and the HUD shows it', cast === 'X' && used.cd > 0, JSON.stringify({ cast, used }));
+  await ev(() => { window.game.input.resetBindings(); });
+  check('reset restores the default keys', await ev(() => window.game.input.keys.actionFor(' ') === 'skill1'));
+}
+
+// ---- onboarding tips
+if (want('tips')) {
+  // a fresh start: the welcome tip comes up on its own and names the movement keys
+  await ev(() => { const g = window.game; g.tips.forget(); g.tips.reset([]); });
+  await loop(120);
+  await page.waitForTimeout(150);
+  const welcome = await ev(() => ({ id: document.querySelector('.vs-coach')?.dataset.tip, text: document.querySelector('.vs-coach .tx')?.innerText }));
+  check('a new game shows the welcome tip with the movement keys', welcome.id === 'welcome' && /WASD|arrow keys/.test(welcome.text || ''), JSON.stringify(welcome));
+  if (process.env.SHOTS) { await page.waitForTimeout(2500); await page.screenshot({ path: `${process.env.SHOTS}/tip.png` }); }
+  await ev(() => document.querySelector('.vs-coach .vs-x').click());
+  await page.waitForTimeout(100);
+  const gone = await ev(() => ({ card: !!document.querySelector('.vs-coach'), seen: window.game.tips.seen.has('welcome') }));
+  check('dismissing a tip hides it and marks it seen', !gone.card && gone.seen, JSON.stringify(gone));
+
+  // a trigger shows its tip once, with the key of the device in use
+  await ev(() => { const g = window.game; g.state.pending = 1; g.ensureCards(); });
+  await loop(300);
+  await page.waitForTimeout(150);
+  const up = await ev(() => ({ id: document.querySelector('.vs-coach')?.dataset.tip, text: document.querySelector('.vs-coach .tx')?.innerText }));
+  check('a pending level-up brings up its tip with the upgrade key', up.id === 'upgrade' && /Press U /.test(up.text || ''), JSON.stringify(up));
+  await ev(() => { const g = window.game; g.tips.dismiss(); g.state.pending = 0; g.ensureCards(); });
+
+  // seen tips are saved and stay seen after loading
+  // a region discovered far away and some experience (so the next tip has something to say) go into the save
+  const saved = await ev(async () => {
+    const g = window.game, p = g.state.player, T = 48;
+    const far = g.overworld.regionId(Math.floor(p.wx / T) + 600, Math.floor(p.wy / T));
+    g.regionsSeen.add(far);
+    g.state.experience = Math.max(1, g.state.experience);
+    await g.requestSave('test', true);
+    return { tips: [...g.tips.seen], regions: [...g.regionsSeen], far };
+  });
+  const p2 = await h.newPage();
+  await p2.goto(h.url);
+  await p2.waitForFunction(() => !!window.game);
+  await p2.waitForTimeout(1200);
+  await p2.keyboard.press('Enter');     // Continue
+  await p2.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
+  await p2.evaluate(() => { const g = window.game; for (let i = 0; i < 200; i++) g.gameLoop(1); });
+  await p2.waitForTimeout(150);
+  const loaded = await p2.evaluate(() => { const g = window.game; return { seen: [...g.tips.seen], card: document.querySelector('.vs-coach')?.dataset.tip || null, regions: [...g.regionsSeen] }; });
+  check('seen tips are saved and not shown again', saved.tips.includes('welcome') && saved.tips.includes('upgrade') && loaded.seen.includes('welcome') && !!loaded.card && loaded.card !== 'welcome' && loaded.card !== 'upgrade', JSON.stringify({ saved, loaded }));
+  check('discovered regions are saved', saved.regions.every((id) => loaded.regions.includes(id)) && loaded.regions.includes(saved.far), JSON.stringify({ saved, loaded }));
+
+  // tips can be switched off from the settings
+  await openSettings(p2);
+  await p2.evaluate(() => document.querySelector('.vs-pause [data-tab="help"]').click());
+  await p2.waitForTimeout(150);
+  const off = await p2.evaluate(() => {
+    const btn = [...document.querySelectorAll('.vs-pause .vs-btn')].find((b) => /Tips are on/.test(b.innerText));
+    btn.click();
+    return { pref: JSON.parse(localStorage.getItem('vs.access.v1') || '{}').tips };
+  });
+  await p2.waitForTimeout(150);
+  const how = await p2.evaluate(() => ({ sections: document.querySelectorAll('.vs-howto p').length, controls: !!document.querySelector('.vs-howto .vs-keys') }));
+  await p2.keyboard.press('Escape');
+  await p2.waitForTimeout(200);
+  const quiet = await p2.evaluate(() => { const g = window.game; g.tips.forget(); for (let i = 0; i < 200; i++) g.gameLoop(1); return !!document.querySelector('.vs-coach'); });
+  check('tips can be turned off and stay off', off.pref === false && !quiet, JSON.stringify({ off, quiet }));
+  check('the pause menu has a How to play page with the controls', how.sections >= 5 && how.controls, JSON.stringify(how));
+  await p2.evaluate(() => { localStorage.removeItem('vs.access.v1'); });
+  await p2.close();
+}
+
+await h.finish();

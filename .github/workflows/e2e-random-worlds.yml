@@ -1,0 +1,38 @@
+name: Browser tests in random worlds
+
+# The pushes test one fixed world (seed 2024), so a layout never turns the gate red by chance. This is the other
+# half: run the suites that depend most on the world in a world nobody chose, to find tests that assume a layout.
+# A failure prints its seed ("seed 123456789" at the top of the suite's output): rerun it with SEED=<that>.
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Suites to run, comma separated
+        default: phase1,phase5,phase6,phase7
+      seed:
+        description: random, or a number to try
+        default: random
+
+jobs:
+  worlds:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3]
+    name: random world (attempt ${{ matrix.attempt }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser
+        run: npx playwright-core install --with-deps chromium
+      - name: Browser tests
+        env:
+          SEED: ${{ inputs.seed }}
+          SUITES: ${{ inputs.suites }}
+        run: node tests/e2e/run.mjs --only "$SUITES" --title "Random worlds, attempt ${{ matrix.attempt }}"
