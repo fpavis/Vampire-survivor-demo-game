@@ -23,6 +23,8 @@ Playtest round three.
   that was revealed lay in another chunk than its gate).
 - **A teleporter that explains itself.** Travel stays clickable when the fare is short, says “Need 36 more gold · you
   have 10” and answers a click; a refusal because of a boat, an escort or a screen change is spoken too.
+- **The title screen's overwrite question** (“OVERWRITE AUTOSAVE?”) fits its button: a menu button shrinks a long
+  label to sit inside its frame.
 - **Escape** closes the game menu from anywhere in it, and the window blinking (an extension or the browser taking
   focus for a moment) no longer opens it again at once; the F3 overlay shows the last key, the menu state and the
   window focus, for the case it still misbehaves.

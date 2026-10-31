@@ -2,6 +2,8 @@
 
 A fast-paced, browser-based survival game built with PixiJS where you fight endless waves of enemies, collect experience, and level up to become stronger.
 
+**Play it:** https://fpavis.github.io/Vampire-survivor-demo-game/ (every push to `main` is built and published by `.github/workflows/pages.yml`).
+
 ![Game Preview](preview.gif) <!-- TODO: Add your game preview gif -->
 
 ## Features

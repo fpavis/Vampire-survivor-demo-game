@@ -1,8 +1,9 @@
 # Release checklist: 1.0
 
-**Version 0.17.0 is the release candidate.** Everything below was checked on it. 1.0.0 is set, and the work is
-merged to `main`, only when the owner decides so (see *Releasing* at the end). Evidence is a command you can run or a
-CI run you can open; nothing here is ticked from memory.
+**Version 0.17.0 is the release candidate.** Everything below was checked on it. It was merged to `main` on 2026-10-31
+at the owner's request, and every push to `main` is built and published to GitHub Pages by
+`.github/workflows/pages.yml`. 1.0.0 is set only when the owner decides so (see *Releasing* at the end). Evidence is a
+command you can run or a CI run you can open; nothing here is ticked from memory.
 
 ## Gates
 
@@ -76,7 +77,7 @@ screens and Safari on iOS have not been tried: the touch controls are tested onl
    (`tests/app-shell.test.ts` fails when they differ), write the 1.0.0 entry in `CHANGELOG.md` and the What's new card.
 3. `npm run typecheck && npm run lint && npm test && npm run build && npm run check:size`, then
    `npm run test:e2e` and CI green.
-4. Merge to `main`, tag `v1.0.0`, publish `dist/` (it is a static site; the service worker makes it installable).
+4. Merge to `main` and tag `v1.0.0`: the push to `main` builds `dist/` and publishes it to GitHub Pages (it is a static site; the service worker makes it installable).
 
 ## After 1.0
 

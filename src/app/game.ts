@@ -343,6 +343,15 @@ class Game {
         });
         label.anchor.set(0.5);
         button.addChild(bg, label);
+        // a longer text (the overwrite question) is scaled down to sit inside the plate, never over its frame
+        button.setText = (t) => {
+            label.text = t;
+            label.scale.set(1);
+            const room = width - 44;
+            if (label.width > room) label.scale.set(room / label.width);
+        };
+        button.setText(text);
+        button.plate = width;
         const base = () => button.baseScale || 1;
         // a pointer resting over a button when the menu appears must not steal the keyboard highlight:
         // hovering counts once the pointer has really moved
@@ -466,8 +475,8 @@ class Game {
         const startNew = () => {
             if (autosave && !confirmNew) {
                 confirmNew = true;
-                newBtn.label.text = 'OVERWRITE AUTOSAVE?';
-                setTimeout(() => { confirmNew = false; if (!started) newBtn.label.text = 'NEW GAME'; }, 3500);
+                newBtn.setText('OVERWRITE AUTOSAVE?');
+                setTimeout(() => { confirmNew = false; if (!started) newBtn.setText('NEW GAME'); }, 3500);
                 return;
             }
             const seedText = uiBridge.newGameSeed.value;

@@ -276,7 +276,8 @@ check('a spell can be equipped with the keyboard, no dragging needed', equipped.
 const unequipBtn = page.locator('.vs-acts button', { hasText: /^Unequip$/ }).first();
 await unequipBtn.focus();
 await page.keyboard.press('Enter');
-await page.waitForTimeout(100);
+// the press is handled between frames: wait for the result (a slow machine takes longer than a fixed pause)
+await page.waitForFunction(() => { const g = window.game; const nova = g.spells.spells.filter((s) => s.tpl === 'nova').pop(); return !g.spells.auto.includes(nova.uid); }, null, { timeout: 5000 }).catch(() => {});
 const unequipped = await ev(() => { const g = window.game; const nova = g.spells.spells.filter((s) => s.tpl === 'nova').pop(); return !g.spells.auto.includes(nova.uid); });
 check('...and unequipped again', unequipped);
 await page.keyboard.press('Escape');
@@ -355,6 +356,8 @@ check('the keyboard moves the highlight too', (await sel()) === 1, String(await 
 await page.keyboard.press('Enter');
 const warn = await page.evaluate(() => window.game.input.menus[0].items()[1].btn.label.text);
 check('New Game with a save asks before overwriting', /OVERWRITE/.test(warn), warn);
+const fits = await page.evaluate(() => window.game.input.menus[0].items().map(({ btn }) => ({ text: btn.label.text, w: Math.round(btn.label.width), room: btn.plate - 40 })));
+check('every title button\'s text sits inside its frame, the overwrite question too', fits.length >= 5 && fits.every((f) => f.w <= f.room), JSON.stringify(fits));
 await page.keyboard.press('ArrowUp');
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => window.game.state.player, null, { timeout: 8000 });
